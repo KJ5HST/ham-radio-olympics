@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Competitors - {{ sport.name }}{% endblock %}
+
+{% block content %}
+<h2>Competitors in {{ sport.name }}</h2>
+<p>
+    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Sports</a>
+</p>
+
+<div class="card">
+    <p><strong>Target Type:</strong> {{ sport.target_type | capitalize }}</p>
+    <p><strong>Total Competitors:</strong> {{ competitors | length }}</p>
+</div>
+
+{% if competitors %}
+<table>
+    <thead>
+        <tr>
+            <th>Callsign</th>
+            <th>Medals</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in competitors %}
+        <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
+            <td>
+                <a href="/contestant/{{ c.callsign }}"><strong>{{ c.callsign }}</strong></a>
+            </td>
+            <td>
+                {% if c.gold_count %}<span style="color: #d69e2e;">{{ c.gold_count }} Gold</span>{% endif %}
+                {% if c.silver_count %}<span style="color: #718096;">{{ c.silver_count }} Silver</span>{% endif %}
+                {% if c.bronze_count %}<span style="color: #c05621;">{{ c.bronze_count }} Bronze</span>{% endif %}
+                {% if not c.gold_count and not c.silver_count and not c.bronze_count %}<span style="color: #a0aec0;">No medals</span>{% endif %}
+            </td>
+            <td>
+                {% if c.is_disabled %}
+                <span style="color: #c53030;">Disabled</span>
+                {% else %}
+                <span style="color: #38a169;">Active</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="/contestant/{{ c.callsign }}" class="btn">View</a>
+                <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-danger">Disqualify</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No competitors have entered this sport yet.</p>
+{% endif %}
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+const sportId = {{ sport.id }};
+
+async function disqualifyCompetitor(callsign) {
+    if (!confirm('Disqualify ' + callsign + ' from {{ sport.name }}? This will remove them from the sport and delete their medals.')) return;
+
+    try {
+        const resp = await fetch('/admin/sport/' + sportId + '/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + data.detail);
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+</script>
+{% endblock %}

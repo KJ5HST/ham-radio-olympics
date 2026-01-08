@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Competitors - Admin{% endblock %}
+
+{% block content %}
+<h2>Competitors</h2>
+<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+
+{% if contestants %}
+<table>
+    <thead>
+        <tr>
+            <th>Callsign</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Registered</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for c in contestants %}
+        <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
+            <td>
+                <strong>{{ c.callsign }}</strong>
+                {% if c.is_referee and c.assigned_sports %}
+                <br><small style="color: #805ad5;">
+                    Referees: {% for s in c.assigned_sports %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </small>
+                {% endif %}
+            </td>
+            <td>
+                {% if c.is_admin %}
+                <span style="color: #c53030; font-weight: bold;">Admin</span>
+                {% elif c.is_referee %}
+                <span style="color: #805ad5; font-weight: bold;">Referee</span>
+                {% else %}
+                <span style="color: #718096;">Competitor</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if c.is_disabled %}
+                <span style="color: #c53030;">Disabled</span>
+                {% else %}
+                <span style="color: #38a169;">Active</span>
+                {% endif %}
+            </td>
+            <td>{{ c.registered_at | format_date }}</td>
+            <td>
+                <a href="/contestant/{{ c.callsign }}" class="btn">View</a>
+
+                <!-- Role Management Dropdown -->
+                <div style="display: inline-block; position: relative;">
+                    <button onclick="toggleDropdown('role-{{ c.callsign }}')" class="btn" style="background: #4a5568;">Role</button>
+                    <div id="role-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; z-index: 100; min-width: 150px;">
+                        {% if not c.is_admin %}
+                        <button onclick="setAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Make Admin</button>
+                        {% else %}
+                        <button onclick="removeAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Remove Admin</button>
+                        {% endif %}
+                        {% if not c.is_referee %}
+                        <button onclick="setReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Make Referee</button>
+                        {% else %}
+                        <button onclick="removeReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Remove Referee</button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if c.is_referee %}
+                <!-- Sport Assignment Dropdown -->
+                <div style="display: inline-block; position: relative;">
+                    <button onclick="toggleDropdown('assign-{{ c.callsign }}')" class="btn" style="background: #805ad5;">Assign</button>
+                    <div id="assign-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; z-index: 100; min-width: 200px; max-height: 300px; overflow-y: auto;">
+                        {% for sport in all_sports %}
+                        {% set is_assigned = sport.id in (c.assigned_sports | map(attribute='id') | list) %}
+                        <button onclick="{% if is_assigned %}unassignSport('{{ c.callsign }}', {{ sport.id }}){% else %}assignSport('{{ c.callsign }}', {{ sport.id }}){% endif %}"
+                                style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: {% if is_assigned %}#e8f4e8{% else %}none{% endif %}; cursor: pointer;">
+                            {% if is_assigned %}✓ {% endif %}{{ sport.name }} ({{ sport.olympiad_name }})
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if c.is_disabled %}
+                <button onclick="enableContestant('{{ c.callsign }}')" class="btn" style="background: #38a169;">Enable</button>
+                {% else %}
+                <button onclick="disableContestant('{{ c.callsign }}')" class="btn" style="background: #d69e2e;">Disable</button>
+                <button onclick="disqualifyContestant('{{ c.callsign }}')" class="btn" style="background: #805ad5;">Disqualify</button>
+                {% endif %}
+                <button onclick="resetPassword('{{ c.callsign }}')" class="btn" style="background: #3182ce;">Reset PW</button>
+                <button onclick="deleteContestant('{{ c.callsign }}')" class="btn btn-danger">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No competitors registered yet.</p>
+{% endif %}
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+
+function toggleDropdown(id) {
+    const dropdown = document.getElementById(id);
+    const allDropdowns = document.querySelectorAll('.dropdown-menu');
+    allDropdowns.forEach(d => {
+        if (d.id !== id) d.style.display = 'none';
+    });
+    dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.matches('button')) {
+        document.querySelectorAll('.dropdown-menu').forEach(d => d.style.display = 'none');
+    }
+});
+
+async function setAdmin(callsign) {
+    if (!confirm('Make ' + callsign + ' an admin?')) return;
+    await fetch('/admin/contestant/' + callsign + '/set-admin?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function removeAdmin(callsign) {
+    if (!confirm('Remove admin role from ' + callsign + '?')) return;
+    await fetch('/admin/contestant/' + callsign + '/remove-admin?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function setReferee(callsign) {
+    if (!confirm('Make ' + callsign + ' a referee?')) return;
+    await fetch('/admin/contestant/' + callsign + '/set-referee?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function removeReferee(callsign) {
+    if (!confirm('Remove referee role from ' + callsign + '? This will also remove all sport assignments.')) return;
+    await fetch('/admin/contestant/' + callsign + '/remove-referee?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function assignSport(callsign, sportId) {
+    await fetch('/admin/contestant/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function unassignSport(callsign, sportId) {
+    await fetch('/admin/contestant/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'DELETE'});
+    location.reload();
+}
+
+async function disableContestant(callsign) {
+    if (!confirm('Disable ' + callsign + '? They will be logged out and unable to log in.')) return;
+    await fetch('/admin/contestant/' + callsign + '/disable?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function enableContestant(callsign) {
+    if (!confirm('Enable ' + callsign + '?')) return;
+    await fetch('/admin/contestant/' + callsign + '/enable?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function disqualifyContestant(callsign) {
+    if (!confirm('Disqualify ' + callsign + ' from the competition? They will be removed from all sports and lose their medals.')) return;
+    await fetch('/admin/contestant/' + callsign + '/disqualify?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function deleteContestant(callsign) {
+    if (!confirm('Delete competitor ' + callsign + '? This cannot be undone.')) return;
+    await fetch('/admin/contestant/' + callsign + '?admin_key=' + adminKey, {method: 'DELETE'});
+    location.reload();
+}
+
+async function resetPassword(callsign) {
+    if (!confirm('Reset password for ' + callsign + '? They will be logged out.')) return;
+    const response = await fetch('/admin/contestant/' + callsign + '/reset-password?admin_key=' + adminKey, {method: 'POST'});
+    const data = await response.json();
+    if (response.ok) {
+        alert('New password for ' + callsign + ':\n\n' + data.new_password + '\n\nPlease share this with the user securely.');
+    } else {
+        alert('Error: ' + data.detail);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if olympiad %}
+<h2>{{ olympiad.name }}</h2>
+<p><strong>Period:</strong> {{ olympiad.start_date | format_date }} to {{ olympiad.end_date | format_date }}</p>
+<p><strong>Qualifying QSOs:</strong> {{ olympiad.qualifying_qsos }}</p>
+
+<h3>Sports</h3>
+{% if sports %}
+<table>
+    <thead>
+        <tr>
+            <th>Sport</th>
+            <th>Target Type</th>
+            <th>Modes</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for sport in sports %}
+        <tr>
+            <td><strong>{{ sport.name }}</strong></td>
+            <td>{{ sport.target_type | capitalize }}</td>
+            <td>
+                {% if sport.work_enabled %}Work{% endif %}
+                {% if sport.work_enabled and sport.activate_enabled %} / {% endif %}
+                {% if sport.activate_enabled %}Activate{% endif %}
+                {% if sport.separate_pools %} (separate pools){% endif %}
+            </td>
+            <td><a href="/olympiad/sport/{{ sport.id }}" class="btn">View</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No sports configured yet.</p>
+{% endif %}
+
+{% else %}
+<h2>No Active Olympiad</h2>
+<p>There is currently no active competition. Check back later!</p>
+{% endif %}
+{% endblock %}

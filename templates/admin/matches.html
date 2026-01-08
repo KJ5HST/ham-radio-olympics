@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Matches - Admin{% endblock %}
+
+{% block content %}
+<h2>Matches for {{ sport.name }}</h2>
+<p>
+    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Sports</a>
+</p>
+
+<div class="card">
+    <p><strong>Target Type:</strong> {{ sport.target_type | capitalize }}</p>
+    <p><strong>Modes:</strong>
+        {% if sport.work_enabled %}Work{% endif %}
+        {% if sport.work_enabled and sport.activate_enabled %} / {% endif %}
+        {% if sport.activate_enabled %}Activate{% endif %}
+        {% if sport.separate_pools %} (separate pools){% endif %}
+    </p>
+</div>
+
+<h3>Scheduled Matches</h3>
+{% if matches %}
+<table>
+    <thead>
+        <tr>
+            <th>Target</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for match in matches %}
+        <tr>
+            <td><strong>{{ match.target_display }}</strong></td>
+            <td>{{ match.start_date | format_datetime }}</td>
+            <td>{{ match.end_date | format_datetime }}</td>
+            <td>
+                <button onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}')" class="btn">Edit</button>
+                <button onclick="deleteMatch({{ match.id }})" class="btn btn-danger">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No matches scheduled yet. Create one below.</p>
+{% endif %}
+
+<h3 id="form-title">Create Match</h3>
+<div class="card">
+    <form id="match-form">
+        <input type="hidden" id="match_id">
+        <div class="form-group">
+            <label for="target_value">Target Value</label>
+            {% if target_options %}
+            <select id="target_value" required>
+                <option value="">-- Select --</option>
+                {% for code, name in target_options %}
+                <option value="{{ code }}">{{ name }} ({{ code }})</option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <input type="text" id="target_value" required placeholder="{% if sport.target_type == 'park' %}K-0001{% elif sport.target_type == 'grid' %}FN31{% elif sport.target_type == 'call' %}W1AW{% else %}Target{% endif %}">
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label for="start_date">Start Date/Time (UTC)</label>
+            <input type="datetime-local" id="start_date" required>
+        </div>
+        <div class="form-group">
+            <label for="end_date">End Date/Time (UTC)</label>
+            <input type="datetime-local" id="end_date" required>
+        </div>
+        <button type="submit" class="btn" id="submit-btn">Create Match</button>
+        <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn" style="background: #718096; display: none;">Cancel</button>
+    </form>
+    <div id="match-result"></div>
+</div>
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+const sportId = {{ sport.id }};
+let editingId = null;
+
+// Set default times on page load
+function setDefaultTimes() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    document.getElementById('start_date').value = `${year}-${month}-${day}T00:00`;
+    document.getElementById('end_date').value = `${year}-${month}-${day}T23:59`;
+}
+setDefaultTimes();
+
+function editMatch(id, targetValue, startDate, endDate) {
+    editingId = id;
+    document.getElementById('match_id').value = id;
+    document.getElementById('target_value').value = targetValue;
+    document.getElementById('start_date').value = startDate;
+    document.getElementById('end_date').value = endDate;
+    document.getElementById('form-title').textContent = 'Edit Match';
+    document.getElementById('submit-btn').textContent = 'Save';
+    document.getElementById('cancel-btn').style.display = 'inline-block';
+}
+
+function cancelEdit() {
+    editingId = null;
+    document.getElementById('match_id').value = '';
+    document.getElementById('target_value').value = '';
+    setDefaultTimes();
+    document.getElementById('form-title').textContent = 'Create Match';
+    document.getElementById('submit-btn').textContent = 'Create Match';
+    document.getElementById('cancel-btn').style.display = 'none';
+}
+
+document.getElementById('match-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('match-result');
+    const data = {
+        target_value: document.getElementById('target_value').value,
+        start_date: document.getElementById('start_date').value + ':00',
+        end_date: document.getElementById('end_date').value + ':00'
+    };
+    try {
+        let resp;
+        if (editingId) {
+            resp = await fetch('/admin/match/' + editingId + '?admin_key=' + adminKey, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        } else {
+            resp = await fetch('/admin/sport/' + sportId + '/match?admin_key=' + adminKey, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        }
+        const respData = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">Match ' + (editingId ? 'updated' : 'created') + '!</div>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + respData.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+async function deleteMatch(id) {
+    if (!confirm('Delete this Match?')) return;
+    await fetch('/admin/match/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    location.reload();
+}
+</script>
+{% endblock %}

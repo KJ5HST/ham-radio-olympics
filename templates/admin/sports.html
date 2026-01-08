@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Sports - Admin{% endblock %}
+
+{% block content %}
+<h2>Sports for {{ olympiad.name }}</h2>
+<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+
+<h3>Current Sports</h3>
+{% if sports %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Target Type</th>
+            <th>Modes</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for sport in sports %}
+        <tr>
+            <td><strong>{{ sport.name }}</strong></td>
+            <td>{{ sport.target_type | capitalize }}</td>
+            <td>
+                {% if sport.work_enabled %}Work{% endif %}
+                {% if sport.work_enabled and sport.activate_enabled %} / {% endif %}
+                {% if sport.activate_enabled %}Activate{% endif %}
+                {% if sport.separate_pools %} (separate){% endif %}
+            </td>
+            <td>
+                <a href="/admin/sport/{{ sport.id }}/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Competitors</a>
+                <a href="/admin/sport/{{ sport.id }}/matches?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Matches</a>
+                <button onclick="editSport({{ sport.id }}, '{{ sport.name }}', '{{ sport.description or '' }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn">Edit</button>
+                <button onclick="deleteSport({{ sport.id }})" class="btn btn-danger">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No sports yet. Create one below.</p>
+{% endif %}
+
+<h3 id="form-title">Create Sport</h3>
+<div class="card">
+    <form id="sport-form">
+        <input type="hidden" id="sport_id">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" required placeholder="DX Challenge">
+        </div>
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" placeholder="Work DX stations on target continent">
+        </div>
+        <div class="form-group">
+            <label for="target_type">Target Type</label>
+            <select id="target_type" required>
+                <option value="continent">Continent</option>
+                <option value="country">Country (DXCC)</option>
+                <option value="park">POTA Park</option>
+                <option value="call">Callsign</option>
+                <option value="grid">Grid Square</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="work_enabled" checked> Work Mode (hunters)</label>
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="activate_enabled"> Activate Mode (activators)</label>
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="separate_pools"> Separate Pools (per-role medals)</label>
+        </div>
+        <button type="submit" class="btn" id="submit-btn">Create Sport</button>
+        <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn" style="background: #718096; display: none;">Cancel</button>
+    </form>
+    <div id="sport-result"></div>
+</div>
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+const olympiadId = {{ olympiad.id }};
+let editingId = null;
+
+function editSport(id, name, description, targetType, workEnabled, activateEnabled, separatePools) {
+    editingId = id;
+    document.getElementById('sport_id').value = id;
+    document.getElementById('name').value = name;
+    document.getElementById('description').value = description;
+    document.getElementById('target_type').value = targetType;
+    document.getElementById('work_enabled').checked = workEnabled;
+    document.getElementById('activate_enabled').checked = activateEnabled;
+    document.getElementById('separate_pools').checked = separatePools;
+    document.getElementById('form-title').textContent = 'Edit Sport';
+    document.getElementById('submit-btn').textContent = 'Save';
+    document.getElementById('cancel-btn').style.display = 'inline-block';
+}
+
+function cancelEdit() {
+    editingId = null;
+    document.getElementById('sport_id').value = '';
+    document.getElementById('name').value = '';
+    document.getElementById('description').value = '';
+    document.getElementById('target_type').value = 'continent';
+    document.getElementById('work_enabled').checked = true;
+    document.getElementById('activate_enabled').checked = false;
+    document.getElementById('separate_pools').checked = false;
+    document.getElementById('form-title').textContent = 'Create Sport';
+    document.getElementById('submit-btn').textContent = 'Create Sport';
+    document.getElementById('cancel-btn').style.display = 'none';
+}
+
+document.getElementById('sport-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('sport-result');
+    const data = {
+        name: document.getElementById('name').value,
+        description: document.getElementById('description').value || null,
+        target_type: document.getElementById('target_type').value,
+        work_enabled: document.getElementById('work_enabled').checked,
+        activate_enabled: document.getElementById('activate_enabled').checked,
+        separate_pools: document.getElementById('separate_pools').checked
+    };
+    try {
+        let resp;
+        if (editingId) {
+            resp = await fetch('/admin/sport/' + editingId + '?admin_key=' + adminKey, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        } else {
+            resp = await fetch('/admin/olympiad/' + olympiadId + '/sport?admin_key=' + adminKey, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        }
+        const respData = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">Sport ' + (editingId ? 'updated' : 'created') + '!</div>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + respData.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+async function deleteSport(id) {
+    if (!confirm('Delete this Sport and all its Matches?')) return;
+    await fetch('/admin/sport/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    location.reload();
+}
+</script>
+{% endblock %}

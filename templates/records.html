@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}World Records - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>World Records</h2>
+
+{% if world_records %}
+<table>
+    <thead>
+        <tr>
+            <th>Record Type</th>
+            <th>Value</th>
+            <th>Holder</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in world_records %}
+        <tr>
+            <td><strong>{{ record.record_type | replace('_', ' ') | title }}</strong></td>
+            <td>
+                {% if 'distance' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km
+                {% elif 'cool_factor' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km/W
+                {% elif 'power' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} W
+                {% else %}
+                    {{ record.value }}
+                {% endif %}
+            </td>
+            <td>
+                {% if record.holder %}
+                    <a href="/contestant/{{ record.holder }}">{{ record.holder }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    <p>No world records have been set yet. Be the first to set a record!</p>
+</div>
+{% endif %}
+
+<h3>About Records</h3>
+<div class="card">
+    <p><strong>Distance Records:</strong> Longest confirmed QSO distance in kilometers.</p>
+    <p><strong>Cool Factor Records:</strong> Best distance-to-power ratio (km/W) - rewards efficient, low-power contacts.</p>
+</div>
+{% endblock %}

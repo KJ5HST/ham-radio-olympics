@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>Admin Dashboard</h2>
+
+<div class="stats">
+    <div class="stat-box">
+        <div class="value">{{ olympiads|length }}</div>
+        <div class="label">Olympiads</div>
+    </div>
+    <a href="/admin/contestants?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
+        <div class="value">{{ contestant_count }}</div>
+        <div class="label">Competitors</div>
+    </a>
+</div>
+
+<h3>Olympiads</h3>
+{% if olympiads %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Period</th>
+            <th>Qualifying</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for olympiad in olympiads %}
+        <tr>
+            <td><strong>{{ olympiad.name }}</strong></td>
+            <td>{{ olympiad.start_date | format_date }} to {{ olympiad.end_date | format_date }}</td>
+            <td>{{ olympiad.qualifying_qsos }} QSOs</td>
+            <td>{% if olympiad.is_active %}<span style="color: green;">Active</span>{% else %}Inactive{% endif %}</td>
+            <td>
+                <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Sports</a>
+                <button onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn">Edit</button>
+                {% if olympiad.is_active %}
+                <button onclick="deactivateOlympiad({{ olympiad.id }})" class="btn" style="background: #d69e2e;">Pause</button>
+                {% else %}
+                <button onclick="activateOlympiad({{ olympiad.id }})" class="btn" style="background: #38a169;">Activate</button>
+                {% endif %}
+                <button onclick="deleteOlympiad({{ olympiad.id }})" class="btn btn-danger">Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No olympiads yet. Create one below.</p>
+{% endif %}
+
+<h3 id="form-title">Create Olympiad</h3>
+<div class="card">
+    <form id="olympiad-form">
+        <input type="hidden" id="olympiad_id">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" required placeholder="2026 Ham Radio Olympics">
+        </div>
+        <div class="form-group">
+            <label for="start_date">Start Date</label>
+            <input type="date" id="start_date" required>
+        </div>
+        <div class="form-group">
+            <label for="end_date">End Date</label>
+            <input type="date" id="end_date" required>
+        </div>
+        <div class="form-group">
+            <label for="qualifying_qsos">Qualifying QSOs (0 = no minimum)</label>
+            <input type="number" id="qualifying_qsos" value="0" min="0">
+        </div>
+        <button type="submit" class="btn" id="submit-btn">Create Olympiad</button>
+        <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn" style="background: #718096; display: none;">Cancel</button>
+    </form>
+    <div id="olympiad-result"></div>
+</div>
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+let editingId = null;
+
+function editOlympiad(id, name, startDate, endDate, qualifyingQsos) {
+    editingId = id;
+    document.getElementById('olympiad_id').value = id;
+    document.getElementById('name').value = name;
+    document.getElementById('start_date').value = startDate;
+    document.getElementById('end_date').value = endDate;
+    document.getElementById('qualifying_qsos').value = qualifyingQsos;
+    document.getElementById('form-title').textContent = 'Edit Olympiad';
+    document.getElementById('submit-btn').textContent = 'Save';
+    document.getElementById('cancel-btn').style.display = 'inline-block';
+}
+
+function cancelEdit() {
+    editingId = null;
+    document.getElementById('olympiad_id').value = '';
+    document.getElementById('name').value = '';
+    document.getElementById('start_date').value = '';
+    document.getElementById('end_date').value = '';
+    document.getElementById('qualifying_qsos').value = '0';
+    document.getElementById('form-title').textContent = 'Create Olympiad';
+    document.getElementById('submit-btn').textContent = 'Create Olympiad';
+    document.getElementById('cancel-btn').style.display = 'none';
+}
+
+document.getElementById('olympiad-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('olympiad-result');
+    const data = {
+        name: document.getElementById('name').value,
+        start_date: document.getElementById('start_date').value,
+        end_date: document.getElementById('end_date').value,
+        qualifying_qsos: parseInt(document.getElementById('qualifying_qsos').value) || 0
+    };
+    try {
+        let resp;
+        if (editingId) {
+            resp = await fetch('/admin/olympiad/' + editingId + '?admin_key=' + adminKey, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        } else {
+            resp = await fetch('/admin/olympiad?admin_key=' + adminKey, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        }
+        const respData = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">Olympiad ' + (editingId ? 'updated' : 'created') + '!</div>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + respData.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+async function activateOlympiad(id) {
+    if (!confirm('Activate this Olympiad? This will deactivate others.')) return;
+    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function deactivateOlympiad(id) {
+    if (!confirm('Pause this Olympiad?')) return;
+    await fetch('/admin/olympiad/' + id + '/deactivate?admin_key=' + adminKey, {method: 'POST'});
+    location.reload();
+}
+
+async function deleteOlympiad(id) {
+    if (!confirm('Delete this Olympiad? This cannot be undone.')) return;
+    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    location.reload();
+}
+</script>
+{% endblock %}

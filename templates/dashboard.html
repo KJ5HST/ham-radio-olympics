@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}{{ contestant.callsign }} - Ham Radio Olympics{% endblock %}
+
+{% block nav_extra %}{% endblock %}
+
+{% block content %}
+{% if is_own_profile %}
+<h2>Welcome, {{ contestant.callsign }}</h2>
+{% else %}
+<h2>{{ contestant.callsign }}</h2>
+{% endif %}
+
+<div class="stats">
+    <div class="stat-box">
+        <div class="value medal-gold">{{ medal_summary.gold }}</div>
+        <div class="label">Gold Medals</div>
+    </div>
+    <div class="stat-box">
+        <div class="value medal-silver">{{ medal_summary.silver }}</div>
+        <div class="label">Silver Medals</div>
+    </div>
+    <div class="stat-box">
+        <div class="value medal-bronze">{{ medal_summary.bronze }}</div>
+        <div class="label">Bronze Medals</div>
+    </div>
+    <div class="stat-box">
+        <div class="value">{{ medal_summary.total_points }}</div>
+        <div class="label">Total Points</div>
+    </div>
+</div>
+
+<div class="card">
+    <h4>Account Status</h4>
+    <p><strong>Registered:</strong> {{ contestant.registered_at | format_date if contestant.registered_at else '-' }}</p>
+    {% if is_own_profile %}
+    <p><strong>QRZ API Key:</strong> {% if user.has_qrz_key %}Configured{% else %}<span style="color: #c53030;">Not configured</span> - <a href="/settings">Add key</a>{% endif %}</p>
+    {% endif %}
+    <p><strong>Last Sync:</strong> {{ contestant.last_sync_at | format_datetime if contestant.last_sync_at else 'Never' }}</p>
+    {% if can_sync %}
+    <a href="/sync?callsign={{ contestant.callsign }}" class="btn" style="margin-top: 10px; display: inline-block;">Sync QSOs Now</a>
+    {% endif %}
+</div>
+
+{% if sport_entries %}
+<h3>{% if is_own_profile %}My {% endif %}Sports</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Sport</th>
+            <th>Olympiad</th>
+            <th>Medals</th>
+            <th>Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for sport in sport_entries %}
+        <tr>
+            <td><a href="/olympiad/sport/{{ sport.id }}"><strong>{{ sport.name }}</strong></a></td>
+            <td>{{ sport.olympiad_name }}</td>
+            <td>
+                {% if sport.gold_count %}<span class="medal-gold">{{ sport.gold_count }}G</span> {% endif %}
+                {% if sport.silver_count %}<span class="medal-silver">{{ sport.silver_count }}S</span> {% endif %}
+                {% if sport.bronze_count %}<span class="medal-bronze">{{ sport.bronze_count }}B</span> {% endif %}
+                {% if not sport.gold_count and not sport.silver_count and not sport.bronze_count %}-{% endif %}
+            </td>
+            <td><strong>{{ sport.sport_points }}</strong></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if personal_bests %}
+<h3>Personal Bests</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Record Type</th>
+            <th>Value</th>
+            <th>Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in personal_bests %}
+        <tr>
+            <td>{{ record.record_type | replace('_', ' ') | title }}</td>
+            <td>
+                {% if 'distance' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km
+                {% elif 'cool_factor' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km/W
+                {% elif 'power' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} W
+                {% else %}
+                    {{ record.value }}
+                {% endif %}
+            </td>
+            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if medals %}
+<h3>{% if is_own_profile %}Recent {% endif %}Medals</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Sport</th>
+            <th>Target</th>
+            <th>Distance</th>
+            <th>Cool Factor</th>
+            <th>Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for medal in medals[:10] %}
+        <tr>
+            <td>{{ medal.sport_name }}</td>
+            <td>{{ medal.target_display }}</td>
+            <td>
+                {% if medal.distance_medal %}
+                    <span class="medal-{{ medal.distance_medal }}">{{ medal.distance_medal | upper }}</span>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if medal.cool_factor_medal %}
+                    <span class="medal-{{ medal.cool_factor_medal }}">{{ medal.cool_factor_medal | upper }}</span>
+                    ({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ medal.total_points }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+
+{% if qsos %}
+<h3>Recent QSOs</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Date/Time (UTC)</th>
+            <th>DX Call</th>
+            <th>Band</th>
+            <th>Mode</th>
+            <th>Power</th>
+            <th>Distance</th>
+            <th>Cool Factor</th>
+            <th>Confirmed</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for qso in qsos %}
+        <tr>
+            <td>{{ qso.qso_datetime_utc | format_datetime }}</td>
+            <td><strong>{{ qso.dx_callsign }}</strong></td>
+            <td>{{ qso.band or '-' }}</td>
+            <td>{{ qso.mode or '-' }}</td>
+            <td>{{ qso.tx_power_w }}W</td>
+            <td>{{ "%.0f" | format(qso.distance_km) if qso.distance_km else '-' }} km</td>
+            <td>{{ "%.1f" | format(qso.cool_factor) if qso.cool_factor else '-' }}</td>
+            <td>{% if qso.is_confirmed %}Yes{% else %}No{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    {% if is_own_profile %}
+    <p>No QSOs synced yet. {% if user.has_qrz_key %}Click "Sync QSOs Now" above to import your contacts.{% else %}Add your QRZ API key in <a href="/settings">Settings</a> to get started.{% endif %}</p>
+    {% else %}
+    <p>No QSOs recorded for this competitor.</p>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

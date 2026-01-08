@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Results - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>Sync Results</h2>
+
+{% if callsign %}
+<p>Syncing QSOs for <strong>{{ callsign }}</strong></p>
+{% else %}
+<p>Syncing all competitors</p>
+{% endif %}
+
+<div class="card">
+{% if result.error %}
+    <div class="alert alert-error">
+        <strong>Error:</strong> {{ result.error }}
+    </div>
+{% else %}
+    {% if callsign %}
+        <table>
+            <tr><th>Callsign</th><td>{{ result.callsign }}</td></tr>
+            <tr><th>QSOs Fetched</th><td>{{ result.total_fetched }}</td></tr>
+            <tr><th>New QSOs</th><td>{{ result.new_qsos }}</td></tr>
+            <tr><th>Updated QSOs</th><td>{{ result.updated_qsos }}</td></tr>
+        </table>
+    {% else %}
+        <table>
+            <tr><th>Competitors Synced</th><td>{{ result.contestants_synced }}</td></tr>
+            <tr><th>Total New QSOs</th><td>{{ result.total_new_qsos }}</td></tr>
+            <tr><th>Total Updated QSOs</th><td>{{ result.total_updated_qsos }}</td></tr>
+        </table>
+        {% if result.errors %}
+        <h4>Errors</h4>
+        <ul>
+            {% for error in result.errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    {% endif %}
+{% endif %}
+</div>
+
+<p><a href="/">Back to Home</a></p>
+{% endblock %}

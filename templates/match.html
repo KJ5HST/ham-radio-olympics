@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}{{ target_display }} - {{ sport_name }} - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>{{ sport_name }}: {{ target_display }}</h2>
+
+<div class="card">
+    <p><strong>Target:</strong> {{ target_display }}</p>
+    <p><strong>Start:</strong> {{ match.start_date | format_datetime }}</p>
+    <p><strong>End:</strong> {{ match.end_date | format_datetime }}</p>
+</div>
+
+{% if medals %}
+<h3>Leaderboard</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Rank</th>
+            <th>Callsign</th>
+            <th>Distance Medal</th>
+            <th>Cool Factor Medal</th>
+            <th>POTA Bonus</th>
+            <th>Total Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for medal in medals %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/contestant/{{ medal.callsign }}">{{ medal.callsign }}</a></td>
+            <td>
+                {% if medal.distance_medal %}
+                    <span class="medal-{{ medal.distance_medal }}">{{ medal.distance_medal | upper }}</span>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if medal.cool_factor_medal %}
+                    <span class="medal-{{ medal.cool_factor_medal }}">{{ medal.cool_factor_medal | upper }}</span>
+                    ({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{% if medal.pota_bonus %}+{{ medal.pota_bonus }}{% else %}-{% endif %}</td>
+            <td><strong>{{ medal.total_points }}</strong></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    <p>No medals awarded yet. Medals are assigned based on confirmed QSOs matching this target.</p>
+</div>
+{% endif %}
+
+<p><a href="/olympiad/sport/{{ sport_id }}">Back to {{ sport_name }}</a></p>
+{% endblock %}

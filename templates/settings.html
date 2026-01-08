@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - {{ user.callsign }} - Ham Radio Olympics{% endblock %}
+
+{% block nav_extra %}{% endblock %}
+
+{% block content %}
+<h2>Account Settings</h2>
+<p>Callsign: <strong>{{ user.callsign }}</strong> | Member since: {{ account.registered_at | format_date }}</p>
+
+{% if request.query_params.get('updated') %}
+<div class="alert alert-success">
+    {% if request.query_params.get('updated') == 'email' %}Email updated successfully.
+    {% elif request.query_params.get('updated') == 'password' %}Password changed successfully.
+    {% elif request.query_params.get('updated') == 'qrz' %}QRZ API key updated successfully.
+    {% endif %}
+</div>
+{% endif %}
+
+<h3>Email Address</h3>
+<div class="card">
+    <form action="/settings/email" method="post">
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" value="{{ account.email or '' }}" placeholder="you@example.com">
+        </div>
+        <button type="submit" class="btn">Update Email</button>
+    </form>
+</div>
+
+<h3>Change Password</h3>
+<div class="card">
+    <form action="/settings/password" method="post" id="password-form">
+        <div class="form-group">
+            <label for="current_password">Current Password</label>
+            <input type="password" id="current_password" name="current_password" required>
+        </div>
+        <div class="form-group">
+            <label for="new_password">New Password</label>
+            <input type="password" id="new_password" name="new_password" required minlength="8">
+        </div>
+        <div class="form-group">
+            <label for="confirm_password">Confirm New Password</label>
+            <input type="password" id="confirm_password" required minlength="8">
+        </div>
+        <button type="submit" class="btn">Change Password</button>
+    </form>
+    <div id="password-result"></div>
+</div>
+
+<h3>QRZ Logbook API Key</h3>
+<div class="card">
+    <p>Status: {% if user.has_qrz_key %}<span style="color: #22543d;">Configured</span>{% else %}<span style="color: #c53030;">Not configured</span>{% endif %}</p>
+    <p style="font-size: 0.9em; color: #718096;">Your QRZ API key is used to sync your confirmed QSOs. Get your key from <a href="https://logbook.qrz.com/logbook" target="_blank">QRZ Logbook Settings</a>.</p>
+    <form action="/settings/qrz-key" method="post">
+        <div class="form-group">
+            <label for="qrz_api_key">QRZ API Key</label>
+            <input type="password" id="qrz_api_key" name="qrz_api_key" required placeholder="Enter your QRZ Logbook API key">
+        </div>
+        <button type="submit" class="btn">{% if user.has_qrz_key %}Update{% else %}Save{% endif %} API Key</button>
+    </form>
+</div>
+
+<script>
+document.getElementById('password-form').addEventListener('submit', function(e) {
+    const newPass = document.getElementById('new_password').value;
+    const confirm = document.getElementById('confirm_password').value;
+
+    if (newPass !== confirm) {
+        e.preventDefault();
+        document.getElementById('password-result').innerHTML =
+            '<div class="alert alert-error">New passwords do not match</div>';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sport.name }} - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>{{ sport.name }}</h2>
+
+{% if sport.description %}
+<p>{{ sport.description }}</p>
+{% endif %}
+
+<div class="card">
+    <p><strong>Target Type:</strong> {{ sport.target_type | title }}</p>
+    <p><strong>Modes:</strong>
+        {% if sport.work_enabled %}Work{% endif %}
+        {% if sport.work_enabled and sport.activate_enabled %} / {% endif %}
+        {% if sport.activate_enabled %}Activate{% endif %}
+    </p>
+    {% if sport.separate_pools %}
+    <p><em>Work and Activate have separate medal pools</em></p>
+    {% endif %}
+    <p><strong>Participants:</strong> {{ entry_count }}</p>
+    {% if user %}
+    <div style="margin-top: 10px;">
+        {% if is_entered %}
+        <span style="color: #38a169; font-weight: bold;">You are entered in this sport</span>
+        <button onclick="leaveSport()" class="btn btn-danger" style="margin-left: 10px;">Leave Sport</button>
+        {% else %}
+        <button onclick="enterSport()" class="btn" style="background: #38a169;">Participate</button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+async function enterSport() {
+    const resp = await fetch('/sport/{{ sport.id }}/enter', {method: 'POST'});
+    if (resp.ok) {
+        location.reload();
+    } else {
+        alert('Failed to enter sport');
+    }
+}
+
+async function leaveSport() {
+    if (!confirm('Leave this sport? You can re-enter later.')) return;
+    const resp = await fetch('/sport/{{ sport.id }}/leave', {method: 'POST'});
+    if (resp.ok) {
+        location.reload();
+    } else {
+        alert('Failed to leave sport');
+    }
+}
+</script>
+
+{% if standings %}
+<h3>Overall Standings</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Rank</th>
+            <th>Callsign</th>
+            <th>Gold</th>
+            <th>Silver</th>
+            <th>Bronze</th>
+            <th>Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for standing in standings[:20] %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/contestant/{{ standing.callsign }}">{{ standing.callsign }}</a></td>
+            <td class="medal-gold">{{ standing.gold }}</td>
+            <td class="medal-silver">{{ standing.silver }}</td>
+            <td class="medal-bronze">{{ standing.bronze }}</td>
+            <td><strong>{{ standing.total_points }}</strong></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    <p>No standings yet. Medals are awarded as matches complete.</p>
+</div>
+{% endif %}
+
+{% if matches %}
+<h3>Matches</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Target</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for match in matches %}
+        <tr>
+            <td><strong>{{ match.target_display }}</strong></td>
+            <td>{{ match.start_date | format_date }}</td>
+            <td>{{ match.end_date | format_date }}</td>
+            <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn">View</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="card">
+    <p>No matches scheduled yet.</p>
+</div>
+{% endif %}
+
+<p><a href="/">Back to Home</a></p>
+{% endblock %}
