@@ -7,8 +7,8 @@ Olympic-style amateur radio competition with QRZ Logbook integration.
 - **Olympiad/Sport/Match Hierarchy** - Like real Olympics
 - **QRZ Integration** - Automatic QSO sync with confirmation status
 - **Two Scoring Events per Match**:
-  - Distance (speed to first confirmed QSO)
-  - Cool Factor (efficiency: distance/power)
+  - Distance (distance to QSO)
+  - Cool Factor (efficiency: distance/power rewards QRP)
 - **Medal System** - Gold (3pts), Silver (2pts), Bronze (1pt), POTA Bonus (+1pt)
 - **Work/Activate Modes** - Hunter and activator competitions
 - **Separate or Combined Pools** - Configurable per Sport
