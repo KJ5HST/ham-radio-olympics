@@ -201,4 +201,5 @@ fly deploy
 
 ## License
 
-MIT License
+CC BY-NC-SA 4.0
+(Use/modify/share, but NOT commercially, and all derivatives must use this same license.)
