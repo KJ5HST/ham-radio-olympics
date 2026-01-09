@@ -1,6 +1,6 @@
 # Ham Radio Olympics
 
-Olympic-style amateur radio competition with QRZ Logbook integration.
+Amateur radio competition server with QRZ Logbook integration. Designed for clubs to do a variety of competitions ("matches" aka first to confirm a contact in Texas) for a multitude of interests (aka "sports" like POTA) throughout a season (aka "Olympiad"). The activities are pretty flexible, but at this point scoring is pretty static and has some room for improvement, but it's a start.
 
 ## Features
 
