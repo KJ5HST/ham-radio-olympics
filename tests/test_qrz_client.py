@@ -514,3 +514,30 @@ class TestVerifyApiKey:
         result = await verify_api_key("any-key")
         assert result is False
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_with_matching_callsign(self):
+        """Test verification passes when callsign matches API key owner."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=W1ABC"))
+
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
+        assert result is True
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_with_mismatched_callsign(self):
+        """Test verification fails when callsign doesn't match API key owner."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=KJ5HST"))
+
+        result = await verify_api_key("valid-api-key", expected_callsign="W1XYZ")
+        assert result is False
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_callsign_case_insensitive(self):
+        """Test callsign comparison is case insensitive."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=w1abc"))
+
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
+        assert result is True
+

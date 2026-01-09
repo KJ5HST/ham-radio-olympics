@@ -88,7 +88,7 @@ def parse_qrz_response(text: str) -> Dict[str, str]:
     decoded = html.unescape(text)
 
     # Known QRZ response keys
-    known_keys = ['RESULT', 'REASON', 'COUNT', 'ADIF', 'LOGID', 'LOGIDS', 'DATA']
+    known_keys = ['RESULT', 'REASON', 'COUNT', 'ADIF', 'LOGID', 'LOGIDS', 'DATA', 'CALLSIGN']
 
     result = {}
     # Find each known key and extract its value
@@ -191,15 +191,16 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     )
 
 
-async def verify_api_key(api_key: str) -> bool:
+async def verify_api_key(api_key: str, expected_callsign: str = None) -> bool:
     """
-    Verify that a QRZ API key is valid by making a simple API call.
+    Verify that a QRZ API key is valid and optionally belongs to a specific callsign.
 
     Args:
         api_key: User's QRZ Logbook API key
+        expected_callsign: If provided, verify the API key belongs to this callsign
 
     Returns:
-        True if the API key is valid, False otherwise
+        True if the API key is valid (and matches callsign if provided), False otherwise
     """
     async with httpx.AsyncClient() as client:
         data = {
@@ -221,10 +222,16 @@ async def verify_api_key(api_key: str) -> bool:
         result = parse_qrz_response(response.text)
 
         # Check if the API returned OK
-        if result.get("RESULT") == "OK":
-            return True
+        if result.get("RESULT") != "OK":
+            return False
 
-        return False
+        # If expected_callsign provided, verify it matches the API key's owner
+        if expected_callsign:
+            api_callsign = result.get("CALLSIGN", "").upper()
+            if api_callsign != expected_callsign.upper():
+                return False
+
+        return True
 
 
 async def fetch_qsos(api_key: str, confirmed_only: bool = True) -> List[QSOData]:

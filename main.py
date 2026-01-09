@@ -660,10 +660,10 @@ async def signup(signup_data: UserSignup):
     """Create a new user account."""
     callsign = signup_data.callsign.upper()
 
-    # Verify QRZ API key is valid (also validates callsign exists in QRZ)
-    is_valid = await verify_api_key(signup_data.qrz_api_key)
+    # Verify QRZ API key is valid AND belongs to the callsign being registered
+    is_valid = await verify_api_key(signup_data.qrz_api_key, callsign)
     if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid QRZ API key. Please check your key and callsign.")
+        raise HTTPException(status_code=400, detail="Invalid QRZ API key or key does not match callsign.")
 
     # Encrypt the API key
     encrypted_key = encrypt_api_key(signup_data.qrz_api_key)
