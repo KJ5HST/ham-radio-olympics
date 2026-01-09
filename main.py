@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
 
-from database import init_db, get_db
+from database import init_db, get_db, seed_example_olympiad
 from crypto import encrypt_api_key
 from sync import sync_contestant, sync_all_contestants, recompute_sport_matches
 from qrz_client import verify_api_key
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown."""
     global _sync_task
     init_db()
+    seed_example_olympiad()  # Seeds example data on fresh deployments
     # Start background sync task
     _sync_task = asyncio.create_task(background_sync())
     yield

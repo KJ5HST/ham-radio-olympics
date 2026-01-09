@@ -191,3 +191,106 @@ def reset_db():
     if os.path.exists(DATABASE_PATH):
         os.remove(DATABASE_PATH)
     init_db()
+
+
+def seed_example_olympiad():
+    """
+    Seed the database with an example 2026 Radio Olympics.
+
+    This creates a complete olympiad with 3 sports demonstrating different configurations:
+    - Continental DX: Monthly continent targets (work mode only)
+    - Country DX: Monthly country targets (work mode only)
+    - National Park POTA: All US National Parks (work + activate, separate pools)
+
+    Only runs if no olympiad exists yet.
+    """
+    with get_db() as conn:
+        # Check if olympiad already exists
+        existing = conn.execute("SELECT COUNT(*) FROM olympiads").fetchone()[0]
+        if existing > 0:
+            return  # Don't seed if data exists
+
+        # Create the olympiad
+        conn.execute("""
+            INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+            VALUES ('2026 Radio Olympics', '2026-01-01', '2026-12-01', 0, 1)
+        """)
+
+        # Sport 1: Continental DX of the Year
+        conn.execute("""
+            INSERT INTO sports (olympiad_id, name, description, target_type, work_enabled, activate_enabled, separate_pools)
+            VALUES (1, 'Continental DX of the Year',
+                    'Work all continents (1 per month). Points for quick QSO and power factor (QRP). Bonus for a successful POTA hunt in that continent.',
+                    'continent', 1, 0, 0)
+        """)
+
+        # Sport 2: Country DX of the Year
+        conn.execute("""
+            INSERT INTO sports (olympiad_id, name, description, target_type, work_enabled, activate_enabled, separate_pools)
+            VALUES (1, 'Country DX of the Year',
+                    'Work each country. Points for quick QSO and power factor (QRP). Bonus for a successful POTA hunt in that country.',
+                    'country', 1, 0, 0)
+        """)
+
+        # Sport 3: National Park POTA Challenge
+        conn.execute("""
+            INSERT INTO sports (olympiad_id, name, description, target_type, work_enabled, activate_enabled, separate_pools)
+            VALUES (1, 'National Park POTA Challenge',
+                    'Activate and Hunt POTA! Points are awarded for both so park-to-park is your biggest score. Separate medals for hunters and activators.',
+                    'park', 1, 1, 1)
+        """)
+
+        # Continental DX matches (Sport 1) - one continent per month
+        continent_matches = [
+            ('2026-01-01T00:00:00', '2026-02-28T23:59:00', 'NA'),  # North America
+            ('2026-03-01T00:00:00', '2026-03-31T23:59:00', 'SA'),  # South America
+            ('2026-04-01T00:00:00', '2026-04-30T23:59:00', 'OC'),  # Oceania
+            ('2026-05-01T00:00:00', '2026-05-31T23:59:00', 'EU'),  # Europe
+            ('2026-06-01T00:00:00', '2026-06-30T23:59:00', 'AF'),  # Africa
+            ('2026-07-01T00:00:00', '2026-07-31T23:59:00', 'AS'),  # Asia
+            ('2026-08-01T00:00:00', '2026-08-31T23:59:00', 'AN'),  # Antarctica
+        ]
+        for start, end, target in continent_matches:
+            conn.execute(
+                "INSERT INTO matches (sport_id, start_date, end_date, target_value) VALUES (1, ?, ?, ?)",
+                (start, end, target)
+            )
+
+        # Country DX matches (Sport 2) - different countries each month
+        # DXCC codes: 291=USA, 224=Poland, 108=Belgium, 503=Czech, 221=Norway, 45=Austria, 422=Liechtenstein, 1=Canada, 223=Sweden, 163=Finland, 339=Japan
+        country_matches = [
+            ('2026-01-01T00:00:00', '2026-01-31T23:59:00', '291'),  # USA
+            ('2026-02-01T00:00:00', '2026-02-28T23:59:00', '224'),  # Poland
+            ('2026-03-01T00:00:00', '2026-03-31T23:59:00', '108'),  # Belgium
+            ('2026-04-01T00:00:00', '2026-04-30T23:59:00', '503'),  # Czech Republic
+            ('2026-05-01T00:00:00', '2026-05-31T23:59:00', '221'),  # Norway
+            ('2026-06-01T00:00:00', '2026-06-30T23:59:00', '45'),   # Austria
+            ('2026-07-01T00:00:00', '2026-07-31T23:59:00', '422'),  # Liechtenstein
+            ('2026-08-01T00:00:00', '2026-08-31T23:59:00', '1'),    # Canada
+            ('2026-09-01T00:00:00', '2026-09-30T23:59:00', '223'),  # Sweden
+            ('2026-10-01T00:00:00', '2026-10-31T23:59:00', '163'),  # Finland
+            ('2026-11-01T00:00:00', '2026-11-30T23:59:00', '339'),  # Japan
+        ]
+        for start, end, target in country_matches:
+            conn.execute(
+                "INSERT INTO matches (sport_id, start_date, end_date, target_value) VALUES (2, ?, ?, ?)",
+                (start, end, target)
+            )
+
+        # National Park POTA matches (Sport 3) - US National Parks spanning full year
+        national_parks = [
+            'US-0001', 'US-0004', 'US-0005', 'US-0006', 'US-0007', 'US-0008', 'US-0009',
+            'US-0010', 'US-0011', 'US-0012', 'US-0014', 'US-0017', 'US-0018', 'US-0020',
+            'US-0021', 'US-0022', 'US-0023', 'US-0024', 'US-0026', 'US-0028', 'US-0030',
+            'US-0031', 'US-0032', 'US-0033', 'US-0034', 'US-0035', 'US-0036', 'US-0037',
+            'US-0038', 'US-0039', 'US-0041', 'US-0044', 'US-0045', 'US-0046', 'US-0047',
+            'US-0048', 'US-0049', 'US-0050', 'US-0051', 'US-0052', 'US-0055', 'US-0056',
+            'US-0057', 'US-0058', 'US-0059', 'US-0060', 'US-0063', 'US-0064', 'US-0065',
+            'US-0067', 'US-0068', 'US-0069', 'US-0070', 'US-0071', 'US-0072', 'US-0640',
+            'US-0765', 'US-0779', 'US-0696', 'US-0970', 'US-12607',
+        ]
+        for park in national_parks:
+            conn.execute(
+                "INSERT INTO matches (sport_id, start_date, end_date, target_value) VALUES (3, ?, ?, ?)",
+                ('2026-01-01T00:00:00', '2026-12-01T23:59:59', park)
+            )
