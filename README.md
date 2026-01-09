@@ -181,19 +181,47 @@ fly deploy
 
 ## Scoring
 
-### Distance Event
-- Gold: Earliest confirmed QSO
-- Silver: 2nd earliest
-- Bronze: 3rd earliest
+Here's how points are calculated:
 
-### Cool Factor Event
-- Gold: Highest cool factor (distance_km / power_w)
-- Silver: 2nd highest
-- Bronze: 3rd highest
+### Medal Points
+
+Each match awards medals for 2 podiums:
+
+  | Medal  | Points |
+  |--------|--------|
+  | Gold   | 3      |
+  | Silver | 2      |
+  | Bronze | 1      |
+
+1. QSO Event
+
+  - Winner: First person to make a qualifying contact with the target QSO
+  - Medals awarded to the 1st, 2nd, and 3rd earliest confirmed QSOs
+
+2. Cool Factor Event (Power Factor aka QSL)
+
+  - Winner: Highest "cool factor" score
+  - Cool Factor formula: distance_km / tx_power_watts
+  - Example: 5000 km contact at 5 watts = 1000 cool factor; 1000 km at 1000 watts = 1 cool factor
+  - Ties broken by earliest QSO time
 
 ### POTA Bonus
-- +1 point when working/activating a POTA park
-- Or when contestant is at a park for non-POTA targets
+
+  | Scenario                                             | Bonus |
+  |------------------------------------------------------|-------|
+  | Park-to-Park (target is a park AND you're at a park) | +2    |
+  | Target is a park OR you're at a park                 | +1    |
+  | No park involvement                                  | +0    |
+
+### Examples
+
+- If you win gold in QSO (3) + silver in QRP (2) + park-to-park bonus (2) = 7 points for that match.
+- If you win silver in QSO (2) + bronze in QRP (1) + hunt a park bonus (1) = 4 points for that match.
+- If you win bronze in QSO (1) + Gold in QRP (3) + activate a park bonus (1) = 5 points for that match.
+
+### Qualification
+
+The Olympiad can set a minimum number of QSOs required to qualify for medals. If you don't meet the threshold, you appear in standings but aren't eligible for medals.
 
 ### Maximum Points per Match
 - Single mode or combined pools: 7 pts
