@@ -18,7 +18,7 @@
 
 <h3>Olympiads</h3>
 {% if olympiads %}
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Name</th>
@@ -48,7 +48,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <p>No olympiads yet. Create one below.</p>
 {% endif %}

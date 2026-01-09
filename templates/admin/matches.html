@@ -20,7 +20,7 @@
 
 <h3>Scheduled Matches</h3>
 {% if matches %}
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Target</th>
@@ -42,7 +42,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <p>No matches scheduled yet. Create one below.</p>
 {% endif %}

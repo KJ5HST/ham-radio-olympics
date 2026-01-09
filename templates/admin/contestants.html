@@ -7,7 +7,7 @@
 <p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
 
 {% if contestants %}
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Callsign</th>
@@ -93,7 +93,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <p>No competitors registered yet.</p>
 {% endif %}

@@ -8,7 +8,7 @@
 
 <h3>Sports</h3>
 {% if sports %}
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Sport</th>
@@ -32,7 +32,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <p>No sports configured yet.</p>
 {% endif %}

@@ -6,7 +6,7 @@
 <h2>World Records</h2>
 
 {% if world_records %}
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Record Type</th>
@@ -41,7 +41,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <div class="card">
     <p>No world records have been set yet. Be the first to set a record!</p>

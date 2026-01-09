@@ -165,6 +165,103 @@
         }
         .dropdown-menu button { color: #c53030; }
         .dropdown:hover .dropdown-menu { display: block; }
+        .dropdown-menu.show { display: block; }
+        /* Table responsive wrapper */
+        .table-responsive {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        /* Mobile styles */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            header {
+                padding: 15px;
+                border-radius: 6px;
+                margin-bottom: 15px;
+            }
+            header h1 {
+                font-size: 1.4rem;
+            }
+            header p {
+                font-size: 0.9rem;
+            }
+            nav {
+                padding: 10px 15px;
+                margin-bottom: 15px;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 10px;
+            }
+            nav a {
+                margin-right: 15px;
+            }
+            nav > span {
+                float: none !important;
+                margin-left: auto;
+            }
+            main {
+                padding: 15px;
+            }
+            h2 {
+                font-size: 1.4rem;
+            }
+            h3 {
+                font-size: 1.2rem;
+            }
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            .stat-box {
+                padding: 12px;
+            }
+            .stat-box .value {
+                font-size: 1.5rem;
+            }
+            .stat-box .label {
+                font-size: 0.8rem;
+            }
+            table {
+                font-size: 0.9rem;
+            }
+            th, td {
+                padding: 8px 6px;
+            }
+            .card {
+                padding: 12px;
+            }
+            .btn {
+                padding: 10px 14px;
+            }
+            /* Stack buttons on mobile */
+            .btn + .btn {
+                margin-left: 0;
+                margin-top: 8px;
+            }
+            .dropdown-menu {
+                right: auto;
+                left: 0;
+            }
+            /* Touch-friendly: don't rely on hover */
+            .dropdown:hover .dropdown-menu {
+                display: none;
+            }
+            .dropdown-menu.show {
+                display: block;
+            }
+        }
+        @media (max-width: 480px) {
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            nav a {
+                margin-right: 10px;
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -202,5 +299,24 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+    <script>
+    // Click-based dropdown for touch devices
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggle = document.querySelector('.dropdown-toggle');
+        const menu = document.querySelector('.dropdown-menu');
+        if (toggle && menu) {
+            toggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            });
+            document.addEventListener('click', function(e) {
+                if (!e.target.closest('.dropdown')) {
+                    menu.classList.remove('show');
+                }
+            });
+        }
+    });
+    </script>
 </body>
 </html>

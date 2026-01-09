@@ -13,7 +13,7 @@
 
 {% if medals %}
 <h3>Leaderboard</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Rank</th>
@@ -49,7 +49,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <div class="card">
     <p>No medals awarded yet. Medals are assigned based on confirmed QSOs matching this target.</p>

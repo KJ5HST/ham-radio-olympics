@@ -55,7 +55,7 @@ async function leaveSport() {
 
 {% if standings %}
 <h3>Overall Standings</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Rank</th>
@@ -78,7 +78,7 @@ async function leaveSport() {
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <div class="card">
     <p>No standings yet. Medals are awarded as matches complete.</p>
@@ -87,7 +87,7 @@ async function leaveSport() {
 
 {% if matches %}
 <h3>Matches</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Target</th>
@@ -106,7 +106,7 @@ async function leaveSport() {
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <div class="card">
     <p>No matches scheduled yet.</p>

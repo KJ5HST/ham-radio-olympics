@@ -18,18 +18,18 @@
     </div>
 {% else %}
     {% if callsign %}
-        <table>
+        <div class="table-responsive"><table>
             <tr><th>Callsign</th><td>{{ result.callsign }}</td></tr>
             <tr><th>QSOs Fetched</th><td>{{ result.total_fetched }}</td></tr>
             <tr><th>New QSOs</th><td>{{ result.new_qsos }}</td></tr>
             <tr><th>Updated QSOs</th><td>{{ result.updated_qsos }}</td></tr>
-        </table>
+        </table></div>
     {% else %}
-        <table>
+        <div class="table-responsive"><table>
             <tr><th>Competitors Synced</th><td>{{ result.contestants_synced }}</td></tr>
             <tr><th>Total New QSOs</th><td>{{ result.total_new_qsos }}</td></tr>
             <tr><th>Total Updated QSOs</th><td>{{ result.total_updated_qsos }}</td></tr>
-        </table>
+        </table></div>
         {% if result.errors %}
         <h4>Errors</h4>
         <ul>

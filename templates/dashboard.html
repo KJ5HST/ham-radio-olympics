@@ -60,7 +60,7 @@
 
 {% if sport_entries %}
 <h3>{% if is_own_profile %}My {% endif %}Sports</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Sport</th>
@@ -84,12 +84,12 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% endif %}
 
 {% if personal_bests %}
 <h3>Personal Bests</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Record Type</th>
@@ -116,12 +116,12 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% endif %}
 
 {% if medals %}
 <h3>{% if is_own_profile %}Recent {% endif %}Medals</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Sport</th>
@@ -155,12 +155,12 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% endif %}
 
 {% if qsos %}
 <h3>Recent QSOs</h3>
-<table>
+<div class="table-responsive"><table>
     <thead>
         <tr>
             <th>Date/Time (UTC)</th>
@@ -187,7 +187,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% else %}
 <div class="card">
     {% if is_own_profile %}
