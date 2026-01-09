@@ -38,7 +38,23 @@
     {% endif %}
     <p><strong>Last Sync:</strong> {{ contestant.last_sync_at | format_datetime if contestant.last_sync_at else 'Never' }}</p>
     {% if can_sync %}
-    <a href="/sync?callsign={{ contestant.callsign }}" class="btn" style="margin-top: 10px; display: inline-block;">Sync QSOs Now</a>
+    <button onclick="syncQsos()" id="sync-btn" class="btn" style="margin-top: 10px;">Sync QSOs Now</button>
+    <script>
+    async function syncQsos() {
+        const btn = document.getElementById('sync-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        try {
+            await fetch('/sync?callsign={{ contestant.callsign }}', {method: 'POST'});
+            location.reload();
+        } catch (e) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert('Sync failed. Please try again.');
+        }
+    }
+    </script>
     {% endif %}
 </div>
 
