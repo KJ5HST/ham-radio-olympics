@@ -18,7 +18,7 @@
         <tr>
             <th>Rank</th>
             <th>Callsign</th>
-            <th>Distance Medal</th>
+            <th>QSO Race</th>
             <th>Cool Factor Medal</th>
             <th>POTA Bonus</th>
             <th>Total Points</th>
@@ -30,8 +30,8 @@
             <td>{{ loop.index }}</td>
             <td><a href="/contestant/{{ medal.callsign }}">{{ medal.callsign }}</a></td>
             <td>
-                {% if medal.distance_medal %}
-                    <span class="medal-{{ medal.distance_medal }}">{{ medal.distance_medal | upper }}</span>
+                {% if medal.qso_race_medal %}
+                    <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
                 {% else %}
                     -
                 {% endif %}

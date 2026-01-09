@@ -221,7 +221,7 @@ class TestQSOValidation:
 class TestMedalComputation:
     """Test medal computation logic."""
 
-    def test_distance_medals_by_time(self):
+    def test_qso_race_medals_by_time(self):
         """Test distance medals awarded by earliest QSO time."""
         qsos = [
             MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 5), 8000, 5, 1600, "combined", False),
@@ -233,15 +233,15 @@ class TestMedalComputation:
 
         # W2XYZ was earliest (12:01), should get gold
         w2 = next(r for r in results if r.callsign == "W2XYZ")
-        assert w2.distance_medal == "gold"
+        assert w2.qso_race_medal == "gold"
 
         # K1ABC was second (12:05), should get silver
         k1 = next(r for r in results if r.callsign == "K1ABC")
-        assert k1.distance_medal == "silver"
+        assert k1.qso_race_medal == "silver"
 
         # N3DEF was third (12:10), should get bronze
         n3 = next(r for r in results if r.callsign == "N3DEF")
-        assert n3.distance_medal == "bronze"
+        assert n3.qso_race_medal == "bronze"
 
     def test_cool_factor_medals_by_value(self):
         """Test cool factor medals awarded by highest value."""
@@ -294,7 +294,7 @@ class TestMedalComputation:
         # Neither should be qualified
         for r in results:
             assert r.qualified == False
-            assert r.distance_medal is None
+            assert r.qso_race_medal is None
             assert r.cool_factor_medal is None
 
     def test_qualifying_with_multiple_qsos(self):
@@ -311,10 +311,10 @@ class TestMedalComputation:
         w2 = next(r for r in results if r.callsign == "W2XYZ")
 
         assert k1.qualified == True
-        assert k1.distance_medal == "gold"
+        assert k1.qso_race_medal == "gold"
 
         assert w2.qualified == False
-        assert w2.distance_medal is None
+        assert w2.qso_race_medal is None
 
     def test_separate_pools(self):
         """Test separate pools for work/activate modes."""
@@ -332,14 +332,14 @@ class TestMedalComputation:
         # Work pool medals
         k1 = next(r for r in results if r.callsign == "K1ABC" and r.role == "work")
         w2 = next(r for r in results if r.callsign == "W2XYZ" and r.role == "work")
-        assert k1.distance_medal == "gold"  # Earlier
-        assert w2.distance_medal == "silver"
+        assert k1.qso_race_medal == "gold"  # Earlier
+        assert w2.qso_race_medal == "silver"
 
         # Activate pool medals (separate from work)
         n3 = next(r for r in results if r.callsign == "N3DEF" and r.role == "activate")
         k4 = next(r for r in results if r.callsign == "K4GHI" and r.role == "activate")
-        assert n3.distance_medal == "gold"  # Earlier
-        assert k4.distance_medal == "silver"
+        assert n3.qso_race_medal == "gold"  # Earlier
+        assert k4.qso_race_medal == "silver"
 
     def test_total_points_calculation(self):
         """Test total points = distance + cool factor + POTA bonus."""
@@ -351,7 +351,7 @@ class TestMedalComputation:
 
         k1 = results[0]
         # Gold for distance (3) + gold for CF (3) + POTA bonus (1) = 7
-        assert k1.distance_medal == "gold"
+        assert k1.qso_race_medal == "gold"
         assert k1.cool_factor_medal == "gold"
         assert k1.pota_bonus == 1
         assert k1.total_points == 7
@@ -431,7 +431,7 @@ class TestMedalReshuffle:
         results_initial = compute_medals(qsos_initial, qualifying_qsos=0, target_type="continent")
 
         k1_initial = next(r for r in results_initial if r.callsign == "K1ABC")
-        assert k1_initial.distance_medal == "gold"
+        assert k1_initial.qso_race_medal == "gold"
 
         # New QSO added that's earlier
         qsos_with_new = qsos_initial + [
@@ -442,11 +442,11 @@ class TestMedalReshuffle:
 
         # N3DEF should now have gold (earliest)
         n3 = next(r for r in results_new if r.callsign == "N3DEF")
-        assert n3.distance_medal == "gold"
+        assert n3.qso_race_medal == "gold"
 
         # K1ABC should be demoted to silver
         k1_new = next(r for r in results_new if r.callsign == "K1ABC")
-        assert k1_new.distance_medal == "silver"
+        assert k1_new.qso_race_medal == "silver"
 
     def test_new_higher_cf_reshuffles(self):
         """Test adding higher cool factor QSO reshuffles CF medals."""

@@ -1507,7 +1507,7 @@ class TestSportEntry:
             cursor = conn.execute("SELECT * FROM medals WHERE callsign = 'W1MED'")
             medal = cursor.fetchone()
         assert medal is not None
-        assert medal["distance_medal"] == "gold"
+        assert medal["qso_race_medal"] == "gold"
 
 
 class TestMultipleSports:
@@ -2210,7 +2210,7 @@ class TestUserDashboard:
         logged_in_client.post("/sport/1/enter")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO medals (match_id, callsign, role, distance_medal, total_points)
+                INSERT INTO medals (match_id, callsign, role, qso_race_medal, total_points)
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 
@@ -2247,7 +2247,7 @@ class TestUserDashboard:
         logged_in_client.post("/sport/1/enter")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO medals (match_id, callsign, role, distance_medal, total_points)
+                INSERT INTO medals (match_id, callsign, role, qso_race_medal, total_points)
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 
@@ -2283,7 +2283,7 @@ class TestUserDashboard:
         logged_in_client.post("/sport/1/enter")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO medals (match_id, callsign, role, distance_medal, total_points)
+                INSERT INTO medals (match_id, callsign, role, qso_race_medal, total_points)
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 
@@ -2320,7 +2320,7 @@ class TestUserDashboard:
         logged_in_client.post("/sport/1/enter")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO medals (match_id, callsign, role, distance_medal, total_points)
+                INSERT INTO medals (match_id, callsign, role, qso_race_medal, total_points)
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 

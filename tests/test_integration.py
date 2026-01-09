@@ -125,7 +125,7 @@ class TestFullWorkflow:
         # 8. Verify medals
         with get_db() as conn:
             cursor = conn.execute("""
-                SELECT callsign, distance_medal, cool_factor_medal, total_points
+                SELECT callsign, qso_race_medal, cool_factor_medal, total_points
                 FROM medals WHERE match_id = ?
                 ORDER BY total_points DESC
             """, (match_id,))
@@ -135,13 +135,13 @@ class TestFullWorkflow:
 
         # W1ABC should have gold for distance (earlier) and gold for CF (1700 > 860)
         w1 = next(m for m in medals if m["callsign"] == "W1ABC")
-        assert w1["distance_medal"] == "gold"
+        assert w1["qso_race_medal"] == "gold"
         assert w1["cool_factor_medal"] == "gold"
         assert w1["total_points"] == 6  # 3 + 3
 
         # K2DEF should have silver for both
         k2 = next(m for m in medals if m["callsign"] == "K2DEF")
-        assert k2["distance_medal"] == "silver"
+        assert k2["qso_race_medal"] == "silver"
         assert k2["cool_factor_medal"] == "silver"
         assert k2["total_points"] == 4  # 2 + 2
 
@@ -195,8 +195,8 @@ class TestFullWorkflow:
         recompute_match_medals(1)
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT callsign, distance_medal FROM medals")
-            medals = {row["callsign"]: row["distance_medal"] for row in cursor.fetchall()}
+            cursor = conn.execute("SELECT callsign, qso_race_medal FROM medals")
+            medals = {row["callsign"]: row["qso_race_medal"] for row in cursor.fetchall()}
         assert medals["W1ABC"] == "gold"
 
         # Now K2DEF's earlier QSO gets confirmed
@@ -212,8 +212,8 @@ class TestFullWorkflow:
         recompute_match_medals(1)
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT callsign, distance_medal FROM medals")
-            medals = {row["callsign"]: row["distance_medal"] for row in cursor.fetchall()}
+            cursor = conn.execute("SELECT callsign, qso_race_medal FROM medals")
+            medals = {row["callsign"]: row["qso_race_medal"] for row in cursor.fetchall()}
 
         # K2DEF should now have gold (earlier)
         assert medals["K2DEF"] == "gold"
@@ -442,7 +442,7 @@ class TestSeparatePools:
         recompute_match_medals(1)
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT callsign, role, distance_medal FROM medals ORDER BY callsign")
+            cursor = conn.execute("SELECT callsign, role, qso_race_medal FROM medals ORDER BY callsign")
             medals = [dict(row) for row in cursor.fetchall()]
 
         # Both should have gold in their respective pools
@@ -450,7 +450,7 @@ class TestSeparatePools:
         k2 = next(m for m in medals if m["callsign"] == "K2DEF")
 
         assert w1["role"] == "work"
-        assert w1["distance_medal"] == "gold"
+        assert w1["qso_race_medal"] == "gold"
 
         assert k2["role"] == "activate"
-        assert k2["distance_medal"] == "gold"
+        assert k2["qso_race_medal"] == "gold"

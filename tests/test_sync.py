@@ -292,7 +292,7 @@ class TestRecomputeMatches:
             cursor = conn.execute("SELECT * FROM medals WHERE callsign = ?", ("W1TEST",))
             medals = cursor.fetchall()
             assert len(medals) == 1
-            assert medals[0]["distance_medal"] == "gold"
+            assert medals[0]["qso_race_medal"] == "gold"
             assert medals[0]["cool_factor_medal"] == "gold"
 
 

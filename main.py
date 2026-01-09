@@ -361,11 +361,11 @@ async def get_sport(request: Request, sport_id: int):
         cursor = conn.execute("""
             SELECT callsign, role,
                    SUM(total_points) as total_points,
-                   SUM(CASE WHEN distance_medal = 'gold' THEN 1 ELSE 0 END +
+                   SUM(CASE WHEN qso_race_medal = 'gold' THEN 1 ELSE 0 END +
                        CASE WHEN cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold,
-                   SUM(CASE WHEN distance_medal = 'silver' THEN 1 ELSE 0 END +
+                   SUM(CASE WHEN qso_race_medal = 'silver' THEN 1 ELSE 0 END +
                        CASE WHEN cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver,
-                   SUM(CASE WHEN distance_medal = 'bronze' THEN 1 ELSE 0 END +
+                   SUM(CASE WHEN qso_race_medal = 'bronze' THEN 1 ELSE 0 END +
                        CASE WHEN cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
@@ -431,7 +431,7 @@ async def get_match(request: Request, sport_id: int, match_id: int):
         cursor = conn.execute("""
             SELECT * FROM medals
             WHERE match_id = ?
-            ORDER BY total_points DESC, distance_claim_time ASC
+            ORDER BY total_points DESC, qso_race_claim_time ASC
         """, (match_id,))
         medals = [dict(row) for row in cursor.fetchall()]
 
@@ -574,9 +574,9 @@ async def get_contestant(request: Request, callsign: str, user: User = Depends(r
         cursor = conn.execute("""
             SELECT s.id, s.name, o.name as olympiad_name,
                    COALESCE(SUM(m.total_points), 0) as sport_points,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN m.id END) as gold_count,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN m.id END) as silver_count,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN m.id END) as bronze_count
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN m.id END) as gold_count,
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN m.id END) as silver_count,
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN m.id END) as bronze_count
             FROM sport_entries se
             JOIN sports s ON se.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
@@ -589,9 +589,9 @@ async def get_contestant(request: Request, callsign: str, user: User = Depends(r
         sport_entries = [dict(row) for row in cursor.fetchall()]
 
         # Calculate medal summary (count each medal type separately)
-        gold = sum((1 if m["distance_medal"] == "gold" else 0) + (1 if m["cool_factor_medal"] == "gold" else 0) for m in medals)
-        silver = sum((1 if m["distance_medal"] == "silver" else 0) + (1 if m["cool_factor_medal"] == "silver" else 0) for m in medals)
-        bronze = sum((1 if m["distance_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
+        gold = sum((1 if m["qso_race_medal"] == "gold" else 0) + (1 if m["cool_factor_medal"] == "gold" else 0) for m in medals)
+        silver = sum((1 if m["qso_race_medal"] == "silver" else 0) + (1 if m["cool_factor_medal"] == "silver" else 0) for m in medals)
+        bronze = sum((1 if m["qso_race_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
         total_points = sum(m["total_points"] for m in medals)
 
         # Can sync if: viewing own profile with QRZ key, OR admin/referee viewing someone with QRZ key
@@ -775,9 +775,9 @@ async def user_dashboard(request: Request, user: User = Depends(require_user)):
         personal_bests = [dict(row) for row in cursor.fetchall()]
 
         # Calculate medal summary (count each medal type separately)
-        gold = sum((1 if m["distance_medal"] == "gold" else 0) + (1 if m["cool_factor_medal"] == "gold" else 0) for m in medals)
-        silver = sum((1 if m["distance_medal"] == "silver" else 0) + (1 if m["cool_factor_medal"] == "silver" else 0) for m in medals)
-        bronze = sum((1 if m["distance_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
+        gold = sum((1 if m["qso_race_medal"] == "gold" else 0) + (1 if m["cool_factor_medal"] == "gold" else 0) for m in medals)
+        silver = sum((1 if m["qso_race_medal"] == "silver" else 0) + (1 if m["cool_factor_medal"] == "silver" else 0) for m in medals)
+        bronze = sum((1 if m["qso_race_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
         total_points = sum(m["total_points"] for m in medals)
 
         # Get contestant info
@@ -791,9 +791,9 @@ async def user_dashboard(request: Request, user: User = Depends(require_user)):
         cursor = conn.execute("""
             SELECT s.id, s.name, o.name as olympiad_name,
                    COALESCE(SUM(m.total_points), 0) as sport_points,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN m.id END) as gold_count,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN m.id END) as silver_count,
-                   COUNT(DISTINCT CASE WHEN m.distance_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN m.id END) as bronze_count
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN m.id END) as gold_count,
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN m.id END) as silver_count,
+                   COUNT(DISTINCT CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN m.id END) as bronze_count
             FROM sport_entries se
             JOIN sports s ON se.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
@@ -1125,9 +1125,9 @@ async def admin_sport_competitors(request: Request, sport_id: int):
         cursor = conn.execute("""
             SELECT c.callsign, c.registered_at, c.is_disabled,
                    COUNT(DISTINCT m.id) as medal_count,
-                   SUM(CASE WHEN m.distance_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
-                   SUM(CASE WHEN m.distance_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
-                   SUM(CASE WHEN m.distance_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count
+                   SUM(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
+                   SUM(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
+                   SUM(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count
             FROM sport_entries se
             JOIN contestants c ON se.callsign = c.callsign
             LEFT JOIN medals m ON m.callsign = c.callsign AND m.match_id IN (

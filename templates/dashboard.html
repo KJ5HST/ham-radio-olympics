@@ -126,7 +126,7 @@
         <tr>
             <th>Sport</th>
             <th>Target</th>
-            <th>Distance</th>
+            <th>QSO Race</th>
             <th>Cool Factor</th>
             <th>Points</th>
         </tr>
@@ -137,8 +137,8 @@
             <td>{{ medal.sport_name }}</td>
             <td>{{ medal.target_display }}</td>
             <td>
-                {% if medal.distance_medal %}
-                    <span class="medal-{{ medal.distance_medal }}">{{ medal.distance_medal | upper }}</span>
+                {% if medal.qso_race_medal %}
+                    <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
                 {% else %}
                     -
                 {% endif %}
@@ -168,7 +168,7 @@
             <th>Band</th>
             <th>Mode</th>
             <th>Power</th>
-            <th>Distance</th>
+            <th>QSO Race</th>
             <th>Cool Factor</th>
             <th>Confirmed</th>
         </tr>

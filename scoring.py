@@ -3,7 +3,7 @@ Scoring engine for Ham Radio Olympics.
 
 Handles:
 - QSO matching against Sport/Match targets
-- Medal computation for Distance and Cool Factor events
+- Medal computation for QSO Race and Cool Factor events
 - POTA bonus logic
 - Record tracking
 """
@@ -37,8 +37,8 @@ class MedalResult:
     callsign: str
     role: str
     qualified: bool
-    distance_medal: Optional[str]
-    distance_claim_time: Optional[datetime]
+    qso_race_medal: Optional[str]
+    qso_race_claim_time: Optional[datetime]
     cool_factor_medal: Optional[str]
     cool_factor_value: Optional[float]
     cool_factor_claim_time: Optional[datetime]
@@ -268,9 +268,9 @@ def compute_medals(
         # Check qualification
         qualified = len(qsos) >= qualifying_qsos
 
-        # Distance event: earliest QSO time
+        # QSO Race: first to make contact wins
         earliest_qso = min(qsos, key=lambda q: q.qso_datetime)
-        distance_claim_time = earliest_qso.qso_datetime
+        qso_race_claim_time = earliest_qso.qso_datetime
 
         # Cool Factor event: highest cool factor
         best_cf_qso = max(qsos, key=lambda q: (q.cool_factor, -q.qso_datetime.timestamp()))
@@ -285,8 +285,8 @@ def compute_medals(
             callsign=callsign,
             role=role,
             qualified=qualified,
-            distance_medal=None,  # Computed below
-            distance_claim_time=distance_claim_time,
+            qso_race_medal=None,  # Computed below
+            qso_race_claim_time=qso_race_claim_time,
             cool_factor_medal=None,  # Computed below
             cool_factor_value=cool_factor_value,
             cool_factor_claim_time=cool_factor_claim_time,
@@ -294,15 +294,15 @@ def compute_medals(
             total_points=0,  # Computed below
         ))
 
-    # Award Distance medals (per role)
+    # Award QSO Race medals (per role)
     for role in set(r.role for r in results):
         role_results = [r for r in results if r.role == role and r.qualified]
         # Sort by earliest claim time
-        role_results.sort(key=lambda r: r.distance_claim_time)
+        role_results.sort(key=lambda r: r.qso_race_claim_time)
 
         medals = ["gold", "silver", "bronze"]
         for i, result in enumerate(role_results[:3]):
-            result.distance_medal = medals[i]
+            result.qso_race_medal = medals[i]
 
     # Award Cool Factor medals (per role)
     for role in set(r.role for r in results):
@@ -317,7 +317,7 @@ def compute_medals(
     # Calculate total points
     medal_points = {"gold": 3, "silver": 2, "bronze": 1, None: 0}
     for result in results:
-        points = medal_points[result.distance_medal]
+        points = medal_points[result.qso_race_medal]
         points += medal_points[result.cool_factor_medal]
         points += result.pota_bonus  # 0, 1, or 2 (P2P)
         result.total_points = points
@@ -411,7 +411,7 @@ def recompute_match_medals(match_id: int):
             conn.execute("""
                 INSERT INTO medals (
                     match_id, callsign, role, qualified,
-                    distance_medal, distance_claim_time,
+                    qso_race_medal, qso_race_claim_time,
                     cool_factor_medal, cool_factor_value, cool_factor_claim_time,
                     pota_bonus, total_points
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -420,8 +420,8 @@ def recompute_match_medals(match_id: int):
                 result.callsign,
                 result.role,
                 1 if result.qualified else 0,
-                result.distance_medal,
-                result.distance_claim_time.isoformat() if result.distance_claim_time else None,
+                result.qso_race_medal,
+                result.qso_race_claim_time.isoformat() if result.qso_race_claim_time else None,
                 result.cool_factor_medal,
                 result.cool_factor_value,
                 result.cool_factor_claim_time.isoformat() if result.cool_factor_claim_time else None,
