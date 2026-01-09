@@ -351,13 +351,13 @@ class TestPOTABonus:
             "target_value": "K-0001"
         }, headers=admin_headers)
 
-        signup_user(client, "W1P2P")
+        signup_user(client, "W1PTP")
 
         # Opt into sport
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
-                ("W1P2P", 1, "2026-01-01T00:00:00")
+                ("W1PTP", 1, "2026-01-01T00:00:00")
             )
 
         # Park-to-park: contestant at K-0002, works someone at K-0001
@@ -368,12 +368,12 @@ class TestPOTABonus:
                     tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, dx_sig_info, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
-            """, ("W1P2P", "N1POTA", "2026-01-05T12:00:00", 5.0, "EM12", "K-0002", "FN31", 291, "K-0001"))
+            """, ("W1PTP", "N1POTA", "2026-01-05T12:00:00", 5.0, "EM12", "K-0002", "FN31", 291, "K-0001"))
 
         recompute_match_medals(1)
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT pota_bonus, total_points FROM medals WHERE callsign = ?", ("W1P2P",))
+            cursor = conn.execute("SELECT pota_bonus, total_points FROM medals WHERE callsign = ?", ("W1PTP",))
             medal = cursor.fetchone()
 
         assert medal["pota_bonus"] == 2  # Park-to-park!

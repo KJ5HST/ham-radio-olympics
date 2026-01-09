@@ -18,6 +18,7 @@ from pydantic import BaseModel, field_validator
 from database import init_db, get_db
 from crypto import encrypt_api_key
 from sync import sync_contestant, sync_all_contestants, recompute_sport_matches
+from qrz_client import verify_api_key
 from scoring import recompute_match_medals
 from dxcc import get_country_name, get_continent_name, get_all_continents, get_all_countries
 from auth import (
@@ -99,6 +100,28 @@ ADMIN_KEY = os.getenv("ADMIN_KEY", "admin-secret-change-me")
 
 
 # Pydantic models
+def is_valid_callsign_format(callsign: str) -> bool:
+    """
+    Validate callsign format using regex patterns for international amateur callsigns.
+
+    Patterns cover:
+    - US: W1AW, K2ABC, N3XYZ, KD5DX, WA1ABC, etc.
+    - International: VE3ABC, G4XYZ, DL1ABC, JA1ABC, VK2ABC, etc.
+
+    General format: [prefix][digit][suffix]
+    - Prefix: 1-3 letters/numbers (starts with letter for most countries)
+    - Digit: 1 digit (required)
+    - Suffix: 1-4 letters
+    """
+    callsign = callsign.upper().strip()
+
+    # Pattern: 1-3 char prefix, 1 digit, 1-4 letter suffix
+    # Examples: W1A, K2AB, N3ABC, KD5DX, WA1ABCD, VE3XYZ, G4ABC, DL1ABC
+    pattern = r'^[A-Z]{1,2}[0-9][A-Z]{1,4}$|^[A-Z][0-9][A-Z]{1,4}$|^[0-9][A-Z][0-9][A-Z]{1,4}$|^[A-Z]{1,2}[0-9]{1,2}[A-Z]{1,4}$'
+
+    return bool(re.match(pattern, callsign))
+
+
 class UserSignup(BaseModel):
     callsign: str
     password: str
@@ -109,7 +132,7 @@ class UserSignup(BaseModel):
     @classmethod
     def validate_callsign(cls, v):
         v = v.upper().strip()
-        if not re.match(r"^[A-Z0-9]{3,10}$", v):
+        if not is_valid_callsign_format(v):
             raise ValueError("Invalid callsign format")
         return v
 
@@ -636,6 +659,11 @@ async def signup_page(request: Request):
 async def signup(signup_data: UserSignup):
     """Create a new user account."""
     callsign = signup_data.callsign.upper()
+
+    # Verify QRZ API key is valid (also validates callsign exists in QRZ)
+    is_valid = await verify_api_key(signup_data.qrz_api_key)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail="Invalid QRZ API key. Please check your key and callsign.")
 
     # Encrypt the API key
     encrypted_key = encrypt_api_key(signup_data.qrz_api_key)

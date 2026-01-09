@@ -8,7 +8,7 @@ import httpx
 from datetime import datetime
 from unittest.mock import patch
 
-from qrz_client import parse_adif, parse_qrz_response, parse_qso_data, fetch_qsos, QRZAPIError, QRZ_API_URL
+from qrz_client import parse_adif, parse_qrz_response, parse_qso_data, fetch_qsos, verify_api_key, QRZAPIError, QRZ_API_URL
 
 
 class TestADIFParsing:
@@ -471,4 +471,46 @@ class TestFetchQSOs:
         assert len(result) == 1
         assert result[0].dx_callsign == "W1ABC"
 
+
+
+
+
+class TestVerifyApiKey:
+    """Test QRZ API key verification."""
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_valid_key(self):
+        """Test verification of valid API key."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK"))
+
+        result = await verify_api_key("valid-api-key")
+        assert result is True
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_invalid_key(self):
+        """Test verification of invalid API key."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=FAIL&REASON=invalid api key"))
+
+        result = await verify_api_key("invalid-api-key")
+        assert result is False
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_http_error(self):
+        """Test verification when HTTP error occurs."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(500, text="Internal Server Error"))
+
+        result = await verify_api_key("any-key")
+        assert result is False
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_timeout(self):
+        """Test verification when request times out."""
+        respx.post(QRZ_API_URL).mock(side_effect=httpx.TimeoutException("timeout"))
+
+        result = await verify_api_key("any-key")
+        assert result is False
 

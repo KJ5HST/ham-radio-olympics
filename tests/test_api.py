@@ -160,6 +160,64 @@ class TestRegistration:
                 cursor = conn.execute("SELECT callsign FROM contestants WHERE callsign = 'W1ERR'")
                 assert cursor.fetchone() is not None
 
+    def test_signup_rejects_invalid_qrz_key(self, client, mock_qrz_verify):
+        """Test that signup fails when QRZ API key verification fails."""
+        mock_qrz_verify.return_value = False
+        response = client.post("/signup", json={
+            "callsign": "W1BAD",
+            "password": "password123",
+            "qrz_api_key": "invalid-api-key"
+        })
+        assert response.status_code == 400
+        assert "Invalid QRZ API key" in response.json()["detail"]
+
+
+class TestCallsignValidation:
+    """Test callsign format validation."""
+
+    def test_valid_us_callsigns(self):
+        """Test valid US amateur callsigns."""
+        from main import is_valid_callsign_format
+
+        valid_callsigns = [
+            "W1AW", "K2ABC", "N3XYZ", "KD5DX", "WA1ABC",
+            "WB4SON", "KC2ABC", "KG7ABC", "W1A", "K2AB",
+            "N3A", "AA1A", "AB2CD", "KK6ABC"
+        ]
+        for call in valid_callsigns:
+            assert is_valid_callsign_format(call), f"{call} should be valid"
+
+    def test_valid_international_callsigns(self):
+        """Test valid international amateur callsigns."""
+        from main import is_valid_callsign_format
+
+        valid_callsigns = [
+            "VE3ABC", "G4XYZ", "DL1ABC", "JA1ABC", "VK2ABC",
+            "ZL1ABC", "F5ABC", "I1ABC", "EA3ABC"
+        ]
+        for call in valid_callsigns:
+            assert is_valid_callsign_format(call), f"{call} should be valid"
+
+    def test_invalid_callsigns(self):
+        """Test invalid callsign formats."""
+        from main import is_valid_callsign_format
+
+        invalid_callsigns = [
+            "123", "ABC", "A1", "ABCDEFGHIJ",
+            "W1", "1ABC", "W-1ABC", "W1ABC!", "", "A"
+        ]
+        for call in invalid_callsigns:
+            assert not is_valid_callsign_format(call), f"{call} should be invalid"
+
+    def test_signup_rejects_invalid_format(self, client):
+        """Test that signup rejects invalid callsign format."""
+        response = client.post("/signup", json={
+            "callsign": "123INVALID",
+            "password": "password123",
+            "qrz_api_key": "test-api-key"
+        })
+        assert response.status_code == 422  # Validation error
+
 
 class TestOlympiadEndpoints:
     """Test Olympiad-related endpoints."""
@@ -225,11 +283,11 @@ class TestAdminEndpoints:
         """Test admin access via logged-in admin user."""
         from database import get_db
         # Create admin user
-        client.post("/signup", json={"callsign": "ADMIN1", "password": "password123", "qrz_api_key": "test-api-key"})
+        client.post("/signup", json={"callsign": "W1ADM", "password": "password123", "qrz_api_key": "test-api-key"})
         with get_db() as conn:
-            conn.execute("UPDATE contestants SET is_admin = 1 WHERE callsign = 'ADMIN1'")
+            conn.execute("UPDATE contestants SET is_admin = 1 WHERE callsign = 'W1ADM'")
         # Login
-        client.post("/login", json={"callsign": "ADMIN1", "password": "password123"})
+        client.post("/login", json={"callsign": "W1ADM", "password": "password123"})
         # Access admin without key
         response = client.get("/admin")
         assert response.status_code == 200
@@ -514,7 +572,7 @@ class TestContestantEndpoints:
     def test_get_contestant_not_found(self, client):
         """Test getting non-existent contestant."""
         # Must be logged in to access contestant pages
-        signup_user(client, "W1TESTER")
+        signup_user(client, "W1TST")
         response = client.get("/contestant/UNKNOWN")
         assert response.status_code == 404
 
@@ -530,7 +588,7 @@ class TestContestantEndpoints:
         client.post("/logout")
 
         # Sign up as different user to verify deletion
-        signup_user(client, "W2CHECK")
+        signup_user(client, "W2CHK")
 
         response = client.delete("/admin/contestant/W2XYZ", headers=admin_headers)
         assert response.status_code == 200
@@ -747,12 +805,12 @@ class TestContestantEndpoints:
         }, headers=admin_headers)
 
         # Create referee
-        signup_user(client, "W1ASREF")
+        signup_user(client, "W1ARF")
         client.post("/logout")
-        client.post("/admin/contestant/W1ASREF/set-referee", headers=admin_headers)
+        client.post("/admin/contestant/W1ARF/set-referee", headers=admin_headers)
 
         # Assign to sport
-        response = client.post("/admin/contestant/W1ASREF/assign-sport/1", headers=admin_headers)
+        response = client.post("/admin/contestant/W1ARF/assign-sport/1", headers=admin_headers)
         assert response.status_code == 200
         assert "assigned" in response.json()["message"]
 
@@ -1079,19 +1137,19 @@ class TestRefereeAccess:
         }, headers=admin_headers)
 
         # Create referee
-        signup_user(client, "W1REF3")
+        signup_user(client, "W1RFC")
         client.post("/logout")
-        client.post("/admin/contestant/W1REF3/set-referee", headers=admin_headers)
+        client.post("/admin/contestant/W1RFC/set-referee", headers=admin_headers)
 
         # Create user to disqualify
-        signup_user(client, "W1DQ3")
+        signup_user(client, "W1DQC")
         client.post("/logout")
 
         # Login as referee
-        client.post("/login", json={"callsign": "W1REF3", "password": "password123"})
+        client.post("/login", json={"callsign": "W1RFC", "password": "password123"})
 
         # Try disqualify - this should use referee session (not admin header)
-        response = client.post("/admin/contestant/W1DQ3/disqualify", headers={})
+        response = client.post("/admin/contestant/W1DQC/disqualify", headers={})
         assert response.status_code == 200
 
     def test_referee_update_nonexistent_match(self, referee_client):
@@ -1126,15 +1184,15 @@ class TestRefereeAccess:
         }, headers=admin_headers)
 
         # Create referee and assign to sport
-        signup_user(client, "W1REF2")
+        signup_user(client, "W1RFB")
         client.post("/logout")
-        client.post("/admin/contestant/W1REF2/set-referee", headers=admin_headers)
-        client.post("/admin/contestant/W1REF2/assign-sport/1", headers=admin_headers)
+        client.post("/admin/contestant/W1RFB/set-referee", headers=admin_headers)
+        client.post("/admin/contestant/W1RFB/assign-sport/1", headers=admin_headers)
 
         # Get contestants page as admin
         response = client.get("/admin/contestants", headers=admin_headers)
         assert response.status_code == 200
-        assert "W1REF2" in response.text
+        assert "W1RFB" in response.text
         assert "Referee" in response.text
         assert "DX Challenge" in response.text
 
@@ -1358,14 +1416,14 @@ class TestSportEntry:
 
     def test_enter_sport_success(self, client, admin_headers, setup_sport):
         """Test successfully entering a sport."""
-        signup_user(client, "W1ENTRY")
+        signup_user(client, "W1ENT")
         response = client.post("/sport/1/enter")
         assert response.status_code == 200
         assert response.json()["message"] == "Entered sport successfully"
 
     def test_enter_sport_already_entered(self, client, admin_headers, setup_sport):
         """Test entering sport when already entered."""
-        signup_user(client, "W1DOUBLE")
+        signup_user(client, "W1DBL")
         client.post("/sport/1/enter")
         # Try to enter again
         response = client.post("/sport/1/enter")
@@ -1380,7 +1438,7 @@ class TestSportEntry:
 
     def test_leave_sport_success(self, client, admin_headers, setup_sport):
         """Test successfully leaving a sport."""
-        signup_user(client, "W1LEAVE")
+        signup_user(client, "W1LVE")
         client.post("/sport/1/enter")
         response = client.post("/sport/1/leave")
         assert response.status_code == 200
@@ -1431,7 +1489,7 @@ class TestSportEntry:
         }, headers=admin_headers)
 
         # Create user and add a matching QSO
-        signup_user(client, "W1MEDAL")
+        signup_user(client, "W1MED")
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
@@ -1439,14 +1497,14 @@ class TestSportEntry:
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
-            """, ("W1MEDAL", "DL1ABC", "2026-06-15T12:00:00", 5.0, "EM12", "JN58", 230))
+            """, ("W1MED", "DL1ABC", "2026-06-15T12:00:00", 5.0, "EM12", "JN58", 230))
 
         # Enter sport - should trigger medal recomputation
         client.post("/sport/1/enter")
 
         # Check medal was created
         with get_db() as conn:
-            cursor = conn.execute("SELECT * FROM medals WHERE callsign = 'W1MEDAL'")
+            cursor = conn.execute("SELECT * FROM medals WHERE callsign = 'W1MED'")
             medal = cursor.fetchone()
         assert medal is not None
         assert medal["distance_medal"] == "gold"
@@ -1962,7 +2020,7 @@ class TestAuthEndpoints:
         """Test signup page redirects if already logged in."""
         # Sign up and stay logged in
         client.post("/signup", json={
-            "callsign": "W1REDIR",
+            "callsign": "W1RED",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })
@@ -1975,7 +2033,7 @@ class TestAuthEndpoints:
         """Test login page redirects if already logged in."""
         # Sign up and stay logged in
         client.post("/signup", json={
-            "callsign": "W1LOGRED",
+            "callsign": "W1LGR",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })
@@ -2013,7 +2071,7 @@ class TestAuthEndpoints:
     def test_signup_short_password(self, client):
         """Test signup with short password."""
         response = client.post("/signup", json={
-            "callsign": "W1SHORT",
+            "callsign": "W1SHT",
             "password": "short",
             "qrz_api_key": "test-api-key"
         })
@@ -2022,7 +2080,7 @@ class TestAuthEndpoints:
     def test_signup_empty_qrz_api_key(self, client):
         """Test signup with empty QRZ API key."""
         response = client.post("/signup", json={
-            "callsign": "W1NOKEY",
+            "callsign": "W1NOK",
             "password": "password123",
             "qrz_api_key": "   "  # Whitespace only
         })
@@ -2038,7 +2096,7 @@ class TestAuthEndpoints:
         """Test successful login."""
         # First signup
         client.post("/signup", json={
-            "callsign": "W1LOGIN",
+            "callsign": "W1LOG",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })
@@ -2046,7 +2104,7 @@ class TestAuthEndpoints:
         client.cookies.clear()
         # Then login
         response = client.post("/login", json={
-            "callsign": "W1LOGIN",
+            "callsign": "W1LOG",
             "password": "password123"
         }, follow_redirects=False)
         assert response.status_code == 303
@@ -2055,13 +2113,13 @@ class TestAuthEndpoints:
     def test_login_wrong_password(self, client):
         """Test login with wrong password."""
         client.post("/signup", json={
-            "callsign": "W1WRONG",
+            "callsign": "W1WRO",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })
         client.cookies.clear()
         response = client.post("/login", json={
-            "callsign": "W1WRONG",
+            "callsign": "W1WRO",
             "password": "wrongpassword"
         })
         assert response.status_code == 401
@@ -2069,16 +2127,16 @@ class TestAuthEndpoints:
     def test_login_disabled_account(self, client, admin_headers):
         """Test login with disabled account."""
         client.post("/signup", json={
-            "callsign": "W1DISLOG",
+            "callsign": "W1DIS",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })
         client.cookies.clear()
         # Disable the account
-        client.post("/admin/contestant/W1DISLOG/disable", headers=admin_headers)
+        client.post("/admin/contestant/W1DIS/disable", headers=admin_headers)
         # Try to login
         response = client.post("/login", json={
-            "callsign": "W1DISLOG",
+            "callsign": "W1DIS",
             "password": "password123"
         })
         assert response.status_code == 403
@@ -2088,7 +2146,7 @@ class TestAuthEndpoints:
         """Test logout."""
         # Signup to get session
         client.post("/signup", json={
-            "callsign": "W1LOGOUT",
+            "callsign": "W1LGO",
             "password": "password123",
             "qrz_api_key": "test-api-key"
         })

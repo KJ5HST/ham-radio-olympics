@@ -191,6 +191,42 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     )
 
 
+async def verify_api_key(api_key: str) -> bool:
+    """
+    Verify that a QRZ API key is valid by making a simple API call.
+
+    Args:
+        api_key: User's QRZ Logbook API key
+
+    Returns:
+        True if the API key is valid, False otherwise
+    """
+    async with httpx.AsyncClient() as client:
+        data = {
+            "KEY": api_key,
+            "ACTION": "STATUS",
+        }
+
+        try:
+            response = await client.post(
+                QRZ_API_URL,
+                data=data,
+                headers={"User-Agent": USER_AGENT},
+                timeout=10.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError:
+            return False
+
+        result = parse_qrz_response(response.text)
+
+        # Check if the API returned OK
+        if result.get("RESULT") == "OK":
+            return True
+
+        return False
+
+
 async def fetch_qsos(api_key: str, confirmed_only: bool = True) -> List[QSOData]:
     """
     Fetch all QSOs from QRZ Logbook API.
