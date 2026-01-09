@@ -164,7 +164,6 @@
             background: #f7fafc;
         }
         .dropdown-menu button { color: #c53030; }
-        .dropdown:hover .dropdown-menu { display: block; }
         .dropdown-menu.show { display: block; }
         /* Table responsive wrapper */
         .table-responsive {
@@ -245,13 +244,6 @@
                 right: auto;
                 left: 0;
             }
-            /* Touch-friendly: don't rely on hover */
-            .dropdown:hover .dropdown-menu {
-                display: none;
-            }
-            .dropdown-menu.show {
-                display: block;
-            }
         }
         @media (max-width: 480px) {
             .stats {
@@ -277,7 +269,7 @@
         <span style="float: right;">
             {% if user %}
                 <div class="dropdown">
-                    <button class="dropdown-toggle">{{ user.callsign }} &#9662;</button>
+                    <button type="button" class="dropdown-toggle">{{ user.callsign }} &#9662;</button>
                     <div class="dropdown-menu">
                         <a href="/dashboard">Dashboard</a>
                         <a href="/settings">Settings</a>
@@ -300,23 +292,29 @@
         {% block content %}{% endblock %}
     </main>
     <script>
-    // Click-based dropdown for touch devices
-    document.addEventListener('DOMContentLoaded', function() {
-        const toggle = document.querySelector('.dropdown-toggle');
-        const menu = document.querySelector('.dropdown-menu');
+    // Click-based dropdown for all devices
+    (function() {
+        var toggle = document.querySelector('.dropdown-toggle');
+        var menu = document.querySelector('.dropdown-menu');
         if (toggle && menu) {
-            toggle.addEventListener('click', function(e) {
+            function toggleMenu(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 menu.classList.toggle('show');
-            });
+            }
+            toggle.addEventListener('click', toggleMenu);
             document.addEventListener('click', function(e) {
                 if (!e.target.closest('.dropdown')) {
                     menu.classList.remove('show');
                 }
             });
+            document.addEventListener('touchstart', function(e) {
+                if (!e.target.closest('.dropdown')) {
+                    menu.classList.remove('show');
+                }
+            });
         }
-    });
+    })();
     </script>
 </body>
 </html>
