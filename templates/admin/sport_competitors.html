@@ -27,7 +27,7 @@
         {% for c in competitors %}
         <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
             <td>
-                <a href="/contestant/{{ c.callsign }}"><strong>{{ c.callsign }}</strong></a>
+                <a href="/competitor/{{ c.callsign }}"><strong>{{ c.callsign }}</strong></a>
             </td>
             <td>
                 {% if c.gold_count %}<span style="color: #d69e2e;">{{ c.gold_count }} Gold</span>{% endif %}
@@ -43,7 +43,7 @@
                 {% endif %}
             </td>
             <td>
-                <a href="/contestant/{{ c.callsign }}" class="btn">View</a>
+                <a href="/competitor/{{ c.callsign }}" class="btn">View</a>
                 <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-danger">Disqualify</button>
             </td>
         </tr>

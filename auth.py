@@ -75,7 +75,7 @@ def get_session_user(session_id: Optional[str]) -> Optional[User]:
         cursor = conn.execute("""
             SELECT c.callsign, c.email, c.qrz_api_key_encrypted, c.is_admin, c.is_referee
             FROM sessions s
-            JOIN contestants c ON s.callsign = c.callsign
+            JOIN competitors c ON s.callsign = c.callsign
             WHERE s.id = ? AND s.expires_at > ? AND c.is_disabled = 0
         """, (session_id, now))
         row = cursor.fetchone()
@@ -107,14 +107,14 @@ def register_user(callsign: str, password: str, email: Optional[str] = None, qrz
     with get_db() as conn:
         # Check if user already exists
         existing = conn.execute(
-            "SELECT 1 FROM contestants WHERE callsign = ?", (callsign,)
+            "SELECT 1 FROM competitors WHERE callsign = ?", (callsign,)
         ).fetchone()
 
         if existing:
             return False
 
         conn.execute("""
-            INSERT INTO contestants (callsign, password_hash, email, qrz_api_key_encrypted, registered_at)
+            INSERT INTO competitors (callsign, password_hash, email, qrz_api_key_encrypted, registered_at)
             VALUES (?, ?, ?, ?, ?)
         """, (callsign, password_hash, email, qrz_api_key_encrypted, now))
 
@@ -127,7 +127,7 @@ def authenticate_user(callsign: str, password: str) -> Optional[str]:
 
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT password_hash, is_disabled FROM contestants WHERE callsign = ?",
+            "SELECT password_hash, is_disabled FROM competitors WHERE callsign = ?",
             (callsign,)
         )
         row = cursor.fetchone()
@@ -144,7 +144,7 @@ def update_user_email(callsign: str, email: str) -> None:
     """Update user's email."""
     with get_db() as conn:
         conn.execute(
-            "UPDATE contestants SET email = ? WHERE callsign = ?",
+            "UPDATE competitors SET email = ? WHERE callsign = ?",
             (email, callsign)
         )
 
@@ -154,6 +154,6 @@ def update_user_password(callsign: str, new_password: str) -> None:
     password_hash = hash_password(new_password)
     with get_db() as conn:
         conn.execute(
-            "UPDATE contestants SET password_hash = ? WHERE callsign = ?",
+            "UPDATE competitors SET password_hash = ? WHERE callsign = ?",
             (password_hash, callsign)
         )

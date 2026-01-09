@@ -12,34 +12,34 @@ from grid_distance import grid_distance
 from scoring import recompute_match_medals, update_records
 
 
-async def sync_contestant(callsign: str) -> dict:
+async def sync_competitor(callsign: str) -> dict:
     """
-    Sync a single contestant's QSOs from QRZ.
+    Sync a single competitor's QSOs from QRZ.
 
     Args:
-        callsign: Contestant callsign
+        callsign: Competitor callsign
 
     Returns:
         dict with sync results
     """
     with get_db() as conn:
-        # Get contestant
+        # Get competitor
         cursor = conn.execute(
-            "SELECT * FROM contestants WHERE callsign = ?",
+            "SELECT * FROM competitors WHERE callsign = ?",
             (callsign.upper(),)
         )
-        contestant = cursor.fetchone()
+        competitor = cursor.fetchone()
 
-        if not contestant:
-            return {"error": f"Contestant {callsign} not found"}
+        if not competitor:
+            return {"error": f"Competitor {callsign} not found"}
 
         # Check if API key is configured
-        if not contestant["qrz_api_key_encrypted"]:
+        if not competitor["qrz_api_key_encrypted"]:
             return {"error": "QRZ API key not configured. Please upload your API key file in Settings."}
 
         # Decrypt API key
         try:
-            api_key = decrypt_api_key(contestant["qrz_api_key_encrypted"])
+            api_key = decrypt_api_key(competitor["qrz_api_key_encrypted"])
         except Exception as e:
             return {"error": f"Failed to decrypt API key: {e}"}
 
@@ -65,7 +65,7 @@ async def sync_contestant(callsign: str) -> dict:
 
         # Update last sync time
         conn.execute(
-            "UPDATE contestants SET last_sync_at = ? WHERE callsign = ?",
+            "UPDATE competitors SET last_sync_at = ? WHERE callsign = ?",
             (datetime.utcnow().isoformat(), callsign.upper())
         )
 
@@ -80,7 +80,7 @@ async def sync_contestant(callsign: str) -> dict:
     }
 
 
-def _upsert_qso(conn, contestant_callsign: str, qso: QSOData) -> Optional[str]:
+def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
     """
     Insert or update a QSO in the database.
 
@@ -91,8 +91,8 @@ def _upsert_qso(conn, contestant_callsign: str, qso: QSOData) -> Optional[str]:
     existing = None
     if qso.qrz_logid:
         cursor = conn.execute(
-            "SELECT id, is_confirmed FROM qsos WHERE qrz_logid = ? AND contestant_callsign = ?",
-            (qso.qrz_logid, contestant_callsign)
+            "SELECT id, is_confirmed FROM qsos WHERE qrz_logid = ? AND competitor_callsign = ?",
+            (qso.qrz_logid, competitor_callsign)
         )
         existing = cursor.fetchone()
 
@@ -100,9 +100,9 @@ def _upsert_qso(conn, contestant_callsign: str, qso: QSOData) -> Optional[str]:
         # Check by callsign + datetime
         cursor = conn.execute(
             """SELECT id, is_confirmed FROM qsos
-               WHERE contestant_callsign = ? AND dx_callsign = ?
+               WHERE competitor_callsign = ? AND dx_callsign = ?
                AND qso_datetime_utc = ?""",
-            (contestant_callsign, qso.dx_callsign, qso.qso_datetime.isoformat())
+            (competitor_callsign, qso.dx_callsign, qso.qso_datetime.isoformat())
         )
         existing = cursor.fetchone()
 
@@ -160,14 +160,14 @@ def _upsert_qso(conn, contestant_callsign: str, qso: QSOData) -> Optional[str]:
         # Insert new QSO
         cursor = conn.execute("""
             INSERT INTO qsos (
-                contestant_callsign, dx_callsign, qso_datetime_utc,
+                competitor_callsign, dx_callsign, qso_datetime_utc,
                 band, mode, tx_power_w,
                 my_dxcc, my_grid, my_sig_info,
                 dx_dxcc, dx_grid, dx_sig_info,
                 distance_km, cool_factor, is_confirmed, qrz_logid
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            contestant_callsign,
+            competitor_callsign,
             qso.dx_callsign,
             qso.qso_datetime.isoformat(),
             qso.band,
@@ -187,26 +187,26 @@ def _upsert_qso(conn, contestant_callsign: str, qso: QSOData) -> Optional[str]:
 
         # Update records for new confirmed QSOs
         if qso.is_confirmed and distance_km:
-            update_records(cursor.lastrowid, contestant_callsign)
+            update_records(cursor.lastrowid, competitor_callsign)
 
         return "new"
 
 
-async def sync_all_contestants() -> dict:
+async def sync_all_competitors() -> dict:
     """
-    Sync all contestants and recompute medals.
+    Sync all competitors and recompute medals.
 
     Returns:
         dict with sync summary
     """
     with get_db() as conn:
-        # Get all contestants
-        cursor = conn.execute("SELECT callsign FROM contestants")
+        # Get all competitors
+        cursor = conn.execute("SELECT callsign FROM competitors")
         callsigns = [row["callsign"] for row in cursor.fetchall()]
 
     results = []
     for callsign in callsigns:
-        result = await sync_contestant(callsign)
+        result = await sync_competitor(callsign)
         results.append(result)
 
     # Recompute medals for all active matches
@@ -217,7 +217,7 @@ async def sync_all_contestants() -> dict:
     errors = [r for r in results if "error" in r]
 
     return {
-        "contestants_synced": len(callsigns),
+        "competitors_synced": len(callsigns),
         "total_new_qsos": total_new,
         "total_updated_qsos": total_updated,
         "errors": errors,

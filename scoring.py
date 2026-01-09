@@ -28,12 +28,12 @@ class MatchingQSO:
     tx_power: float
     cool_factor: float
     role: str  # 'work', 'activate', or 'combined'
-    has_pota: bool  # contestant was at a park
+    has_pota: bool  # competitor was at a park
 
 
 @dataclass
 class MedalResult:
-    """Medal calculation result for a contestant."""
+    """Medal calculation result for a competitor."""
     callsign: str
     role: str
     qualified: bool
@@ -97,7 +97,7 @@ def matches_target(
         if mode == "work":
             return (qso.get("dx_callsign") or "").upper() == target_value
         else:
-            # For activate mode with call target, the contestant IS the callsign
+            # For activate mode with call target, the competitor IS the callsign
             # This doesn't really make sense, but we check if they contacted someone
             return True  # All QSOs count when activating as a specific call
 
@@ -164,7 +164,7 @@ def get_matching_qsos(
         target_value: Match target value
         start_date: Match start datetime
         end_date: Match end datetime
-        sport_id: Sport ID (only contestants who opted in are included)
+        sport_id: Sport ID (only competitors who opted in are included)
 
     Returns:
         List of MatchingQSO objects
@@ -177,12 +177,12 @@ def get_matching_qsos(
     separate_pools = sport_config["separate_pools"]
 
     with get_db() as conn:
-        # Get all confirmed QSOs in the time window from contestants who opted in
+        # Get all confirmed QSOs in the time window from competitors who opted in
         cursor = conn.execute("""
             SELECT q.*, c.registered_at
             FROM qsos q
-            JOIN contestants c ON q.contestant_callsign = c.callsign
-            JOIN sport_entries se ON q.contestant_callsign = se.callsign AND se.sport_id = ?
+            JOIN competitors c ON q.competitor_callsign = c.callsign
+            JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
             WHERE q.is_confirmed = 1
             AND q.qso_datetime_utc >= ?
             AND q.qso_datetime_utc <= ?
@@ -200,7 +200,7 @@ def get_matching_qsos(
 
                     matching.append(MatchingQSO(
                         qso_id=qso["id"],
-                        callsign=qso["contestant_callsign"],
+                        callsign=qso["competitor_callsign"],
                         dx_callsign=qso["dx_callsign"],
                         qso_datetime=datetime.fromisoformat(qso["qso_datetime_utc"]),
                         distance_km=qso["distance_km"] or 0,
@@ -222,7 +222,7 @@ def get_matching_qsos(
                             matches_target(qso, target_type, target_value, "work")):
                         matching.append(MatchingQSO(
                             qso_id=qso["id"],
-                            callsign=qso["contestant_callsign"],
+                            callsign=qso["competitor_callsign"],
                             dx_callsign=qso["dx_callsign"],
                             qso_datetime=datetime.fromisoformat(qso["qso_datetime_utc"]),
                             distance_km=qso["distance_km"] or 0,
@@ -255,16 +255,16 @@ def compute_medals(
         return []
 
     # Group QSOs by callsign and role
-    by_contestant: Dict[Tuple[str, str], List[MatchingQSO]] = {}
+    by_competitor: Dict[Tuple[str, str], List[MatchingQSO]] = {}
     for qso in matching_qsos:
         key = (qso.callsign, qso.role)
-        if key not in by_contestant:
-            by_contestant[key] = []
-        by_contestant[key].append(qso)
+        if key not in by_competitor:
+            by_competitor[key] = []
+        by_competitor[key].append(qso)
 
     results = []
 
-    for (callsign, role), qsos in by_contestant.items():
+    for (callsign, role), qsos in by_competitor.items():
         # Check qualification
         qualified = len(qsos) >= qualifying_qsos
 
@@ -325,30 +325,30 @@ def compute_medals(
     return results
 
 
-def should_award_pota_bonus(target_type: str, role: str, contestant_at_park: bool) -> int:
+def should_award_pota_bonus(target_type: str, role: str, competitor_at_park: bool) -> int:
     """
     Determine POTA bonus points to award.
 
     Logic:
-    - Park-to-Park (POTA target + contestant at park): +2
-    - POTA target OR contestant at park: +1
+    - Park-to-Park (POTA target + competitor at park): +2
+    - POTA target OR competitor at park: +1
     - Neither: +0
 
     Args:
         target_type: Sport's target type
         role: 'work', 'activate', or 'combined'
-        contestant_at_park: Whether contestant has MY_SIG_INFO
+        competitor_at_park: Whether competitor has MY_SIG_INFO
 
     Returns:
         Bonus points (0, 1, or 2)
     """
     is_pota_target = target_type == "park"
 
-    if is_pota_target and contestant_at_park:
+    if is_pota_target and competitor_at_park:
         # Park-to-Park: +2
         return 2
-    elif is_pota_target or contestant_at_park:
-        # Either POTA target or contestant at park: +1
+    elif is_pota_target or competitor_at_park:
+        # Either POTA target or competitor at park: +1
         return 1
     else:
         # No POTA involvement
@@ -386,7 +386,7 @@ def recompute_match_medals(match_id: int):
             "separate_pools": bool(match_data["separate_pools"]),
         }
 
-        # Get matching QSOs (only from contestants who opted into this sport)
+        # Get matching QSOs (only from competitors who opted into this sport)
         matching = get_matching_qsos(
             match_id,
             sport_config,
@@ -436,7 +436,7 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None):
 
     Args:
         qso_id: QSO ID
-        callsign: Contestant callsign
+        callsign: Competitor callsign
         sport_id: Sport ID (None for global records)
     """
     with get_db() as conn:

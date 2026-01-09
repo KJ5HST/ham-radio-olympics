@@ -41,7 +41,7 @@ class TestTargetMatching:
         assert matches_target(qso, "continent", "AS", "work") == False
 
     def test_activate_mode_continent_match(self):
-        """Test activate mode matching contestant's continent."""
+        """Test activate mode matching competitor's continent."""
         qso = {
             "dx_dxcc": 230,  # Germany
             "my_dxcc": 291,  # USA = NA
@@ -64,7 +64,7 @@ class TestTargetMatching:
         assert matches_target(qso, "park", "k-0001", "work") == True  # Case insensitive
 
     def test_activate_mode_park_match(self):
-        """Test activate mode matching contestant's park."""
+        """Test activate mode matching competitor's park."""
         qso = {
             "my_sig_info": "K-0001",
             "my_grid": "DN15",
@@ -85,7 +85,7 @@ class TestTargetMatching:
         assert matches_target(qso, "grid", "FN31ab", "work") == True
 
     def test_activate_mode_grid_match(self):
-        """Test activate mode matching contestant's grid."""
+        """Test activate mode matching competitor's grid."""
         qso = {
             "my_grid": "EM12cd",
         }
@@ -282,7 +282,7 @@ class TestMedalComputation:
         assert k1.cool_factor_medal == "silver"
 
     def test_qualifying_threshold(self):
-        """Test contestants below threshold don't get medals."""
+        """Test competitors below threshold don't get medals."""
         # Single QSO each, but threshold is 2
         qsos = [
             MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 1), 8000, 5, 1600, "combined", False),
@@ -298,7 +298,7 @@ class TestMedalComputation:
             assert r.cool_factor_medal is None
 
     def test_qualifying_with_multiple_qsos(self):
-        """Test contestant with multiple QSOs qualifies."""
+        """Test competitor with multiple QSOs qualifies."""
         qsos = [
             MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 1), 8000, 5, 1600, "combined", False),
             MatchingQSO(2, "K1ABC", "DL2", datetime(2026, 1, 1, 12, 5), 8000, 5, 1600, "combined", False),
@@ -366,12 +366,12 @@ class TestPOTABonus:
         assert should_award_pota_bonus("park", "activate", True) == 2
 
     def test_pota_target_without_park_gets_1_point(self):
-        """Test POTA target without contestant at park gets +1."""
+        """Test POTA target without competitor at park gets +1."""
         assert should_award_pota_bonus("park", "work", False) == 1
         assert should_award_pota_bonus("park", "activate", False) == 1
 
     def test_non_pota_target_with_park_gets_1_point(self):
-        """Test non-POTA target with contestant at park gets +1."""
+        """Test non-POTA target with competitor at park gets +1."""
         assert should_award_pota_bonus("continent", "work", True) == 1
         assert should_award_pota_bonus("grid", "activate", True) == 1
 
@@ -554,18 +554,18 @@ class TestRecordUpdates:
         from scoring import update_records
         from auth import hash_password
 
-        # First register a contestant
+        # First register a competitor
         password_hash = hash_password("password123")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("W1FIRST", password_hash, "encrypted", datetime.utcnow().isoformat()))
 
             # Insert a QSO with 10000km distance
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -582,16 +582,16 @@ class TestRecordUpdates:
             record = cursor.fetchone()
             assert record["value"] == 10000.0
 
-        # Now another contestant breaks the record
+        # Now another competitor breaks the record
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("K2SECOND", password_hash, "encrypted", datetime.utcnow().isoformat()))
 
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -613,18 +613,18 @@ class TestRecordUpdates:
         from scoring import update_records
         from auth import hash_password
 
-        # Register contestant
+        # Register competitor
         password_hash = hash_password("password123")
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("W1PB", password_hash, "encrypted", datetime.utcnow().isoformat()))
 
             # First QSO
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -645,7 +645,7 @@ class TestRecordUpdates:
         with get_db() as conn:
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)

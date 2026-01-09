@@ -84,11 +84,11 @@ class TestFullWorkflow:
         assert resp.status_code == 200
         match_id = resp.json()["id"]
 
-        # 5. Register contestants and opt into sport
+        # 5. Register competitors and opt into sport
         signup_user(client, "W1ABC")
         signup_user(client, "K2DEF")
 
-        # Opt contestants into the sport
+        # Opt competitors into the sport
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
@@ -104,7 +104,7 @@ class TestFullWorkflow:
             # W1ABC contacts EU at 12:01 - should get gold
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
@@ -113,7 +113,7 @@ class TestFullWorkflow:
             # K2DEF contacts EU at 12:05 - should get silver
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8600.0, 860.0)
@@ -171,7 +171,7 @@ class TestFullWorkflow:
         signup_user(client, "W1ABC")
         signup_user(client, "K2DEF")
 
-        # Opt contestants into the sport
+        # Opt competitors into the sport
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
@@ -186,7 +186,7 @@ class TestFullWorkflow:
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
@@ -203,7 +203,7 @@ class TestFullWorkflow:
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8600.0, 860.0)
@@ -230,7 +230,7 @@ class TestRecords:
         with get_db() as conn:
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 15000.0, 3000.0)
@@ -255,7 +255,7 @@ class TestRecords:
         with get_db() as conn:
             cursor = conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
@@ -313,7 +313,7 @@ class TestPOTABonus:
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, dx_sig_info, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
@@ -360,11 +360,11 @@ class TestPOTABonus:
                 ("W1PTP", 1, "2026-01-01T00:00:00")
             )
 
-        # Park-to-park: contestant at K-0002, works someone at K-0001
+        # Park-to-park: competitor at K-0002, works someone at K-0001
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, dx_sig_info, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
@@ -409,7 +409,7 @@ class TestSeparatePools:
         signup_user(client, "W1ABC")
         signup_user(client, "K2DEF")
 
-        # Opt contestants into sport
+        # Opt competitors into sport
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
@@ -424,7 +424,7 @@ class TestSeparatePools:
             # W1ABC works K-0001 (hunter)
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, dx_sig_info, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
@@ -433,7 +433,7 @@ class TestSeparatePools:
             # K2DEF activates from K-0001
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 500.0, 100.0)

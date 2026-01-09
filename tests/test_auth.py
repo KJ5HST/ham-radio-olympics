@@ -67,7 +67,7 @@ class TestUserRegistration:
         # Verify user exists in database
         with get_db() as conn:
             cursor = conn.execute(
-                "SELECT * FROM contestants WHERE callsign = ?", ("W1ABC",)
+                "SELECT * FROM competitors WHERE callsign = ?", ("W1ABC",)
             )
             user = cursor.fetchone()
             assert user is not None
@@ -86,7 +86,7 @@ class TestUserRegistration:
 
         with get_db() as conn:
             cursor = conn.execute(
-                "SELECT * FROM contestants WHERE callsign = ?", ("W3XYZ",)
+                "SELECT * FROM competitors WHERE callsign = ?", ("W3XYZ",)
             )
             assert cursor.fetchone() is not None
 
@@ -184,7 +184,7 @@ class TestUserUpdates:
 
         with get_db() as conn:
             cursor = conn.execute(
-                "SELECT email FROM contestants WHERE callsign = ?", ("W1ABC",)
+                "SELECT email FROM competitors WHERE callsign = ?", ("W1ABC",)
             )
             assert cursor.fetchone()["email"] == "new@example.com"
 
@@ -219,12 +219,12 @@ class TestAdminRole:
         with get_db() as conn:
             # Both users should not be admin
             cursor = conn.execute(
-                "SELECT is_admin FROM contestants WHERE callsign = ?", ("W1ABC",)
+                "SELECT is_admin FROM competitors WHERE callsign = ?", ("W1ABC",)
             )
             assert cursor.fetchone()["is_admin"] == 0
 
             cursor = conn.execute(
-                "SELECT is_admin FROM contestants WHERE callsign = ?", ("W2DEF",)
+                "SELECT is_admin FROM competitors WHERE callsign = ?", ("W2DEF",)
             )
             assert cursor.fetchone()["is_admin"] == 0
 
@@ -233,7 +233,7 @@ class TestAdminRole:
         register_user("W1ADM", "password123")
 
         with get_db() as conn:
-            conn.execute("UPDATE contestants SET is_admin = 1 WHERE callsign = ?", ("W1ADM",))
+            conn.execute("UPDATE competitors SET is_admin = 1 WHERE callsign = ?", ("W1ADM",))
 
         session_id = create_session("W1ADM")
         user = get_session_user(session_id)

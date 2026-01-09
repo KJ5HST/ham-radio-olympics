@@ -28,7 +28,7 @@
         {% for medal in medals %}
         <tr>
             <td>{{ loop.index }}</td>
-            <td><a href="/contestant/{{ medal.callsign }}">{{ medal.callsign }}</a></td>
+            <td><a href="/competitor/{{ medal.callsign }}">{{ medal.callsign }}</a></td>
             <td>
                 {% if medal.qso_race_medal %}
                     <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>

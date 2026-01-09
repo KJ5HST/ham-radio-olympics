@@ -36,9 +36,35 @@ def get_db():
 def init_db():
     """Initialize the database schema."""
     with get_db() as conn:
+        # Migration: rename contestants -> competitors if needed
+        # Check what tables exist
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        has_contestants = 'contestants' in tables
+        has_competitors = 'competitors' in tables
+
+        if has_contestants and has_competitors:
+            # Both tables exist - drop the old empty contestants table (partial migration state)
+            conn.execute("DROP TABLE contestants")
+            conn.commit()
+        elif has_contestants and not has_competitors:
+            # Need to migrate
+            conn.execute("ALTER TABLE contestants RENAME TO competitors")
+            conn.commit()
+
+        # Check if qsos table has old column name
+        cursor = conn.execute("PRAGMA table_info(qsos)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'contestant_callsign' in columns:
+            conn.execute("ALTER TABLE qsos RENAME COLUMN contestant_callsign TO competitor_callsign")
+            conn.commit()
+
+        # Drop old index if it exists
+        conn.execute("DROP INDEX IF EXISTS idx_qsos_contestant")
+        conn.commit()
+
         conn.executescript("""
-            -- Contestants table
-            CREATE TABLE IF NOT EXISTS contestants (
+            -- Competitors table
+            CREATE TABLE IF NOT EXISTS competitors (
                 callsign TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
                 email TEXT,
@@ -56,7 +82,7 @@ def init_db():
                 callsign TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
-                FOREIGN KEY (callsign) REFERENCES contestants(callsign) ON DELETE CASCADE
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
             );
 
             -- Olympiads table
@@ -95,7 +121,7 @@ def init_db():
             -- QSOs table
             CREATE TABLE IF NOT EXISTS qsos (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                contestant_callsign TEXT NOT NULL,
+                competitor_callsign TEXT NOT NULL,
                 dx_callsign TEXT NOT NULL,
                 qso_datetime_utc TEXT NOT NULL,
                 band TEXT,
@@ -111,7 +137,7 @@ def init_db():
                 cool_factor REAL,
                 is_confirmed INTEGER NOT NULL DEFAULT 0,
                 qrz_logid TEXT,
-                FOREIGN KEY (contestant_callsign) REFERENCES contestants(callsign) ON DELETE CASCADE
+                FOREIGN KEY (competitor_callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
             );
 
             -- Medals table
@@ -129,7 +155,7 @@ def init_db():
                 pota_bonus INTEGER NOT NULL DEFAULT 0,
                 total_points INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
-                FOREIGN KEY (callsign) REFERENCES contestants(callsign) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 UNIQUE (match_id, callsign, role)
             );
 
@@ -139,7 +165,7 @@ def init_db():
                 callsign TEXT NOT NULL,
                 sport_id INTEGER NOT NULL,
                 entered_at TEXT NOT NULL,
-                FOREIGN KEY (callsign) REFERENCES contestants(callsign) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
                 UNIQUE (callsign, sport_id)
             );
@@ -150,7 +176,7 @@ def init_db():
                 callsign TEXT NOT NULL,
                 sport_id INTEGER NOT NULL,
                 assigned_at TEXT NOT NULL,
-                FOREIGN KEY (callsign) REFERENCES contestants(callsign) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
                 UNIQUE (callsign, sport_id)
             );
@@ -165,12 +191,12 @@ def init_db():
                 qso_id INTEGER,
                 achieved_at TEXT NOT NULL,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
-                FOREIGN KEY (callsign) REFERENCES contestants(callsign) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE SET NULL
             );
 
             -- Indexes for performance
-            CREATE INDEX IF NOT EXISTS idx_qsos_contestant ON qsos(contestant_callsign);
+            CREATE INDEX IF NOT EXISTS idx_qsos_competitor ON qsos(competitor_callsign);
             CREATE INDEX IF NOT EXISTS idx_qsos_datetime ON qsos(qso_datetime_utc);
             CREATE INDEX IF NOT EXISTS idx_qsos_confirmed ON qsos(is_confirmed);
             CREATE INDEX IF NOT EXISTS idx_medals_match ON medals(match_id);

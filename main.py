@@ -17,7 +17,7 @@ from pydantic import BaseModel, field_validator
 
 from database import init_db, get_db, seed_example_olympiad
 from crypto import encrypt_api_key
-from sync import sync_contestant, sync_all_contestants, recompute_sport_matches
+from sync import sync_competitor, sync_all_competitors, recompute_sport_matches
 from qrz_client import verify_api_key
 from scoring import recompute_match_medals
 from dxcc import get_country_name, get_continent_name, get_all_continents, get_all_countries
@@ -34,11 +34,11 @@ _sync_task = None
 
 
 async def background_sync():
-    """Background task that syncs all contestants periodically."""
+    """Background task that syncs all competitors periodically."""
     while True:
         await asyncio.sleep(SYNC_INTERVAL)
         try:
-            await sync_all_contestants()
+            await sync_all_competitors()
         except Exception:
             # Log error but keep running
             pass
@@ -506,7 +506,7 @@ async def get_records(request: Request, user: User = Depends(require_user)):
     with get_db() as conn:
         # Global records (sport_id IS NULL, callsign IS NULL)
         cursor = conn.execute("""
-            SELECT r.*, q.contestant_callsign as holder
+            SELECT r.*, q.competitor_callsign as holder
             FROM records r
             LEFT JOIN qsos q ON r.qso_id = q.id
             WHERE r.callsign IS NULL AND r.sport_id IS NULL
@@ -521,29 +521,29 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         })
 
 
-@app.get("/contestant/{callsign}", response_class=HTMLResponse)
-async def get_contestant(request: Request, callsign: str, user: User = Depends(require_user)):
-    """Get contestant's QSOs, medals, and personal bests."""
+@app.get("/competitor/{callsign}", response_class=HTMLResponse)
+async def get_competitor(request: Request, callsign: str, user: User = Depends(require_user)):
+    """Get competitor's QSOs, medals, and personal bests."""
     callsign = callsign.upper()
     is_own_profile = (callsign == user.callsign)
 
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT callsign, registered_at, last_sync_at, qrz_api_key_encrypted FROM contestants WHERE callsign = ?",
+            "SELECT callsign, registered_at, last_sync_at, qrz_api_key_encrypted FROM competitors WHERE callsign = ?",
             (callsign,)
         )
-        contestant = cursor.fetchone()
+        competitor = cursor.fetchone()
 
-        if not contestant:
-            raise HTTPException(status_code=404, detail="Contestant not found")
+        if not competitor:
+            raise HTTPException(status_code=404, detail="Competitor not found")
 
-        contestant_dict = dict(contestant)
-        has_qrz_key = bool(contestant_dict.pop("qrz_api_key_encrypted", None))
+        competitor_dict = dict(competitor)
+        has_qrz_key = bool(competitor_dict.pop("qrz_api_key_encrypted", None))
 
         # Get QSOs
         cursor = conn.execute("""
             SELECT * FROM qsos
-            WHERE contestant_callsign = ?
+            WHERE competitor_callsign = ?
             ORDER BY qso_datetime_utc DESC
             LIMIT 50
         """, (callsign,))
@@ -601,7 +601,7 @@ async def get_contestant(request: Request, callsign: str, user: User = Depends(r
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
             "user": user,
-            "contestant": contestant_dict,
+            "competitor": competitor_dict,
             "medal_summary": {
                 "gold": gold,
                 "silver": silver,
@@ -621,9 +621,9 @@ async def get_contestant(request: Request, callsign: str, user: User = Depends(r
 async def sync_page(request: Request, callsign: Optional[str] = None):
     """Sync page - shows sync results."""
     if callsign:
-        result = await sync_contestant(callsign)
+        result = await sync_competitor(callsign)
     else:
-        result = await sync_all_contestants()
+        result = await sync_all_competitors()
 
     return templates.TemplateResponse("sync.html", {
         "request": request,
@@ -634,11 +634,11 @@ async def sync_page(request: Request, callsign: Optional[str] = None):
 
 @app.post("/sync")
 async def trigger_sync(callsign: Optional[str] = None):
-    """Trigger QRZ sync (API). Syncs single contestant or all if no callsign provided."""
+    """Trigger QRZ sync (API). Syncs single competitor or all if no callsign provided."""
     if callsign:
-        result = await sync_contestant(callsign)
+        result = await sync_competitor(callsign)
     else:
-        result = await sync_all_contestants()
+        result = await sync_all_competitors()
 
     return result
 
@@ -676,7 +676,7 @@ async def signup(signup_data: UserSignup):
     # Sync QRZ data if API key was provided
     if signup_data.qrz_api_key:
         try:
-            await sync_contestant(callsign)
+            await sync_competitor(callsign)
         except Exception:
             pass  # Don't fail signup if sync fails
 
@@ -748,7 +748,7 @@ async def user_dashboard(request: Request, user: User = Depends(require_user)):
         # Get QSOs
         cursor = conn.execute("""
             SELECT * FROM qsos
-            WHERE contestant_callsign = ?
+            WHERE competitor_callsign = ?
             ORDER BY qso_datetime_utc DESC
             LIMIT 50
         """, (user.callsign,))
@@ -781,12 +781,12 @@ async def user_dashboard(request: Request, user: User = Depends(require_user)):
         bronze = sum((1 if m["qso_race_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
         total_points = sum(m["total_points"] for m in medals)
 
-        # Get contestant info
+        # Get competitor info
         cursor = conn.execute(
-            "SELECT registered_at, last_sync_at FROM contestants WHERE callsign = ?",
+            "SELECT registered_at, last_sync_at FROM competitors WHERE callsign = ?",
             (user.callsign,)
         )
-        contestant_info = dict(cursor.fetchone())
+        competitor_info = dict(cursor.fetchone())
 
         # Get sports the competitor is entered in with points per sport
         cursor = conn.execute("""
@@ -809,7 +809,7 @@ async def user_dashboard(request: Request, user: User = Depends(require_user)):
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
-        "contestant": {"callsign": user.callsign, **contestant_info},
+        "competitor": {"callsign": user.callsign, **competitor_info},
         "qsos": qsos,
         "medals": medals,
         "personal_bests": personal_bests,
@@ -830,7 +830,7 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
     """Account settings page."""
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT email, registered_at FROM contestants WHERE callsign = ?",
+            "SELECT email, registered_at FROM competitors WHERE callsign = ?",
             (user.callsign,)
         )
         account = dict(cursor.fetchone())
@@ -879,7 +879,7 @@ async def update_qrz_key(
     encrypted_key = encrypt_api_key(qrz_api_key)
     with get_db() as conn:
         conn.execute(
-            "UPDATE contestants SET qrz_api_key_encrypted = ? WHERE callsign = ?",
+            "UPDATE competitors SET qrz_api_key_encrypted = ? WHERE callsign = ?",
             (encrypted_key, user.callsign)
         )
     return RedirectResponse(url="/settings?updated=qrz", status_code=303)
@@ -896,14 +896,14 @@ async def admin_dashboard(request: Request, _: bool = Depends(verify_admin)):
         cursor = conn.execute("SELECT * FROM olympiads ORDER BY start_date DESC")
         olympiads = [dict(row) for row in cursor.fetchall()]
 
-        cursor = conn.execute("SELECT COUNT(*) as count FROM contestants")
-        contestant_count = cursor.fetchone()["count"]
+        cursor = conn.execute("SELECT COUNT(*) as count FROM competitors")
+        competitor_count = cursor.fetchone()["count"]
 
     return templates.TemplateResponse("admin/dashboard.html", {
         "request": request,
         "user": get_current_user(request),
         "olympiads": olympiads,
-        "contestant_count": contestant_count,
+        "competitor_count": competitor_count,
     })
 
 
@@ -1130,7 +1130,7 @@ async def admin_sport_competitors(request: Request, sport_id: int):
                    SUM(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
                    SUM(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count
             FROM sport_entries se
-            JOIN contestants c ON se.callsign = c.callsign
+            JOIN competitors c ON se.callsign = c.callsign
             LEFT JOIN medals m ON m.callsign = c.callsign AND m.match_id IN (
                 SELECT id FROM matches WHERE sport_id = ?
             )
@@ -1252,19 +1252,19 @@ async def delete_match(request: Request, match_id: int):
     return {"message": "Match deleted"}
 
 
-@app.get("/admin/contestants", response_class=HTMLResponse)
-async def admin_contestants(request: Request, _: bool = Depends(verify_admin)):
+@app.get("/admin/competitors", response_class=HTMLResponse)
+async def admin_competitors(request: Request, _: bool = Depends(verify_admin)):
     """List all competitors."""
     with get_db() as conn:
         cursor = conn.execute("""
             SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
-            FROM contestants
+            FROM competitors
             ORDER BY registered_at DESC
         """)
-        contestants = [dict(row) for row in cursor.fetchall()]
+        competitors = [dict(row) for row in cursor.fetchall()]
 
         # Get referee assignments for each referee
-        for c in contestants:
+        for c in competitors:
             if c["is_referee"]:
                 cursor = conn.execute("""
                     SELECT s.id, s.name FROM referee_assignments ra
@@ -1284,104 +1284,104 @@ async def admin_contestants(request: Request, _: bool = Depends(verify_admin)):
         """)
         all_sports = [dict(row) for row in cursor.fetchall()]
 
-    return templates.TemplateResponse("admin/contestants.html", {
+    return templates.TemplateResponse("admin/competitors.html", {
         "request": request,
         "user": get_current_user(request),
-        "contestants": contestants,
+        "competitors": competitors,
         "all_sports": all_sports,
     })
 
 
-@app.post("/admin/contestant/{callsign}/disable")
-async def disable_contestant(callsign: str, _: bool = Depends(verify_admin)):
+@app.post("/admin/competitor/{callsign}/disable")
+async def disable_competitor(callsign: str, _: bool = Depends(verify_admin)):
     """Disable a competitor's account."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_disabled = 1 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_disabled = 1 WHERE callsign = ?", (callsign,))
         # Also delete their sessions so they're logged out
         conn.execute("DELETE FROM sessions WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} disabled"}
 
 
-@app.post("/admin/contestant/{callsign}/enable")
-async def enable_contestant(callsign: str, _: bool = Depends(verify_admin)):
+@app.post("/admin/competitor/{callsign}/enable")
+async def enable_competitor(callsign: str, _: bool = Depends(verify_admin)):
     """Enable a competitor's account."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_disabled = 0 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_disabled = 0 WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} enabled"}
 
 
-@app.post("/admin/contestant/{callsign}/set-admin")
+@app.post("/admin/competitor/{callsign}/set-admin")
 async def set_admin_role(callsign: str, _: bool = Depends(verify_admin)):
     """Grant admin role to a competitor."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_admin = 1 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_admin = 1 WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} is now an admin"}
 
 
-@app.post("/admin/contestant/{callsign}/remove-admin")
+@app.post("/admin/competitor/{callsign}/remove-admin")
 async def remove_admin_role(callsign: str, _: bool = Depends(verify_admin)):
     """Remove admin role from a competitor."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_admin = 0 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_admin = 0 WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} is no longer an admin"}
 
 
-@app.post("/admin/contestant/{callsign}/set-referee")
+@app.post("/admin/competitor/{callsign}/set-referee")
 async def set_referee_role(callsign: str, _: bool = Depends(verify_admin)):
     """Grant referee role to a competitor."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_referee = 1 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_referee = 1 WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} is now a referee"}
 
 
-@app.post("/admin/contestant/{callsign}/remove-referee")
+@app.post("/admin/competitor/{callsign}/remove-referee")
 async def remove_referee_role(callsign: str, _: bool = Depends(verify_admin)):
     """Remove referee role from a competitor."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
-        conn.execute("UPDATE contestants SET is_referee = 0 WHERE callsign = ?", (callsign,))
+        conn.execute("UPDATE competitors SET is_referee = 0 WHERE callsign = ?", (callsign,))
         # Also remove all referee assignments
         conn.execute("DELETE FROM referee_assignments WHERE callsign = ?", (callsign,))
 
     return {"message": f"Competitor {callsign} is no longer a referee"}
 
 
-@app.post("/admin/contestant/{callsign}/assign-sport/{sport_id}")
+@app.post("/admin/competitor/{callsign}/assign-sport/{sport_id}")
 async def assign_referee_to_sport(callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
     """Assign a referee to a sport."""
     callsign = callsign.upper()
     now = datetime.utcnow().isoformat()
     with get_db() as conn:
         # Check competitor exists and is a referee
-        cursor = conn.execute("SELECT is_referee FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT is_referee FROM competitors WHERE callsign = ?", (callsign,))
         row = cursor.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Competitor not found")
@@ -1409,7 +1409,7 @@ async def assign_referee_to_sport(callsign: str, sport_id: int, _: bool = Depend
     return {"message": f"Referee {callsign} assigned to sport {sport_id}"}
 
 
-@app.delete("/admin/contestant/{callsign}/assign-sport/{sport_id}")
+@app.delete("/admin/competitor/{callsign}/assign-sport/{sport_id}")
 async def remove_referee_from_sport(callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
     """Remove a referee from a sport."""
     callsign = callsign.upper()
@@ -1424,12 +1424,12 @@ async def remove_referee_from_sport(callsign: str, sport_id: int, _: bool = Depe
     return {"message": f"Referee {callsign} removed from sport {sport_id}"}
 
 
-@app.post("/admin/contestant/{callsign}/disqualify")
-async def disqualify_contestant(callsign: str, _: bool = Depends(verify_admin_or_referee)):
+@app.post("/admin/competitor/{callsign}/disqualify")
+async def disqualify_competitor(callsign: str, _: bool = Depends(verify_admin_or_referee)):
     """Disqualify a competitor from the active competition. Admins or referees can disqualify."""
     callsign = callsign.upper()
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
 
@@ -1466,8 +1466,8 @@ async def disqualify_contestant(callsign: str, _: bool = Depends(verify_admin_or
     return {"message": f"Competitor {callsign} disqualified from {removed_count} sport(s)"}
 
 
-@app.post("/admin/contestant/{callsign}/reset-password")
-async def reset_contestant_password(callsign: str, _: bool = Depends(verify_admin)):
+@app.post("/admin/competitor/{callsign}/reset-password")
+async def reset_competitor_password(callsign: str, _: bool = Depends(verify_admin)):
     """Reset a competitor's password to a random value."""
     callsign = callsign.upper()
 
@@ -1475,14 +1475,14 @@ async def reset_contestant_password(callsign: str, _: bool = Depends(verify_admi
     new_password = secrets.token_urlsafe(12)
 
     with get_db() as conn:
-        cursor = conn.execute("SELECT 1 FROM contestants WHERE callsign = ?", (callsign,))
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
 
         # Hash and store new password
         password_hash = hash_password(new_password)
         conn.execute(
-            "UPDATE contestants SET password_hash = ? WHERE callsign = ?",
+            "UPDATE competitors SET password_hash = ? WHERE callsign = ?",
             (password_hash, callsign)
         )
         # Invalidate all sessions
@@ -1491,11 +1491,11 @@ async def reset_contestant_password(callsign: str, _: bool = Depends(verify_admi
     return {"message": f"Password reset for {callsign}", "new_password": new_password}
 
 
-@app.delete("/admin/contestant/{callsign}")
-async def delete_contestant(callsign: str, _: bool = Depends(verify_admin)):
+@app.delete("/admin/competitor/{callsign}")
+async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
     """Delete a competitor."""
     with get_db() as conn:
-        conn.execute("DELETE FROM contestants WHERE callsign = ?", (callsign.upper(),))
+        conn.execute("DELETE FROM competitors WHERE callsign = ?", (callsign.upper(),))
 
     return {"message": f"Competitor {callsign.upper()} deleted"}
 

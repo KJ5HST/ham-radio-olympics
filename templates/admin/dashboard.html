@@ -10,8 +10,8 @@
         <div class="value">{{ olympiads|length }}</div>
         <div class="label">Olympiads</div>
     </div>
-    <a href="/admin/contestants?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
-        <div class="value">{{ contestant_count }}</div>
+    <a href="/admin/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
+        <div class="value">{{ competitor_count }}</div>
         <div class="label">Competitors</div>
     </a>
 </div>

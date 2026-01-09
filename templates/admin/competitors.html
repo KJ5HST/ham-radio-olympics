@@ -6,7 +6,7 @@
 <h2>Competitors</h2>
 <p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
 
-{% if contestants %}
+{% if competitors %}
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -18,7 +18,7 @@
         </tr>
     </thead>
     <tbody>
-        {% for c in contestants %}
+        {% for c in competitors %}
         <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
             <td>
                 <strong>{{ c.callsign }}</strong>
@@ -46,7 +46,7 @@
             </td>
             <td>{{ c.registered_at | format_date }}</td>
             <td>
-                <a href="/contestant/{{ c.callsign }}" class="btn">View</a>
+                <a href="/competitor/{{ c.callsign }}" class="btn">View</a>
 
                 <!-- Role Management Dropdown -->
                 <div style="display: inline-block; position: relative;">
@@ -82,13 +82,13 @@
                 {% endif %}
 
                 {% if c.is_disabled %}
-                <button onclick="enableContestant('{{ c.callsign }}')" class="btn" style="background: #38a169;">Enable</button>
+                <button onclick="enableCompetitor('{{ c.callsign }}')" class="btn" style="background: #38a169;">Enable</button>
                 {% else %}
-                <button onclick="disableContestant('{{ c.callsign }}')" class="btn" style="background: #d69e2e;">Disable</button>
-                <button onclick="disqualifyContestant('{{ c.callsign }}')" class="btn" style="background: #805ad5;">Disqualify</button>
+                <button onclick="disableCompetitor('{{ c.callsign }}')" class="btn" style="background: #d69e2e;">Disable</button>
+                <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn" style="background: #805ad5;">Disqualify</button>
                 {% endif %}
                 <button onclick="resetPassword('{{ c.callsign }}')" class="btn" style="background: #3182ce;">Reset PW</button>
-                <button onclick="deleteContestant('{{ c.callsign }}')" class="btn btn-danger">Delete</button>
+                <button onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-danger">Delete</button>
             </td>
         </tr>
         {% endfor %}
@@ -119,65 +119,65 @@ document.addEventListener('click', function(e) {
 
 async function setAdmin(callsign) {
     if (!confirm('Make ' + callsign + ' an admin?')) return;
-    await fetch('/admin/contestant/' + callsign + '/set-admin?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/set-admin?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
 async function removeAdmin(callsign) {
     if (!confirm('Remove admin role from ' + callsign + '?')) return;
-    await fetch('/admin/contestant/' + callsign + '/remove-admin?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/remove-admin?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
 async function setReferee(callsign) {
     if (!confirm('Make ' + callsign + ' a referee?')) return;
-    await fetch('/admin/contestant/' + callsign + '/set-referee?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/set-referee?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
 async function removeReferee(callsign) {
     if (!confirm('Remove referee role from ' + callsign + '? This will also remove all sport assignments.')) return;
-    await fetch('/admin/contestant/' + callsign + '/remove-referee?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/remove-referee?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
 async function assignSport(callsign, sportId) {
-    await fetch('/admin/contestant/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
 async function unassignSport(callsign, sportId) {
-    await fetch('/admin/contestant/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'DELETE'});
     location.reload();
 }
 
-async function disableContestant(callsign) {
+async function disableCompetitor(callsign) {
     if (!confirm('Disable ' + callsign + '? They will be logged out and unable to log in.')) return;
-    await fetch('/admin/contestant/' + callsign + '/disable?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/disable?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
-async function enableContestant(callsign) {
+async function enableCompetitor(callsign) {
     if (!confirm('Enable ' + callsign + '?')) return;
-    await fetch('/admin/contestant/' + callsign + '/enable?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/enable?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
-async function disqualifyContestant(callsign) {
+async function disqualifyCompetitor(callsign) {
     if (!confirm('Disqualify ' + callsign + ' from the competition? They will be removed from all sports and lose their medals.')) return;
-    await fetch('/admin/contestant/' + callsign + '/disqualify?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {method: 'POST'});
     location.reload();
 }
 
-async function deleteContestant(callsign) {
+async function deleteCompetitor(callsign) {
     if (!confirm('Delete competitor ' + callsign + '? This cannot be undone.')) return;
-    await fetch('/admin/contestant/' + callsign + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/competitor/' + callsign + '?admin_key=' + adminKey, {method: 'DELETE'});
     location.reload();
 }
 
 async function resetPassword(callsign) {
     if (!confirm('Reset password for ' + callsign + '? They will be logged out.')) return;
-    const response = await fetch('/admin/contestant/' + callsign + '/reset-password?admin_key=' + adminKey, {method: 'POST'});
+    const response = await fetch('/admin/competitor/' + callsign + '/reset-password?admin_key=' + adminKey, {method: 'POST'});
     const data = await response.json();
     if (response.ok) {
         alert('New password for ' + callsign + ':\n\n' + data.new_password + '\n\nPlease share this with the user securely.');

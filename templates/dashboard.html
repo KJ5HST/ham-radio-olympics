@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}{{ contestant.callsign }} - Ham Radio Olympics{% endblock %}
+{% block title %}{{ competitor.callsign }} - Ham Radio Olympics{% endblock %}
 
 {% block nav_extra %}{% endblock %}
 
 {% block content %}
 {% if is_own_profile %}
-<h2>Welcome, {{ contestant.callsign }}</h2>
+<h2>Welcome, {{ competitor.callsign }}</h2>
 {% else %}
-<h2>{{ contestant.callsign }}</h2>
+<h2>{{ competitor.callsign }}</h2>
 {% endif %}
 
 <div class="stats">
@@ -32,11 +32,11 @@
 
 <div class="card">
     <h4>Account Status</h4>
-    <p><strong>Registered:</strong> {{ contestant.registered_at | format_date if contestant.registered_at else '-' }}</p>
+    <p><strong>Registered:</strong> {{ competitor.registered_at | format_date if competitor.registered_at else '-' }}</p>
     {% if is_own_profile %}
     <p><strong>QRZ API Key:</strong> {% if user.has_qrz_key %}Configured{% else %}<span style="color: #c53030;">Not configured</span> - <a href="/settings">Add key</a>{% endif %}</p>
     {% endif %}
-    <p><strong>Last Sync:</strong> {{ contestant.last_sync_at | format_datetime if contestant.last_sync_at else 'Never' }}</p>
+    <p><strong>Last Sync:</strong> {{ competitor.last_sync_at | format_datetime if competitor.last_sync_at else 'Never' }}</p>
     {% if can_sync %}
     <button onclick="syncQsos()" id="sync-btn" class="btn" style="margin-top: 10px;">Sync QSOs Now</button>
     <script>
@@ -46,7 +46,7 @@
         btn.textContent = 'Syncing...';
         btn.disabled = true;
         try {
-            await fetch('/sync?callsign={{ contestant.callsign }}', {method: 'POST'});
+            await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
             location.reload();
         } catch (e) {
             btn.textContent = originalText;

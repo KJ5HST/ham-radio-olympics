@@ -18,7 +18,7 @@ os.environ["ENCRYPTION_KEY"] = "test-encryption-key"
 
 from database import reset_db, get_db
 from crypto import encrypt_api_key
-from sync import sync_contestant, sync_all_contestants, _upsert_qso, recompute_all_active_matches
+from sync import sync_competitor, sync_all_competitors, _upsert_qso, recompute_all_active_matches
 from qrz_client import QSOData
 
 
@@ -30,14 +30,14 @@ def setup_db():
 
 
 @pytest.fixture
-def registered_contestant():
-    """Create a registered contestant with password and QRZ API key."""
+def registered_competitor():
+    """Create a registered competitor with password and QRZ API key."""
     from auth import hash_password
     with get_db() as conn:
         encrypted_key = encrypt_api_key("test-api-key")
         password_hash = hash_password("password123")
         conn.execute("""
-            INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+            INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
             VALUES (?, ?, ?, ?)
         """, ("W1TEST", password_hash, encrypted_key, datetime.utcnow().isoformat()))
     return "W1TEST"
@@ -69,7 +69,7 @@ def setup_olympiad():
 class TestUpsertQSO:
     """Test QSO insert/update logic."""
 
-    def test_insert_new_qso(self, registered_contestant):
+    def test_insert_new_qso(self, registered_competitor):
         """Test inserting a new QSO."""
         qso = QSOData(
             dx_callsign="DL1ABC",
@@ -93,13 +93,13 @@ class TestUpsertQSO:
         assert result == "new"
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT * FROM qsos WHERE contestant_callsign = ?", ("W1TEST",))
+            cursor = conn.execute("SELECT * FROM qsos WHERE competitor_callsign = ?", ("W1TEST",))
             qsos = cursor.fetchall()
             assert len(qsos) == 1
             assert qsos[0]["dx_callsign"] == "DL1ABC"
             assert qsos[0]["is_confirmed"] == 1
 
-    def test_update_existing_qso(self, registered_contestant):
+    def test_update_existing_qso(self, registered_competitor):
         """Test updating confirmation status of existing QSO."""
         # Insert unconfirmed QSO
         qso = QSOData(
@@ -133,7 +133,7 @@ class TestUpsertQSO:
             row = cursor.fetchone()
             assert row["is_confirmed"] == 1
 
-    def test_no_update_if_unchanged(self, registered_contestant):
+    def test_no_update_if_unchanged(self, registered_competitor):
         """Test no update if QSO hasn't changed."""
         qso = QSOData(
             dx_callsign="DL1ABC",
@@ -157,7 +157,7 @@ class TestUpsertQSO:
 
         assert result is None
 
-    def test_distance_calculated(self, registered_contestant):
+    def test_distance_calculated(self, registered_competitor):
         """Test that distance is calculated from grids."""
         qso = QSOData(
             dx_callsign="DL1ABC",
@@ -187,50 +187,50 @@ class TestUpsertQSO:
             assert row["cool_factor"] > 1600  # 8500/5 = 1700
 
 
-class TestSyncContestant:
-    """Test contestant sync."""
+class TestSyncCompetitor:
+    """Test competitor sync."""
 
-    def test_sync_nonexistent_contestant(self):
-        """Test syncing a contestant that doesn't exist."""
+    def test_sync_nonexistent_competitor(self):
+        """Test syncing a competitor that doesn't exist."""
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("NOTEXIST")
+            sync_competitor("NOTEXIST")
         )
         assert "error" in result
         assert "not found" in result["error"]
 
     def test_sync_no_api_key_configured(self):
-        """Test syncing contestant without QRZ API key."""
+        """Test syncing competitor without QRZ API key."""
         from auth import hash_password
-        # Create contestant without API key
+        # Create competitor without API key
         with get_db() as conn:
             password_hash = hash_password("password123")
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, registered_at)
+                INSERT INTO competitors (callsign, password_hash, registered_at)
                 VALUES (?, ?, ?)
             """, ("W1NOKEY", password_hash, datetime.utcnow().isoformat()))
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1NOKEY")
+            sync_competitor("W1NOKEY")
         )
         assert "error" in result
         assert "not configured" in result["error"]
 
     @patch('sync.fetch_qsos')
-    def test_sync_empty_logbook(self, mock_fetch, registered_contestant):
+    def test_sync_empty_logbook(self, mock_fetch, registered_competitor):
         """Test syncing when QRZ returns no QSOs."""
         mock_fetch.return_value = []
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1TEST")
+            sync_competitor("W1TEST")
         )
         assert "error" in result
         assert "No QSOs found" in result["error"]
 
     @patch('sync.fetch_qsos')
-    def test_sync_with_qsos(self, mock_fetch, registered_contestant):
+    def test_sync_with_qsos(self, mock_fetch, registered_competitor):
         """Test syncing with QSO data."""
         mock_fetch.return_value = [
             QSOData(
@@ -252,7 +252,7 @@ class TestSyncContestant:
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1TEST")
+            sync_competitor("W1TEST")
         )
 
         assert result["callsign"] == "W1TEST"
@@ -268,9 +268,9 @@ class TestRecomputeMatches:
         # Should not raise
         recompute_all_active_matches()
 
-    def test_recompute_with_active_match(self, setup_olympiad, registered_contestant):
+    def test_recompute_with_active_match(self, setup_olympiad, registered_competitor):
         """Test recompute updates medals."""
-        # Opt contestant into sport
+        # Opt competitor into sport
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
@@ -281,7 +281,7 @@ class TestRecomputeMatches:
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed, distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
             """, ("W1TEST", "DL1ABC", "2026-01-15T12:00:00", 5.0, "EM12", "JN58", 230))
@@ -303,35 +303,35 @@ class TestSyncEdgeCases:
         """Test sync handles decryption errors."""
         from auth import hash_password
         with get_db() as conn:
-            # Insert contestant with invalid encrypted key
+            # Insert competitor with invalid encrypted key
             password_hash = hash_password("password123")
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("W1BAD", password_hash, "invalid_encrypted_data", datetime.utcnow().isoformat()))
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1BAD")
+            sync_competitor("W1BAD")
         )
         assert "error" in result
         assert "decrypt" in result["error"].lower() or "Failed" in result["error"]
 
     @patch('sync.fetch_qsos')
-    def test_sync_with_api_error(self, mock_fetch, registered_contestant):
+    def test_sync_with_api_error(self, mock_fetch, registered_competitor):
         """Test sync handles API errors."""
         from qrz_client import QRZAPIError
         mock_fetch.side_effect = QRZAPIError("API connection failed")
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1TEST")
+            sync_competitor("W1TEST")
         )
         assert "error" in result
         assert "API connection failed" in result["error"]
 
     @patch('sync.fetch_qsos')
-    def test_sync_updates_existing_qso(self, mock_fetch, registered_contestant):
+    def test_sync_updates_existing_qso(self, mock_fetch, registered_competitor):
         """Test updating an existing QSO confirmation status."""
         # First sync with unconfirmed QSO
         mock_fetch.return_value = [
@@ -354,7 +354,7 @@ class TestSyncEdgeCases:
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1TEST")
+            sync_competitor("W1TEST")
         )
         assert result["new_qsos"] == 1
 
@@ -378,11 +378,11 @@ class TestSyncEdgeCases:
         ]
 
         result = asyncio.get_event_loop().run_until_complete(
-            sync_contestant("W1TEST")
+            sync_competitor("W1TEST")
         )
         assert result["updated_qsos"] == 1
 
-    def test_upsert_qso_with_invalid_grid(self, registered_contestant):
+    def test_upsert_qso_with_invalid_grid(self, registered_competitor):
         """Test QSO with invalid grid format."""
         qso = QSOData(
             dx_callsign="DL1ABC",
@@ -413,23 +413,23 @@ class TestSyncEdgeCases:
             assert row["cool_factor"] is None
 
 
-class TestSyncAllContestants:
-    """Test sync_all_contestants function."""
+class TestSyncAllCompetitors:
+    """Test sync_all_competitors function."""
 
     @patch('sync.fetch_qsos')
-    def test_sync_all_contestants(self, mock_fetch):
-        """Test syncing all contestants."""
+    def test_sync_all_competitors(self, mock_fetch):
+        """Test syncing all competitors."""
         from auth import hash_password
-        # Register two contestants
+        # Register two competitors
         with get_db() as conn:
             encrypted_key = encrypt_api_key("test-api-key")
             password_hash = hash_password("password123")
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("W1TEST", password_hash, encrypted_key, datetime.utcnow().isoformat()))
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("K2TEST", password_hash, encrypted_key, datetime.utcnow().isoformat()))
 
@@ -453,10 +453,10 @@ class TestSyncAllContestants:
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_all_contestants()
+            sync_all_competitors()
         )
 
-        assert result["contestants_synced"] == 2
+        assert result["competitors_synced"] == 2
         assert result["total_new_qsos"] == 2
         assert result["errors"] == []
 
@@ -466,12 +466,12 @@ class TestSyncAllContestants:
         from qrz_client import QRZAPIError
         from auth import hash_password
 
-        # Register one contestant
+        # Register one competitor
         with get_db() as conn:
             encrypted_key = encrypt_api_key("test-api-key")
             password_hash = hash_password("password123")
             conn.execute("""
-                INSERT INTO contestants (callsign, password_hash, qrz_api_key_encrypted, registered_at)
+                INSERT INTO competitors (callsign, password_hash, qrz_api_key_encrypted, registered_at)
                 VALUES (?, ?, ?, ?)
             """, ("W1ERR", password_hash, encrypted_key, datetime.utcnow().isoformat()))
 
@@ -479,8 +479,8 @@ class TestSyncAllContestants:
 
         import asyncio
         result = asyncio.get_event_loop().run_until_complete(
-            sync_all_contestants()
+            sync_all_competitors()
         )
 
-        assert result["contestants_synced"] == 1
+        assert result["competitors_synced"] == 1
         assert len(result["errors"]) == 1

@@ -72,10 +72,10 @@ def signup_user(client, callsign, password="password123", qrz_api_key="test-api-
 
 
 class TestRegistration:
-    """Test contestant registration via signup."""
+    """Test competitor registration via signup."""
 
-    def test_register_new_contestant(self, client):
-        """Test registering a new contestant."""
+    def test_register_new_competitor(self, client):
+        """Test registering a new competitor."""
         response = signup_user(client, "W1ABC")
         # Signup redirects on success
         assert response.status_code in [200, 303]
@@ -105,7 +105,7 @@ class TestRegistration:
         assert response.status_code in [200, 303]
 
         with get_db() as conn:
-            cursor = conn.execute("SELECT callsign FROM contestants WHERE callsign = 'W1ABC'")
+            cursor = conn.execute("SELECT callsign FROM competitors WHERE callsign = 'W1ABC'")
             assert cursor.fetchone() is not None
 
     def test_register_invalid_callsign_rejected(self, client):
@@ -118,11 +118,11 @@ class TestRegistration:
 
         assert response.status_code == 422  # Validation error
 
-    def test_signup_calls_sync_contestant_with_api_key(self, client):
+    def test_signup_calls_sync_competitor_with_api_key(self, client):
         """Test that signup syncs QRZ data when API key is provided."""
         from unittest.mock import patch, AsyncMock
 
-        with patch('main.sync_contestant', new_callable=AsyncMock) as mock_sync:
+        with patch('main.sync_competitor', new_callable=AsyncMock) as mock_sync:
             mock_sync.return_value = {"synced": 0}
             response = client.post("/signup", json={
                 "callsign": "W1SYN",
@@ -145,7 +145,7 @@ class TestRegistration:
         """Test that signup succeeds even if QRZ sync fails."""
         from unittest.mock import patch, AsyncMock
 
-        with patch('main.sync_contestant', new_callable=AsyncMock) as mock_sync:
+        with patch('main.sync_competitor', new_callable=AsyncMock) as mock_sync:
             mock_sync.side_effect = Exception("QRZ API error")
             response = client.post("/signup", json={
                 "callsign": "W1ERR",
@@ -157,7 +157,7 @@ class TestRegistration:
 
             # User should still be created
             with get_db() as conn:
-                cursor = conn.execute("SELECT callsign FROM contestants WHERE callsign = 'W1ERR'")
+                cursor = conn.execute("SELECT callsign FROM competitors WHERE callsign = 'W1ERR'")
                 assert cursor.fetchone() is not None
 
     def test_signup_rejects_invalid_qrz_key(self, client, mock_qrz_verify):
@@ -285,7 +285,7 @@ class TestAdminEndpoints:
         # Create admin user
         client.post("/signup", json={"callsign": "W1ADM", "password": "password123", "qrz_api_key": "test-api-key"})
         with get_db() as conn:
-            conn.execute("UPDATE contestants SET is_admin = 1 WHERE callsign = 'W1ADM'")
+            conn.execute("UPDATE competitors SET is_admin = 1 WHERE callsign = 'W1ADM'")
         # Login
         client.post("/login", json={"callsign": "W1ADM", "password": "password123"})
         # Access admin without key
@@ -555,78 +555,78 @@ class TestMatchEndpoints:
         assert "291" in response.text
 
 
-class TestContestantEndpoints:
-    """Test contestant-related endpoints."""
+class TestCompetitorEndpoints:
+    """Test competitor-related endpoints."""
 
-    def test_get_contestant(self, client):
-        """Test getting contestant details page."""
+    def test_get_competitor(self, client):
+        """Test getting competitor details page."""
         # Register
         signup_user(client, "K1ABC")
 
-        response = client.get("/contestant/K1ABC")
+        response = client.get("/competitor/K1ABC")
         assert response.status_code == 200
         assert "K1ABC" in response.text
         assert "Gold Medals" in response.text
         assert "Total Points" in response.text
 
-    def test_get_contestant_not_found(self, client):
-        """Test getting non-existent contestant."""
-        # Must be logged in to access contestant pages
+    def test_get_competitor_not_found(self, client):
+        """Test getting non-existent competitor."""
+        # Must be logged in to access competitor pages
         signup_user(client, "W1TST")
-        response = client.get("/contestant/UNKNOWN")
+        response = client.get("/competitor/UNKNOWN")
         assert response.status_code == 404
 
-    def test_get_contestant_requires_auth(self, client):
-        """Test contestant page requires authentication."""
-        response = client.get("/contestant/ANYONE", follow_redirects=False)
+    def test_get_competitor_requires_auth(self, client):
+        """Test competitor page requires authentication."""
+        response = client.get("/competitor/ANYONE", follow_redirects=False)
         assert response.status_code == 401
 
-    def test_delete_contestant(self, client, admin_headers):
-        """Test admin can delete contestant."""
-        # Create the contestant to delete
+    def test_delete_competitor(self, client, admin_headers):
+        """Test admin can delete competitor."""
+        # Create the competitor to delete
         signup_user(client, "W2XYZ")
         client.post("/logout")
 
         # Sign up as different user to verify deletion
         signup_user(client, "W2CHK")
 
-        response = client.delete("/admin/contestant/W2XYZ", headers=admin_headers)
+        response = client.delete("/admin/competitor/W2XYZ", headers=admin_headers)
         assert response.status_code == 200
 
         # Verify deleted - need to be logged in to check
-        get_response = client.get("/contestant/W2XYZ")
+        get_response = client.get("/competitor/W2XYZ")
         assert get_response.status_code == 404
 
-    def test_disable_contestant(self, client, admin_headers):
+    def test_disable_competitor(self, client, admin_headers):
         """Test admin can disable a competitor's account."""
         signup_user(client, "W1DIS")
         client.post("/logout")
 
-        response = client.post("/admin/contestant/W1DIS/disable", headers=admin_headers)
+        response = client.post("/admin/competitor/W1DIS/disable", headers=admin_headers)
         assert response.status_code == 200
         assert "disabled" in response.json()["message"]
 
-    def test_disable_contestant_not_found(self, client, admin_headers):
+    def test_disable_competitor_not_found(self, client, admin_headers):
         """Test disabling non-existent competitor."""
-        response = client.post("/admin/contestant/NOTEXIST/disable", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/disable", headers=admin_headers)
         assert response.status_code == 404
 
-    def test_enable_contestant(self, client, admin_headers):
+    def test_enable_competitor(self, client, admin_headers):
         """Test admin can enable a disabled competitor's account."""
         signup_user(client, "W1ENA")
         client.post("/logout")
 
         # Disable first
-        client.post("/admin/contestant/W1ENA/disable", headers=admin_headers)
+        client.post("/admin/competitor/W1ENA/disable", headers=admin_headers)
 
         # Then enable
-        response = client.post("/admin/contestant/W1ENA/enable", headers=admin_headers)
+        response = client.post("/admin/competitor/W1ENA/enable", headers=admin_headers)
         assert response.status_code == 200
         assert "enabled" in response.json()["message"]
 
-    def test_enable_contestant_not_found(self, client, admin_headers):
+    def test_enable_competitor_not_found(self, client, admin_headers):
         """Test enabling non-existent competitor."""
-        response = client.post("/admin/contestant/NOTEXIST/enable", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/enable", headers=admin_headers)
         assert response.status_code == 404
 
     def test_reset_password(self, client, admin_headers):
@@ -634,7 +634,7 @@ class TestContestantEndpoints:
         signup_user(client, "W1RST")
         client.post("/logout")
 
-        response = client.post("/admin/contestant/W1RST/reset-password", headers=admin_headers)
+        response = client.post("/admin/competitor/W1RST/reset-password", headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert "new_password" in data
@@ -656,7 +656,7 @@ class TestContestantEndpoints:
 
     def test_reset_password_not_found(self, client, admin_headers):
         """Test resetting password for non-existent competitor."""
-        response = client.post("/admin/contestant/NOTEXIST/reset-password", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/reset-password", headers=admin_headers)
         assert response.status_code == 404
 
     def test_reset_password_invalidates_sessions(self, client, admin_headers):
@@ -669,7 +669,7 @@ class TestContestantEndpoints:
         assert session_cookie is not None
 
         # Admin resets password
-        client.post("/admin/contestant/W1SES/reset-password", headers=admin_headers)
+        client.post("/admin/competitor/W1SES/reset-password", headers=admin_headers)
 
         # Session should be invalidated - try to access a protected API endpoint
         client.cookies.clear()
@@ -678,7 +678,7 @@ class TestContestantEndpoints:
         # Should fail with 401 since session is invalid
         assert response.status_code == 401
 
-    def test_disqualify_contestant(self, client, admin_headers):
+    def test_disqualify_competitor(self, client, admin_headers):
         """Test admin can disqualify a competitor from competition."""
         # Setup competition
         client.post("/admin/olympiad", json={
@@ -696,17 +696,17 @@ class TestContestantEndpoints:
             "separate_pools": False
         }, headers=admin_headers)
 
-        # Create contestant and enter sport
+        # Create competitor and enter sport
         signup_user(client, "W1DQ")
         client.post("/sport/1/enter")
         client.post("/logout")
 
         # Disqualify
-        response = client.post("/admin/contestant/W1DQ/disqualify", headers=admin_headers)
+        response = client.post("/admin/competitor/W1DQ/disqualify", headers=admin_headers)
         assert response.status_code == 200
         assert "disqualified" in response.json()["message"]
 
-    def test_disqualify_contestant_not_found(self, client, admin_headers):
+    def test_disqualify_competitor_not_found(self, client, admin_headers):
         """Test disqualifying non-existent competitor."""
         # Need active olympiad for disqualify
         client.post("/admin/olympiad", json={
@@ -717,15 +717,15 @@ class TestContestantEndpoints:
         }, headers=admin_headers)
         client.post("/admin/olympiad/1/activate", headers=admin_headers)
 
-        response = client.post("/admin/contestant/NOTEXIST/disqualify", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/disqualify", headers=admin_headers)
         assert response.status_code == 404
 
-    def test_disqualify_contestant_no_active_olympiad(self, client, admin_headers):
+    def test_disqualify_competitor_no_active_olympiad(self, client, admin_headers):
         """Test disqualifying when no active competition."""
         signup_user(client, "W1NODQ")
         client.post("/logout")
 
-        response = client.post("/admin/contestant/W1NODQ/disqualify", headers=admin_headers)
+        response = client.post("/admin/competitor/W1NODQ/disqualify", headers=admin_headers)
         assert response.status_code == 400
         assert "No active competition" in response.json()["detail"]
 
@@ -734,13 +734,13 @@ class TestContestantEndpoints:
         signup_user(client, "W1ADM")
         client.post("/logout")
 
-        response = client.post("/admin/contestant/W1ADM/set-admin", headers=admin_headers)
+        response = client.post("/admin/competitor/W1ADM/set-admin", headers=admin_headers)
         assert response.status_code == 200
         assert "admin" in response.json()["message"]
 
     def test_set_admin_role_not_found(self, client, admin_headers):
         """Test setting admin role for non-existent user."""
-        response = client.post("/admin/contestant/NOTEXIST/set-admin", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/set-admin", headers=admin_headers)
         assert response.status_code == 404
 
     def test_remove_admin_role(self, client, admin_headers):
@@ -748,14 +748,14 @@ class TestContestantEndpoints:
         signup_user(client, "W1RADM")
         client.post("/logout")
 
-        client.post("/admin/contestant/W1RADM/set-admin", headers=admin_headers)
-        response = client.post("/admin/contestant/W1RADM/remove-admin", headers=admin_headers)
+        client.post("/admin/competitor/W1RADM/set-admin", headers=admin_headers)
+        response = client.post("/admin/competitor/W1RADM/remove-admin", headers=admin_headers)
         assert response.status_code == 200
         assert "no longer an admin" in response.json()["message"]
 
     def test_remove_admin_role_not_found(self, client, admin_headers):
         """Test removing admin role for non-existent user."""
-        response = client.post("/admin/contestant/NOTEXIST/remove-admin", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/remove-admin", headers=admin_headers)
         assert response.status_code == 404
 
     def test_set_referee_role(self, client, admin_headers):
@@ -763,13 +763,13 @@ class TestContestantEndpoints:
         signup_user(client, "W1REF")
         client.post("/logout")
 
-        response = client.post("/admin/contestant/W1REF/set-referee", headers=admin_headers)
+        response = client.post("/admin/competitor/W1REF/set-referee", headers=admin_headers)
         assert response.status_code == 200
         assert "referee" in response.json()["message"]
 
     def test_set_referee_role_not_found(self, client, admin_headers):
         """Test setting referee role for non-existent user."""
-        response = client.post("/admin/contestant/NOTEXIST/set-referee", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/set-referee", headers=admin_headers)
         assert response.status_code == 404
 
     def test_remove_referee_role(self, client, admin_headers):
@@ -777,14 +777,14 @@ class TestContestantEndpoints:
         signup_user(client, "W1RREF")
         client.post("/logout")
 
-        client.post("/admin/contestant/W1RREF/set-referee", headers=admin_headers)
-        response = client.post("/admin/contestant/W1RREF/remove-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1RREF/set-referee", headers=admin_headers)
+        response = client.post("/admin/competitor/W1RREF/remove-referee", headers=admin_headers)
         assert response.status_code == 200
         assert "no longer a referee" in response.json()["message"]
 
     def test_remove_referee_role_not_found(self, client, admin_headers):
         """Test removing referee role for non-existent user."""
-        response = client.post("/admin/contestant/NOTEXIST/remove-referee", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/remove-referee", headers=admin_headers)
         assert response.status_code == 404
 
     def test_assign_referee_to_sport(self, client, admin_headers):
@@ -807,16 +807,16 @@ class TestContestantEndpoints:
         # Create referee
         signup_user(client, "W1ARF")
         client.post("/logout")
-        client.post("/admin/contestant/W1ARF/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1ARF/set-referee", headers=admin_headers)
 
         # Assign to sport
-        response = client.post("/admin/contestant/W1ARF/assign-sport/1", headers=admin_headers)
+        response = client.post("/admin/competitor/W1ARF/assign-sport/1", headers=admin_headers)
         assert response.status_code == 200
         assert "assigned" in response.json()["message"]
 
     def test_assign_referee_not_found(self, client, admin_headers):
         """Test assigning non-existent user."""
-        response = client.post("/admin/contestant/NOTEXIST/assign-sport/1", headers=admin_headers)
+        response = client.post("/admin/competitor/NOTEXIST/assign-sport/1", headers=admin_headers)
         assert response.status_code == 404
 
     def test_assign_non_referee_to_sport(self, client, admin_headers):
@@ -839,7 +839,7 @@ class TestContestantEndpoints:
             "separate_pools": False
         }, headers=admin_headers)
 
-        response = client.post("/admin/contestant/W1NREF/assign-sport/1", headers=admin_headers)
+        response = client.post("/admin/competitor/W1NREF/assign-sport/1", headers=admin_headers)
         assert response.status_code == 400
         assert "not a referee" in response.json()["detail"]
 
@@ -847,9 +847,9 @@ class TestContestantEndpoints:
         """Test assigning referee to non-existent sport."""
         signup_user(client, "W1ASNF")
         client.post("/logout")
-        client.post("/admin/contestant/W1ASNF/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1ASNF/set-referee", headers=admin_headers)
 
-        response = client.post("/admin/contestant/W1ASNF/assign-sport/999", headers=admin_headers)
+        response = client.post("/admin/competitor/W1ASNF/assign-sport/999", headers=admin_headers)
         assert response.status_code == 404
         assert "Sport not found" in response.json()["detail"]
 
@@ -873,11 +873,11 @@ class TestContestantEndpoints:
         # Create and assign referee
         signup_user(client, "W1DUP")
         client.post("/logout")
-        client.post("/admin/contestant/W1DUP/set-referee", headers=admin_headers)
-        client.post("/admin/contestant/W1DUP/assign-sport/1", headers=admin_headers)
+        client.post("/admin/competitor/W1DUP/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1DUP/assign-sport/1", headers=admin_headers)
 
         # Try to assign again
-        response = client.post("/admin/contestant/W1DUP/assign-sport/1", headers=admin_headers)
+        response = client.post("/admin/competitor/W1DUP/assign-sport/1", headers=admin_headers)
         assert response.status_code == 400
         assert "already assigned" in response.json()["detail"]
 
@@ -901,17 +901,17 @@ class TestContestantEndpoints:
         # Create and assign referee
         signup_user(client, "W1REMR")
         client.post("/logout")
-        client.post("/admin/contestant/W1REMR/set-referee", headers=admin_headers)
-        client.post("/admin/contestant/W1REMR/assign-sport/1", headers=admin_headers)
+        client.post("/admin/competitor/W1REMR/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1REMR/assign-sport/1", headers=admin_headers)
 
         # Remove
-        response = client.delete("/admin/contestant/W1REMR/assign-sport/1", headers=admin_headers)
+        response = client.delete("/admin/competitor/W1REMR/assign-sport/1", headers=admin_headers)
         assert response.status_code == 200
         assert "removed" in response.json()["message"]
 
     def test_remove_referee_assignment_not_found(self, client, admin_headers):
         """Test removing non-existent assignment."""
-        response = client.delete("/admin/contestant/NOTEXIST/assign-sport/1", headers=admin_headers)
+        response = client.delete("/admin/competitor/NOTEXIST/assign-sport/1", headers=admin_headers)
         assert response.status_code == 404
 
 
@@ -956,10 +956,10 @@ class TestRefereeAccess:
         resp = client.post("/logout")
         assert resp.status_code == 200, f"Logout failed: {resp.text}"
 
-        resp = client.post("/admin/contestant/W1REF/set-referee", headers=admin_headers)
+        resp = client.post("/admin/competitor/W1REF/set-referee", headers=admin_headers)
         assert resp.status_code == 200, f"Set referee failed: {resp.text}"
 
-        resp = client.post("/admin/contestant/W1REF/assign-sport/1", headers=admin_headers)
+        resp = client.post("/admin/competitor/W1REF/assign-sport/1", headers=admin_headers)
         assert resp.status_code == 200, f"Assign sport failed: {resp.text}"
 
         # Login as referee
@@ -1026,7 +1026,7 @@ class TestRefereeAccess:
         # Login as referee again
         referee_client.post("/login", json={"callsign": "W1REF", "password": "password123"})
 
-        response = referee_client.post("/admin/contestant/W1DQ/disqualify")
+        response = referee_client.post("/admin/competitor/W1DQ/disqualify")
         assert response.status_code == 200
 
     def test_referee_cannot_access_unassigned_sport(self, referee_client, admin_headers):
@@ -1066,7 +1066,7 @@ class TestRefereeAccess:
         # Create admin user, promote to admin via API, then login
         signup_user(client, "W1ADM")
         client.post("/logout")
-        client.post("/admin/contestant/W1ADM/set-admin", headers=admin_headers)
+        client.post("/admin/competitor/W1ADM/set-admin", headers=admin_headers)
         client.post("/login", json={"callsign": "W1ADM", "password": "password123"})
 
         # Access sport without admin header (just session cookie)
@@ -1099,21 +1099,21 @@ class TestRefereeAccess:
         # Create user, promote to admin via API, then login
         signup_user(client, "W1ADM")
         client.post("/logout")
-        client.post("/admin/contestant/W1ADM/set-admin", headers=admin_headers)
+        client.post("/admin/competitor/W1ADM/set-admin", headers=admin_headers)
         client.post("/login", json={"callsign": "W1ADM", "password": "password123"})
 
         # Disqualify without admin header (just session cookie) - explicitly no headers
-        response = client.post("/admin/contestant/W1DQ/disqualify", headers={})
+        response = client.post("/admin/competitor/W1DQ/disqualify", headers={})
         assert response.status_code == 200
 
-    def test_admin_contestants_page_with_non_referee(self, client, admin_headers):
-        """Test admin contestants page shows non-referee competitors with empty assignments."""
+    def test_admin_competitors_page_with_non_referee(self, client, admin_headers):
+        """Test admin competitors page shows non-referee competitors with empty assignments."""
         # Create non-referee competitor
         signup_user(client, "W1NON")
         client.post("/logout")
 
-        # Get contestants page as admin
-        response = client.get("/admin/contestants", headers=admin_headers)
+        # Get competitors page as admin
+        response = client.get("/admin/competitors", headers=admin_headers)
         assert response.status_code == 200
         assert "W1NON" in response.text
         assert "Competitor" in response.text  # Role should show as Competitor
@@ -1139,7 +1139,7 @@ class TestRefereeAccess:
         # Create referee
         signup_user(client, "W1RFC")
         client.post("/logout")
-        client.post("/admin/contestant/W1RFC/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1RFC/set-referee", headers=admin_headers)
 
         # Create user to disqualify
         signup_user(client, "W1DQC")
@@ -1149,7 +1149,7 @@ class TestRefereeAccess:
         client.post("/login", json={"callsign": "W1RFC", "password": "password123"})
 
         # Try disqualify - this should use referee session (not admin header)
-        response = client.post("/admin/contestant/W1DQC/disqualify", headers={})
+        response = client.post("/admin/competitor/W1DQC/disqualify", headers={})
         assert response.status_code == 200
 
     def test_referee_update_nonexistent_match(self, referee_client):
@@ -1166,8 +1166,8 @@ class TestRefereeAccess:
         response = referee_client.delete("/admin/match/999")
         assert response.status_code == 404
 
-    def test_admin_contestants_page_shows_referee_assignments(self, client, admin_headers):
-        """Test admin contestants page shows referee sport assignments."""
+    def test_admin_competitors_page_shows_referee_assignments(self, client, admin_headers):
+        """Test admin competitors page shows referee sport assignments."""
         # Create olympiad and sport
         client.post("/admin/olympiad", json={
             "name": "2026 Olympics",
@@ -1186,11 +1186,11 @@ class TestRefereeAccess:
         # Create referee and assign to sport
         signup_user(client, "W1RFB")
         client.post("/logout")
-        client.post("/admin/contestant/W1RFB/set-referee", headers=admin_headers)
-        client.post("/admin/contestant/W1RFB/assign-sport/1", headers=admin_headers)
+        client.post("/admin/competitor/W1RFB/set-referee", headers=admin_headers)
+        client.post("/admin/competitor/W1RFB/assign-sport/1", headers=admin_headers)
 
-        # Get contestants page as admin
-        response = client.get("/admin/contestants", headers=admin_headers)
+        # Get competitors page as admin
+        response = client.get("/admin/competitors", headers=admin_headers)
         assert response.status_code == 200
         assert "W1RFB" in response.text
         assert "Referee" in response.text
@@ -1272,7 +1272,7 @@ class TestVerifyAdminOrReferee:
 
         # Make user a referee
         with get_db() as conn:
-            conn.execute("UPDATE contestants SET is_referee = 1 WHERE callsign = ?", ("W1UNIT",))
+            conn.execute("UPDATE competitors SET is_referee = 1 WHERE callsign = ?", ("W1UNIT",))
 
         # Create a session
         session_id = create_session("W1UNIT")
@@ -1283,7 +1283,7 @@ class TestVerifyAdminOrReferee:
             "headers": [],
             "query_string": b"",
             "method": "POST",
-            "path": "/admin/contestant/TEST/disqualify"
+            "path": "/admin/competitor/TEST/disqualify"
         }
         request = Request(scope)
         # Manually set cookies on the request (simulating cookie parsing)
@@ -1310,7 +1310,7 @@ class TestVerifyAdminOrReferee:
             "headers": [],
             "query_string": b"",
             "method": "POST",
-            "path": "/admin/contestant/TEST/disqualify"
+            "path": "/admin/competitor/TEST/disqualify"
         }
         request = Request(scope)
         request._cookies = {SESSION_COOKIE_NAME: session_id}
@@ -1360,14 +1360,14 @@ class TestRecordsEndpoint:
             "target_value": "EU"
         }, headers=admin_headers)
 
-        # Register contestant and add a QSO that would set a record
+        # Register competitor and add a QSO that would set a record
         signup_user(client, "W1TEST")
 
         # Insert a QSO directly into DB to set a record
         from database import get_db
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO qsos (contestant_callsign, dx_callsign, qso_datetime_utc,
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc,
                     band, mode, tx_power_w, my_grid, dx_grid, my_dxcc, dx_dxcc,
                     distance_km, is_confirmed)
                 VALUES ('W1TEST', 'DL1ABC', '2026-01-15 12:00:00',
@@ -1493,7 +1493,7 @@ class TestSportEntry:
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO qsos (
-                    contestant_callsign, dx_callsign, qso_datetime_utc,
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
                     tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
                     distance_km, cool_factor
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 8500.0, 1700.0)
@@ -1682,35 +1682,35 @@ class TestSportEndpointsPublic:
 class TestSyncEndpoint:
     """Test sync endpoint."""
 
-    def test_sync_single_contestant(self, client):
-        """Test syncing a single contestant."""
+    def test_sync_single_competitor(self, client):
+        """Test syncing a single competitor."""
         # Register first
         signup_user(client, "W1TEST")
         response = client.post("/sync?callsign=W1TEST")
         assert response.status_code == 200
 
-    def test_sync_all_contestants(self, client):
-        """Test syncing all contestants."""
+    def test_sync_all_competitors(self, client):
+        """Test syncing all competitors."""
         response = client.post("/sync")
         assert response.status_code == 200
 
-    def test_sync_page_single_contestant(self, client):
-        """Test sync page for single contestant."""
+    def test_sync_page_single_competitor(self, client):
+        """Test sync page for single competitor."""
         signup_user(client, "W1SYNC")
         response = client.get("/sync?callsign=W1SYNC")
         assert response.status_code == 200
         assert "Sync Results" in response.text
         assert "W1SYNC" in response.text
 
-    def test_sync_page_all_contestants(self, client):
-        """Test sync page for all contestants."""
+    def test_sync_page_all_competitors(self, client):
+        """Test sync page for all competitors."""
         response = client.get("/sync")
         assert response.status_code == 200
         assert "Sync Results" in response.text
         assert "Syncing all competitors" in response.text
 
-    def test_sync_page_nonexistent_contestant(self, client):
-        """Test sync page for nonexistent contestant shows error."""
+    def test_sync_page_nonexistent_competitor(self, client):
+        """Test sync page for nonexistent competitor shows error."""
         response = client.get("/sync?callsign=NOTEXIST")
         assert response.status_code == 200
         assert "Error" in response.text
@@ -1791,9 +1791,9 @@ class TestAdminHTMLEndpoints:
         response = client.get("/admin/sport/999/matches", headers=admin_headers)
         assert response.status_code == 404
 
-    def test_admin_contestants_page(self, client, admin_headers):
-        """Test admin contestants HTML page."""
-        response = client.get("/admin/contestants", headers=admin_headers)
+    def test_admin_competitors_page(self, client, admin_headers):
+        """Test admin competitors HTML page."""
+        response = client.get("/admin/competitors", headers=admin_headers)
         assert response.status_code == 200
         assert "Competitors" in response.text
 
@@ -2133,7 +2133,7 @@ class TestAuthEndpoints:
         })
         client.cookies.clear()
         # Disable the account
-        client.post("/admin/contestant/W1DIS/disable", headers=admin_headers)
+        client.post("/admin/competitor/W1DIS/disable", headers=admin_headers)
         # Try to login
         response = client.post("/login", json={
             "callsign": "W1DIS",
@@ -2255,8 +2255,8 @@ class TestUserDashboard:
         assert response.status_code == 200
         assert "EU" in response.text
 
-    def test_contestant_page_shows_country_name_for_medals(self, logged_in_client, admin_headers):
-        """Test contestant page shows country name for country-target medals."""
+    def test_competitor_page_shows_country_name_for_medals(self, logged_in_client, admin_headers):
+        """Test competitor page shows country name for country-target medals."""
         from database import get_db
         # Create country-target sport and match
         logged_in_client.post("/admin/olympiad", json={
@@ -2287,13 +2287,13 @@ class TestUserDashboard:
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 
-        response = logged_in_client.get("/contestant/W1DASH")
+        response = logged_in_client.get("/competitor/W1DASH")
         assert response.status_code == 200
         assert "United States" in response.text
         assert "291" in response.text
 
-    def test_contestant_page_shows_target_for_non_country_medals(self, logged_in_client, admin_headers):
-        """Test contestant page shows raw target for non-country targets."""
+    def test_competitor_page_shows_target_for_non_country_medals(self, logged_in_client, admin_headers):
+        """Test competitor page shows raw target for non-country targets."""
         from database import get_db
         # Create continent-target sport and match
         logged_in_client.post("/admin/olympiad", json={
@@ -2324,7 +2324,7 @@ class TestUserDashboard:
                 VALUES (1, 'W1DASH', 'combined', 'gold', 3)
             """)
 
-        response = logged_in_client.get("/contestant/W1DASH")
+        response = logged_in_client.get("/competitor/W1DASH")
         assert response.status_code == 200
         assert "EU" in response.text
 
@@ -2377,19 +2377,19 @@ class TestUserDashboard:
         assert "Log Out" in response.text
         assert "Sign Up" not in response.text
 
-    def test_contestant_page_shows_logout_when_logged_in(self, logged_in_client):
-        """Test contestant page shows logout when logged in."""
-        response = logged_in_client.get("/contestant/W1DASH")
+    def test_competitor_page_shows_logout_when_logged_in(self, logged_in_client):
+        """Test competitor page shows logout when logged in."""
+        response = logged_in_client.get("/competitor/W1DASH")
         assert response.status_code == 200
         assert "Log Out" in response.text
         assert "Sign Up" not in response.text
 
-    def test_contestant_page_requires_auth_when_logged_out(self, client):
-        """Test contestant page requires authentication when logged out."""
-        # First create a contestant
+    def test_competitor_page_requires_auth_when_logged_out(self, client):
+        """Test competitor page requires authentication when logged out."""
+        # First create a competitor
         client.post("/signup", json={"callsign": "W1TEST", "password": "password123", "qrz_api_key": "test-api-key"})
         client.post("/logout")  # Log out
-        response = client.get("/contestant/W1TEST", follow_redirects=False)
+        response = client.get("/competitor/W1TEST", follow_redirects=False)
         assert response.status_code == 401
 
     def test_sport_page_shows_logout_when_logged_in(self, logged_in_client, admin_headers):
@@ -2495,12 +2495,12 @@ class TestBackgroundSync:
 
     @pytest.mark.asyncio
     async def test_background_sync_calls_sync_all(self):
-        """Test background_sync calls sync_all_contestants after sleep."""
+        """Test background_sync calls sync_all_competitors after sleep."""
         import asyncio
         from unittest.mock import patch, AsyncMock
         from main import background_sync
 
-        with patch('main.sync_all_contestants', new_callable=AsyncMock) as mock_sync:
+        with patch('main.sync_all_competitors', new_callable=AsyncMock) as mock_sync:
             with patch('main.SYNC_INTERVAL', 0.01):  # Very short interval for testing
                 # Run background_sync briefly then cancel
                 task = asyncio.create_task(background_sync())
@@ -2530,7 +2530,7 @@ class TestBackgroundSync:
                 raise Exception("Test error")
             # Second call succeeds
 
-        with patch('main.sync_all_contestants', side_effect=mock_sync_with_error):
+        with patch('main.sync_all_competitors', side_effect=mock_sync_with_error):
             with patch('main.SYNC_INTERVAL', 0.01):
                 task = asyncio.create_task(background_sync())
                 await asyncio.sleep(0.05)
