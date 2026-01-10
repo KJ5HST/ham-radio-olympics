@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_code }} - {{ error_title }} - Ham Radio Olympics{% endblock %}
+
+{% block nav_extra %}{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 60px 20px;">
+    <h1 style="font-size: 6rem; color: #cbd5e0; margin-bottom: 20px;">{{ error_code }}</h1>
+    <h2 style="margin-bottom: 15px;">{{ error_title }}</h2>
+    <p style="color: #718096; margin-bottom: 30px;">{{ error_message }}</p>
+    <a href="/" class="btn">Go to Home</a>
+</div>
+{% endblock %}

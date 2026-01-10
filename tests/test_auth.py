@@ -22,12 +22,13 @@ class TestPasswordHashing:
     """Test password hashing functions."""
 
     def test_hash_password_creates_hash(self):
-        """Test that hash_password creates a salted hash."""
+        """Test that hash_password creates a bcrypt hash."""
         password = "testpassword123"
         hashed = hash_password(password)
 
-        assert ":" in hashed
-        assert len(hashed) > 64  # Salt + hash
+        # Bcrypt hashes start with $2b$ or $2a$
+        assert hashed.startswith("$2b$") or hashed.startswith("$2a$")
+        assert len(hashed) == 60  # Standard bcrypt hash length
 
     def test_hash_password_unique_salts(self):
         """Test that each hash has a unique salt."""
@@ -54,6 +55,21 @@ class TestPasswordHashing:
     def test_verify_password_invalid_hash(self):
         """Test verifying with invalid hash format."""
         assert verify_password("password", "invalidhash") is False
+
+    def test_verify_legacy_sha256_password(self):
+        """Test verifying a legacy SHA-256 password."""
+        import hashlib
+        import secrets
+
+        password = "legacypassword"
+        # Create legacy format: salt:sha256_hash
+        salt = secrets.token_hex(16)
+        hash_input = f"{salt}{password}".encode()
+        legacy_hash = f"{salt}:{hashlib.sha256(hash_input).hexdigest()}"
+
+        # Should verify successfully
+        assert verify_password(password, legacy_hash) is True
+        assert verify_password("wrongpassword", legacy_hash) is False
 
 
 class TestUserRegistration:

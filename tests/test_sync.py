@@ -15,6 +15,7 @@ os.close(_test_db_fd)
 os.environ["DATABASE_PATH"] = _test_db_path
 os.environ["ADMIN_KEY"] = "test-admin-key"
 os.environ["ENCRYPTION_KEY"] = "test-encryption-key"
+os.environ["TESTING"] = "1"
 
 from database import reset_db, get_db
 from crypto import encrypt_api_key

@@ -4,13 +4,15 @@ Authentication and session management for Ham Radio Olympics.
 
 import hashlib
 import secrets
-import os
+import bcrypt
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from dataclasses import dataclass
 
 from database import get_db
 
+logger = logging.getLogger(__name__)
 
 SESSION_DURATION_DAYS = 30
 SESSION_COOKIE_NAME = "hro_session"
@@ -28,21 +30,45 @@ class User:
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using SHA-256 with salt."""
-    salt = secrets.token_hex(16)
-    hash_input = f"{salt}{password}".encode()
-    password_hash = hashlib.sha256(hash_input).hexdigest()
-    return f"{salt}:{password_hash}"
+    """Hash a password using bcrypt."""
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
-def verify_password(password: str, stored_hash: str) -> bool:
-    """Verify a password against a stored hash."""
+def _verify_sha256_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against legacy SHA-256 hash (for migration)."""
     try:
         salt, hash_value = stored_hash.split(":", 1)
         hash_input = f"{salt}{password}".encode()
         return hashlib.sha256(hash_input).hexdigest() == hash_value
     except ValueError:
         return False
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify a password against a stored hash. Supports both bcrypt and legacy SHA-256."""
+    # Try bcrypt first (new format starts with $2b$)
+    if stored_hash.startswith('$2b$') or stored_hash.startswith('$2a$'):
+        try:
+            return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
+        except Exception:
+            return False
+
+    # Fall back to legacy SHA-256 format (salt:hash)
+    return _verify_sha256_password(password, stored_hash)
+
+
+def _upgrade_password_hash(callsign: str, password: str) -> None:
+    """Upgrade a legacy SHA-256 password to bcrypt."""
+    new_hash = hash_password(password)
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET password_hash = ? WHERE callsign = ?",
+            (new_hash, callsign)
+        )
+    logger.info(f"Upgraded password hash for {callsign} from SHA-256 to bcrypt")
 
 
 def create_session(callsign: str) -> str:
@@ -130,6 +156,7 @@ def register_user(
         """, (callsign, password_hash, email, qrz_api_key_encrypted,
               lotw_username_encrypted, lotw_password_encrypted, now))
 
+    logger.info(f"Registered new user: {callsign}")
     return True
 
 
@@ -144,10 +171,23 @@ def authenticate_user(callsign: str, password: str) -> Optional[str]:
         )
         row = cursor.fetchone()
 
-        if row and verify_password(password, row["password_hash"]):
-            if row["is_disabled"]:
-                return "disabled"
-            return create_session(callsign)
+        if row:
+            stored_hash = row["password_hash"]
+            is_legacy = not (stored_hash.startswith('$2b$') or stored_hash.startswith('$2a$'))
+
+            if verify_password(password, stored_hash):
+                if row["is_disabled"]:
+                    logger.warning(f"Login attempt for disabled account: {callsign}")
+                    return "disabled"
+
+                # Upgrade legacy SHA-256 hash to bcrypt on successful login
+                if is_legacy:
+                    _upgrade_password_hash(callsign, password)
+
+                logger.info(f"Successful login: {callsign}")
+                return create_session(callsign)
+            else:
+                logger.warning(f"Failed login attempt for: {callsign}")
 
     return None
 

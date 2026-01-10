@@ -3,6 +3,7 @@ Ham Radio Olympics - Main FastAPI Application
 """
 
 import asyncio
+import logging
 import os
 import re
 import secrets
@@ -11,9 +12,12 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from database import init_db, get_db, seed_example_olympiad
 from crypto import encrypt_api_key
@@ -26,6 +30,22 @@ from auth import (
     register_user, authenticate_user, get_session_user, delete_session,
     update_user_email, update_user_password, hash_password, User, SESSION_COOKIE_NAME
 )
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Rate limiter - disabled in test mode
+def get_rate_limit_key(request: Request) -> str:
+    """Get rate limit key, return empty string in test mode to disable."""
+    if os.getenv("TESTING"):
+        return ""  # Disable rate limiting in tests
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=get_rate_limit_key)
 
 # Sync interval in seconds (1 hour)
 SYNC_INTERVAL = int(os.getenv("SYNC_INTERVAL", 3600))
@@ -71,8 +91,75 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Templates
 templates = Jinja2Templates(directory="templates")
+
+
+# CSRF token management
+CSRF_COOKIE_NAME = "hro_csrf"
+
+
+def generate_csrf_token() -> str:
+    """Generate a CSRF token."""
+    return secrets.token_urlsafe(32)
+
+
+@app.middleware("http")
+async def csrf_middleware(request: Request, call_next):
+    """CSRF protection middleware."""
+    # Get or create CSRF token
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME)
+    is_new_session = csrf_token is None
+
+    if not csrf_token:
+        csrf_token = generate_csrf_token()
+
+    request.state.csrf_token = csrf_token
+
+    # Skip CSRF validation in test mode
+    if os.getenv("TESTING"):
+        response = await call_next(request)
+        return response
+
+    # Validate CSRF for HTML form POSTs (not JSON API calls)
+    # Skip validation for new sessions (no cookie yet) to allow first form submission
+    if request.method == "POST" and not is_new_session:
+        content_type = request.headers.get("content-type", "")
+
+        # Only validate for form submissions, not JSON API calls
+        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+            form = await request.form()
+            form_token = form.get("csrf_token")
+
+            if not form_token or form_token != csrf_token:
+                logger.warning(f"CSRF validation failed for {request.url.path}")
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF validation failed"}
+                )
+
+    response = await call_next(request)
+
+    # Set CSRF cookie if not present
+    if is_new_session:
+        response.set_cookie(
+            key=CSRF_COOKIE_NAME,
+            value=csrf_token,
+            httponly=True,
+            samesite="lax",
+            max_age=30 * 24 * 60 * 60  # 30 days
+        )
+
+    return response
+
+
+def get_csrf_token(request: Request) -> str:
+    """Get CSRF token for the request."""
+    return getattr(request.state, 'csrf_token', generate_csrf_token())
 
 
 def format_date(value: str, include_time: bool = False) -> str:
@@ -707,7 +794,8 @@ async def signup_page(request: Request):
 
 
 @app.post("/signup")
-async def signup(signup_data: UserSignup):
+@limiter.limit("5/minute")
+async def signup(request: Request, signup_data: UserSignup):
     """Create a new user account."""
     callsign = signup_data.callsign.upper()
 
@@ -789,7 +877,8 @@ async def login_page(request: Request):
 
 
 @app.post("/login")
-async def login(login_data: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, login_data: UserLogin):
     """Authenticate user and create session."""
     result = authenticate_user(login_data.callsign, login_data.password)
 
@@ -924,6 +1013,7 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
         "request": request,
         "user": user,
         "account": account,
+        "csrf_token": get_csrf_token(request),
     })
 
 
@@ -1623,6 +1713,61 @@ async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
         conn.execute("DELETE FROM competitors WHERE callsign = ?", (callsign.upper(),))
 
     return {"message": f"Competitor {callsign.upper()} deleted"}
+
+
+# ============================================================
+# ERROR HANDLERS
+# ============================================================
+
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle HTTP exceptions."""
+    # Get the detail message from the exception
+    detail = getattr(exc, 'detail', None) or "An error occurred"
+
+    # For API requests or requests with specific error details, return JSON
+    accept_header = request.headers.get("accept", "")
+    is_api_request = (
+        request.url.path.startswith("/admin/") or
+        "application/json" in accept_header or
+        detail != "Not Found"  # Preserve specific error messages
+    )
+
+    if is_api_request:
+        return JSONResponse(status_code=exc.status_code, content={"detail": detail})
+
+    # For browser requests to pages that don't exist, show nice error page
+    if exc.status_code == 404:
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "error_code": 404,
+            "error_title": "Page Not Found",
+            "error_message": "The page you're looking for doesn't exist."
+        }, status_code=404)
+
+    # Other errors
+    return templates.TemplateResponse("error.html", {
+        "request": request,
+        "error_code": exc.status_code,
+        "error_title": "Error",
+        "error_message": detail
+    }, status_code=exc.status_code)
+
+
+@app.exception_handler(500)
+async def server_error_handler(request: Request, exc: Exception):
+    """Handle 500 errors."""
+    logger.error(f"Internal server error: {exc}", exc_info=True)
+    if request.url.path.startswith("/admin/") or request.headers.get("accept") == "application/json":
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+    return templates.TemplateResponse("error.html", {
+        "request": request,
+        "error_code": 500,
+        "error_title": "Server Error",
+        "error_message": "Something went wrong. Please try again later."
+    }, status_code=500)
 
 
 # Run with uvicorn
