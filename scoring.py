@@ -430,7 +430,7 @@ def recompute_match_medals(match_id: int):
             ))
 
 
-def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None):
+def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, match_id: Optional[int] = None):
     """
     Check and update records based on a QSO.
 
@@ -438,6 +438,7 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None):
         qso_id: QSO ID
         callsign: Competitor callsign
         sport_id: Sport ID (None for global records)
+        match_id: Match ID where the QSO qualified
     """
     with get_db() as conn:
         # Get QSO data
@@ -454,21 +455,21 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None):
         if qso["distance_km"]:
             _update_record_if_better(
                 conn, "longest_distance", qso["distance_km"],
-                qso_id, callsign, sport_id, achieved_at, higher_is_better=True
+                qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=True
             )
 
         # Check highest cool factor
         if qso["cool_factor"]:
             _update_record_if_better(
                 conn, "highest_cool_factor", qso["cool_factor"],
-                qso_id, callsign, sport_id, achieved_at, higher_is_better=True
+                qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=True
             )
 
         # Check lowest power (only for confirmed QSOs with positive power)
         if qso["tx_power_w"] and qso["tx_power_w"] > 0 and qso["is_confirmed"]:
             _update_record_if_better(
                 conn, "lowest_power", qso["tx_power_w"],
-                qso_id, callsign, sport_id, achieved_at, higher_is_better=False
+                qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=False
             )
 
 
@@ -479,6 +480,7 @@ def _update_record_if_better(
     qso_id: int,
     callsign: str,
     sport_id: Optional[int],
+    match_id: Optional[int],
     achieved_at: str,
     higher_is_better: bool,
 ):
@@ -494,16 +496,16 @@ def _update_record_if_better(
     if world_record is None:
         # No record exists, create it
         conn.execute("""
-            INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-            VALUES (?, NULL, ?, ?, ?, ?)
-        """, (sport_id, record_type, value, qso_id, achieved_at))
+            INSERT INTO records (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at)
+            VALUES (?, ?, NULL, ?, ?, ?, ?)
+        """, (sport_id, match_id, record_type, value, qso_id, achieved_at))
     else:
         is_better = (value > world_record["value"]) if higher_is_better else (value < world_record["value"])
         if is_better:
             conn.execute("""
-                UPDATE records SET value = ?, qso_id = ?, achieved_at = ?
+                UPDATE records SET value = ?, qso_id = ?, match_id = ?, achieved_at = ?
                 WHERE id = ?
-            """, (value, qso_id, achieved_at, world_record["id"]))
+            """, (value, qso_id, match_id, achieved_at, world_record["id"]))
 
     # Check personal best (per callsign)
     cursor = conn.execute("""
@@ -514,16 +516,16 @@ def _update_record_if_better(
 
     if pb_record is None:
         conn.execute("""
-            INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (sport_id, callsign, record_type, value, qso_id, achieved_at))
+            INSERT INTO records (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at))
     else:
         is_better = (value > pb_record["value"]) if higher_is_better else (value < pb_record["value"])
         if is_better:
             conn.execute("""
-                UPDATE records SET value = ?, qso_id = ?, achieved_at = ?
+                UPDATE records SET value = ?, qso_id = ?, match_id = ?, achieved_at = ?
                 WHERE id = ?
-            """, (value, qso_id, achieved_at, pb_record["id"]))
+            """, (value, qso_id, match_id, achieved_at, pb_record["id"]))
 
 
 def recompute_all_records():
@@ -576,4 +578,4 @@ def recompute_all_records():
         for qso in matching:
             if qso.qso_id not in seen_qsos:
                 seen_qsos.add(qso.qso_id)
-                update_records(qso.qso_id, qso.callsign)
+                update_records(qso.qso_id, qso.callsign, match_id=match_data["match_id"])

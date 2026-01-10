@@ -686,12 +686,17 @@ async def leave_sport(sport_id: int, user: User = Depends(require_user)):
 async def get_records(request: Request, user: User = Depends(require_user)):
     """Get world records page."""
     with get_db() as conn:
-        # Global records (sport_id IS NULL, callsign IS NULL) with holder names
+        # Global records (sport_id IS NULL, callsign IS NULL) with holder names and match info
         cursor = conn.execute("""
-            SELECT r.*, q.competitor_callsign as holder, c.first_name as holder_first_name
+            SELECT r.*, q.competitor_callsign as holder, q.dx_callsign,
+                   c.first_name as holder_first_name,
+                   m.id as match_id, m.target_value,
+                   s.id as sport_id, s.name as sport_name
             FROM records r
             LEFT JOIN qsos q ON r.qso_id = q.id
             LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
+            LEFT JOIN matches m ON r.match_id = m.id
+            LEFT JOIN sports s ON m.sport_id = s.id
             WHERE r.callsign IS NULL AND r.sport_id IS NULL
             ORDER BY r.record_type
         """)

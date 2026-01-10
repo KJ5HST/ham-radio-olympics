@@ -227,6 +227,14 @@ def init_db():
                 conn.execute("ALTER TABLE competitors ADD COLUMN last_name TEXT")
                 conn.commit()
 
+        # Migration: add match_id column to records table
+        if 'records' in tables:
+            cursor = conn.execute("PRAGMA table_info(records)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'match_id' not in columns:
+                conn.execute("ALTER TABLE records ADD COLUMN match_id INTEGER REFERENCES matches(id) ON DELETE CASCADE")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -377,12 +385,14 @@ def init_db():
             CREATE TABLE IF NOT EXISTS records (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 sport_id INTEGER,
+                match_id INTEGER,
                 callsign TEXT,
                 record_type TEXT NOT NULL CHECK (record_type IN ('longest_distance', 'highest_cool_factor', 'lowest_power')),
                 value REAL NOT NULL,
                 qso_id INTEGER,
                 achieved_at TEXT NOT NULL,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
                 FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE SET NULL
             );

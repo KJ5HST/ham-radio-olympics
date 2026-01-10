@@ -12,6 +12,8 @@
             <th scope="col">Record Type</th>
             <th scope="col">Value</th>
             <th scope="col">Holder</th>
+            <th scope="col">QSO With</th>
+            <th scope="col">Match</th>
             <th scope="col">Date</th>
         </tr>
     </thead>
@@ -33,6 +35,14 @@
             <td>
                 {% if record.holder %}
                     <a href="/competitor/{{ record.holder }}">{{ record.holder_first_name | competitor_display(record.holder) }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>{{ record.dx_callsign or '-' }}</td>
+            <td>
+                {% if record.match_id %}
+                    <a href="/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target_value }}</a>
                 {% else %}
                     -
                 {% endif %}
