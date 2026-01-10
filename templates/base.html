@@ -5,16 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Ham Radio Olympics{% endblock %}</title>
     <style>
+        /* CSS Custom Properties for theming */
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --bg-card: #f7fafc;
+            --text-primary: #333;
+            --text-secondary: #718096;
+            --text-heading: #1a365d;
+            --text-subheading: #2c5282;
+            --border-color: #e2e8f0;
+            --shadow-color: rgba(0,0,0,0.1);
+            --accent-color: #2c5282;
+            --accent-hover: #1a365d;
+        }
+
+        /* Dark mode theme */
+        [data-theme="dark"] {
+            --bg-primary: #1a202c;
+            --bg-secondary: #2d3748;
+            --bg-card: #4a5568;
+            --text-primary: #e2e8f0;
+            --text-secondary: #a0aec0;
+            --text-heading: #90cdf4;
+            --text-subheading: #63b3ed;
+            --border-color: #4a5568;
+            --shadow-color: rgba(0,0,0,0.3);
+            --accent-color: #4299e1;
+            --accent-hover: #3182ce;
+        }
+
+        /* Respect system preference */
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg-primary: #1a202c;
+                --bg-secondary: #2d3748;
+                --bg-card: #4a5568;
+                --text-primary: #e2e8f0;
+                --text-secondary: #a0aec0;
+                --text-heading: #90cdf4;
+                --text-subheading: #63b3ed;
+                --border-color: #4a5568;
+                --shadow-color: rgba(0,0,0,0.3);
+                --accent-color: #4299e1;
+                --accent-hover: #3182ce;
+            }
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             line-height: 1.6;
-            color: #333;
+            color: var(--text-primary);
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
+            background: var(--bg-primary);
         }
+        a { color: var(--accent-color); }
+        a:hover { color: var(--accent-hover); }
+        p { color: var(--text-primary); }
         header {
             background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
             color: white;
@@ -24,28 +74,44 @@
         }
         header h1 { font-size: 1.8rem; }
         header p { opacity: 0.9; }
+        /* Skip to main content link for accessibility */
+        .skip-link {
+            position: absolute;
+            top: -40px;
+            left: 0;
+            background: var(--accent-color);
+            color: white;
+            padding: 8px 16px;
+            z-index: 9999;
+            text-decoration: none;
+            border-radius: 0 0 4px 0;
+        }
+        .skip-link:focus {
+            top: 0;
+        }
+
         nav {
-            background: white;
+            background: var(--bg-secondary);
             padding: 10px 20px;
             border-radius: 8px;
             margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px var(--shadow-color);
         }
         nav a {
-            color: #2c5282;
+            color: var(--accent-color);
             text-decoration: none;
             margin-right: 20px;
             font-weight: 500;
         }
         nav a:hover { text-decoration: underline; }
         main {
-            background: white;
+            background: var(--bg-secondary);
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px var(--shadow-color);
         }
-        h2 { color: #1a365d; margin-bottom: 15px; }
-        h3 { color: #2c5282; margin: 20px 0 10px; }
+        h2 { color: var(--text-heading); margin-bottom: 15px; }
+        h3 { color: var(--text-subheading); margin: 20px 0 10px; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -54,10 +120,10 @@
         th, td {
             padding: 10px;
             text-align: left;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--border-color);
         }
-        th { background: #f7fafc; font-weight: 600; }
-        tr:hover { background: #f7fafc; }
+        th { background: var(--bg-card); font-weight: 600; }
+        tr:hover { background: var(--bg-card); }
         .medal-gold { color: #d69e2e; font-weight: bold; }
         .medal-silver { color: #718096; font-weight: bold; }
         .medal-bronze { color: #c05621; font-weight: bold; }
@@ -83,20 +149,25 @@
             margin-bottom: 5px;
             font-weight: 500;
         }
-        .form-group input, .form-group select {
+        .form-group input, .form-group select, .form-group textarea {
             width: 100%;
             padding: 8px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border-color);
             border-radius: 4px;
             font-size: 14px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        .form-group input::placeholder {
+            color: var(--text-secondary);
         }
         .card {
-            background: #f7fafc;
+            background: var(--bg-card);
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 15px;
         }
-        .card h4 { margin-bottom: 10px; color: #2c5282; }
+        .card h4 { margin-bottom: 10px; color: var(--text-subheading); }
         .stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -104,20 +175,106 @@
             margin-bottom: 20px;
         }
         .stat-box {
-            background: #f7fafc;
+            background: var(--bg-card);
             padding: 15px;
             border-radius: 8px;
             text-align: center;
         }
-        .stat-box .value { font-size: 2rem; font-weight: bold; color: #2c5282; }
-        .stat-box .label { font-size: 0.9rem; color: #718096; }
+        .stat-box .value { font-size: 2rem; font-weight: bold; color: var(--text-subheading); }
+        .stat-box .label { font-size: 0.9rem; color: var(--text-secondary); }
         .alert {
             padding: 15px;
             border-radius: 4px;
             margin-bottom: 15px;
+            background: var(--bg-card);
+            color: var(--text-primary);
         }
-        .alert-success { background: #c6f6d5; color: #22543d; }
-        .alert-error { background: #fed7d7; color: #822727; }
+        .alert-success { background: #c6f6d5; color: #22543d; border-left: 4px solid #38a169; }
+        .alert-error { background: #fed7d7; color: #822727; border-left: 4px solid #e53e3e; }
+        .alert-info { background: #bee3f8; color: #2a4365; border-left: 4px solid #3182ce; }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px;
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            box-shadow: 0 4px 12px var(--shadow-color);
+            animation: toast-slide-in 0.3s ease-out;
+            max-width: 350px;
+        }
+        .toast-success { border-left: 4px solid #38a169; }
+        .toast-error { border-left: 4px solid #e53e3e; }
+        .toast-warning { border-left: 4px solid #d69e2e; }
+        .toast-info { border-left: 4px solid #3182ce; }
+        @keyframes toast-slide-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Focus indicators for accessibility */
+        a:focus, button:focus, input:focus, select:focus, textarea:focus {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+        .btn:focus {
+            outline: 2px solid white;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 4px var(--accent-color);
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .loading-overlay .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border-width: 3px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Theme toggle button */
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 5px;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-left: 10px;
+        }
+        .theme-toggle:hover {
+            color: var(--text-primary);
+        }
         /* Dropdown menu */
         .dropdown {
             position: relative;
@@ -128,7 +285,7 @@
         .dropdown-toggle {
             background: none;
             border: none;
-            color: #2c5282;
+            color: var(--accent-color);
             cursor: pointer;
             font-size: inherit;
             font-weight: 500;
@@ -140,19 +297,20 @@
             position: absolute;
             right: 0;
             top: 100%;
-            background: white;
+            background: var(--bg-secondary);
             min-width: 150px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 8px var(--shadow-color);
             border-radius: 4px;
             z-index: 1000;
             padding-top: 5px;
+            border: 1px solid var(--border-color);
         }
         .dropdown-menu a, .dropdown-menu button {
             display: block;
             width: 100%;
             padding: 10px 15px;
             text-align: left;
-            color: #333;
+            color: var(--text-primary);
             text-decoration: none;
             border: none;
             background: none;
@@ -161,9 +319,9 @@
             margin: 0;
         }
         .dropdown-menu a:hover, .dropdown-menu button:hover {
-            background: #f7fafc;
+            background: var(--bg-card);
         }
-        .dropdown-menu button { color: #c53030; }
+        .dropdown-menu button { color: #e53e3e; }
         .dropdown-menu.show { display: block; }
         /* Table responsive wrapper */
         .table-responsive {
@@ -257,6 +415,11 @@
     </style>
 </head>
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Toast notification container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <header>
         <h1>Ham Radio Olympics</h1>
         <p>Olympic-style amateur radio competition</p>
@@ -285,13 +448,82 @@
                 <a href="/signup">Sign Up</a>
                 <a href="/login">Log In</a>
             {% endif %}
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                <span class="theme-icon">🌙</span>
+            </button>
         </span>
     </nav>
 
-    <main>
+    <main id="main-content">
         {% block content %}{% endblock %}
     </main>
     <script>
+    // Theme toggle functionality
+    (function() {
+        var themeToggle = document.getElementById('theme-toggle');
+        var themeIcon = themeToggle ? themeToggle.querySelector('.theme-icon') : null;
+        var html = document.documentElement;
+
+        function getTheme() {
+            return localStorage.getItem('theme') || 'auto';
+        }
+
+        function setTheme(theme) {
+            localStorage.setItem('theme', theme);
+            if (theme === 'dark') {
+                html.setAttribute('data-theme', 'dark');
+                if (themeIcon) themeIcon.textContent = '☀️';
+            } else if (theme === 'light') {
+                html.setAttribute('data-theme', 'light');
+                if (themeIcon) themeIcon.textContent = '🌙';
+            } else {
+                html.removeAttribute('data-theme');
+                var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (themeIcon) themeIcon.textContent = prefersDark ? '☀️' : '🌙';
+            }
+        }
+
+        // Initialize theme
+        setTheme(getTheme());
+
+        // Toggle theme on button click
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function() {
+                var current = getTheme();
+                var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var currentlyDark = current === 'dark' || (current === 'auto' && prefersDark);
+                setTheme(currentlyDark ? 'light' : 'dark');
+            });
+        }
+
+        // Listen for system theme changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+            if (getTheme() === 'auto') {
+                setTheme('auto');
+            }
+        });
+    })();
+
+    // Toast notification system
+    window.showToast = function(message, type) {
+        type = type || 'info';
+        var container = document.getElementById('toast-container');
+        if (!container) return;
+
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+        toast.textContent = message;
+        container.appendChild(toast);
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(function() {
+            toast.style.animation = 'toast-slide-in 0.3s ease-out reverse';
+            setTimeout(function() {
+                toast.remove();
+            }, 300);
+        }, 5000);
+    };
+
     // Click-based dropdown for all devices
     (function() {
         var toggle = document.querySelector('.dropdown-toggle');

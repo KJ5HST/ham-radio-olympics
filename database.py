@@ -8,12 +8,15 @@ from datetime import datetime
 from typing import Optional
 from contextlib import contextmanager
 
-DATABASE_PATH = os.getenv("DATABASE_PATH", "ham_olympics.db")
+# Import config for DATABASE_PATH - note: config must not import database to avoid circular imports
+# We use a function to get the path so tests can override it before imports
+def _get_database_path():
+    return os.getenv("DATABASE_PATH", "ham_olympics.db")
 
 
 def get_connection() -> sqlite3.Connection:
     """Get a database connection with row factory."""
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(_get_database_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -204,6 +207,11 @@ def init_db():
                 conn.execute("ALTER TABLE competitors ADD COLUMN lotw_username_encrypted TEXT")
                 conn.execute("ALTER TABLE competitors ADD COLUMN lotw_password_encrypted TEXT")
                 conn.commit()
+            # Migration: add lockout columns
+            if 'failed_login_attempts' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
+                conn.execute("ALTER TABLE competitors ADD COLUMN locked_until TEXT")
+                conn.commit()
 
         conn.executescript("""
             -- Competitors table
@@ -218,7 +226,9 @@ def init_db():
                 last_sync_at TEXT,
                 is_admin INTEGER NOT NULL DEFAULT 0,
                 is_referee INTEGER NOT NULL DEFAULT 0,
-                is_disabled INTEGER NOT NULL DEFAULT 0
+                is_disabled INTEGER NOT NULL DEFAULT 0,
+                failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+                locked_until TEXT
             );
 
             -- Sessions table
@@ -227,6 +237,16 @@ def init_db():
                 callsign TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 expires_at TEXT NOT NULL,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Password reset tokens table
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                token TEXT PRIMARY KEY,
+                callsign TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
             );
 
@@ -340,7 +360,22 @@ def init_db():
                 FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE SET NULL
             );
 
+            -- Audit log table
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                actor_callsign TEXT,
+                action TEXT NOT NULL,
+                target_type TEXT,
+                target_id TEXT,
+                details TEXT,
+                ip_address TEXT
+            );
+
             -- Indexes for performance
+            CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor_callsign);
             CREATE INDEX IF NOT EXISTS idx_qsos_competitor ON qsos(competitor_callsign);
             CREATE INDEX IF NOT EXISTS idx_qsos_datetime ON qsos(qso_datetime_utc);
             CREATE INDEX IF NOT EXISTS idx_qsos_confirmed ON qsos(is_confirmed);
@@ -359,8 +394,9 @@ def init_db():
 
 def reset_db():
     """Reset the database (for testing)."""
-    if os.path.exists(DATABASE_PATH):
-        os.remove(DATABASE_PATH)
+    db_path = _get_database_path()
+    if os.path.exists(db_path):
+        os.remove(db_path)
     init_db()
 
 

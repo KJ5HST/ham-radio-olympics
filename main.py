@@ -8,7 +8,7 @@ import os
 import re
 import secrets
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie
@@ -30,6 +30,11 @@ from auth import (
     register_user, authenticate_user, get_session_user, delete_session,
     update_user_email, update_user_password, hash_password, User, SESSION_COOKIE_NAME
 )
+from config import config
+from email_service import (
+    create_password_reset_token, validate_reset_token, mark_token_used,
+    send_password_reset_email
+)
 
 # Configure logging
 logging.basicConfig(
@@ -41,14 +46,11 @@ logger = logging.getLogger(__name__)
 # Rate limiter - disabled in test mode
 def get_rate_limit_key(request: Request) -> str:
     """Get rate limit key, return empty string in test mode to disable."""
-    if os.getenv("TESTING"):
+    if config.TESTING:
         return ""  # Disable rate limiting in tests
     return get_remote_address(request)
 
 limiter = Limiter(key_func=get_rate_limit_key)
-
-# Sync interval in seconds (1 hour)
-SYNC_INTERVAL = int(os.getenv("SYNC_INTERVAL", 3600))
 
 # Background task handle
 _sync_task = None
@@ -57,7 +59,7 @@ _sync_task = None
 async def background_sync():
     """Background task that syncs all competitors periodically."""
     while True:
-        await asyncio.sleep(SYNC_INTERVAL)
+        await asyncio.sleep(config.SYNC_INTERVAL_SECONDS)
         try:
             await sync_all_competitors()
         except Exception:
@@ -100,7 +102,7 @@ templates = Jinja2Templates(directory="templates")
 
 
 # CSRF token management
-CSRF_COOKIE_NAME = "hro_csrf"
+CSRF_COOKIE_NAME = config.CSRF_COOKIE_NAME
 
 
 def generate_csrf_token() -> str:
@@ -121,7 +123,7 @@ async def csrf_middleware(request: Request, call_next):
     request.state.csrf_token = csrf_token
 
     # Skip CSRF validation in test mode
-    if os.getenv("TESTING"):
+    if config.TESTING:
         response = await call_next(request)
         return response
 
@@ -157,6 +159,45 @@ async def csrf_middleware(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Prevent MIME type sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # XSS protection (legacy browsers)
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Control referrer information
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions policy (disable unnecessary features)
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    # Content Security Policy
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none';"
+    )
+
+    # HSTS - only on production (not localhost)
+    host = request.headers.get("host", "")
+    if not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    return response
+
+
 def get_csrf_token(request: Request) -> str:
     """Get CSRF token for the request."""
     return getattr(request.state, 'csrf_token', generate_csrf_token())
@@ -185,7 +226,7 @@ templates.env.filters["format_date"] = format_date
 templates.env.filters["format_datetime"] = format_datetime
 
 # Admin key from environment
-ADMIN_KEY = os.getenv("ADMIN_KEY", "admin-secret-change-me")
+ADMIN_KEY = config.ADMIN_KEY
 
 
 # Pydantic models
@@ -880,13 +921,26 @@ async def login_page(request: Request):
 @limiter.limit("10/minute")
 async def login(request: Request, login_data: UserLogin):
     """Authenticate user and create session."""
+    from audit import log_action
+
     result = authenticate_user(login_data.callsign, login_data.password)
 
     if result == "disabled":
         raise HTTPException(status_code=403, detail="Account has been disabled")
 
+    if result == "locked":
+        raise HTTPException(status_code=423, detail="Account is temporarily locked due to too many failed login attempts. Please try again later.")
+
     if not result:
         raise HTTPException(status_code=401, detail="Invalid callsign or password")
+
+    # Log successful login
+    log_action(
+        actor_callsign=login_data.callsign.upper(),
+        action="login",
+        details="Successful login",
+        ip_address=request.client.host if request.client else None
+    )
 
     response = RedirectResponse(url="/dashboard", status_code=303)
     response.set_cookie(
@@ -896,19 +950,157 @@ async def login(request: Request, login_data: UserLogin):
         max_age=30 * 24 * 60 * 60,  # 30 days
         samesite="lax"
     )
+    # Rotate CSRF token on login to prevent session fixation
+    new_csrf = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=new_csrf,
+        httponly=True,
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60
+    )
     return response
 
 
 @app.post("/logout")
 async def logout(request: Request):
     """Logout and delete session."""
+    from audit import log_action
+
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user = get_current_user(request)
+
     if session_id:
         delete_session(session_id)
 
+    # Log logout
+    if user:
+        log_action(
+            actor_callsign=user.callsign,
+            action="logout",
+            details="User logged out",
+            ip_address=request.client.host if request.client else None
+        )
+
     response = RedirectResponse(url="/signup", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
+    # Rotate CSRF token on logout
+    new_csrf = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=new_csrf,
+        httponly=True,
+        samesite="lax",
+        max_age=30 * 24 * 60 * 60
+    )
     return response
+
+
+# ============================================================
+# PASSWORD RESET
+# ============================================================
+
+@app.get("/forgot-password", response_class=HTMLResponse)
+async def forgot_password_page(request: Request):
+    """Forgot password page."""
+    user = get_current_user(request)
+    if user:
+        return RedirectResponse(url="/dashboard", status_code=303)
+    return templates.TemplateResponse("forgot_password.html", {
+        "request": request,
+        "csrf_token": get_csrf_token(request)
+    })
+
+
+class ForgotPasswordForm(BaseModel):
+    callsign: str
+
+
+@app.post("/forgot-password")
+async def forgot_password(request: Request, form_data: ForgotPasswordForm):
+    """Handle forgot password request."""
+    callsign = form_data.callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT email FROM competitors WHERE callsign = ?",
+            (callsign,)
+        )
+        row = cursor.fetchone()
+
+        if not row:
+            # Don't reveal if user exists
+            return templates.TemplateResponse("forgot_password.html", {
+                "request": request,
+                "csrf_token": get_csrf_token(request),
+                "message": "If an account exists with that callsign, a password reset email will be sent."
+            })
+
+        email = row["email"]
+        if not email:
+            raise HTTPException(
+                status_code=400,
+                detail="No email address on file for this account. Please contact an administrator."
+            )
+
+        # Create reset token
+        token = create_password_reset_token(callsign)
+        reset_url = f"{request.base_url}reset-password/{token}"
+
+        # Send email
+        await send_password_reset_email(callsign, email, reset_url)
+
+        return templates.TemplateResponse("forgot_password.html", {
+            "request": request,
+            "csrf_token": get_csrf_token(request),
+            "message": "If an account exists with that callsign, a password reset email will be sent."
+        })
+
+
+@app.get("/reset-password/{token}", response_class=HTMLResponse)
+async def reset_password_page(request: Request, token: str):
+    """Reset password page."""
+    callsign = validate_reset_token(token)
+    if not callsign:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    return templates.TemplateResponse("reset_password.html", {
+        "request": request,
+        "token": token,
+        "callsign": callsign,
+        "csrf_token": get_csrf_token(request)
+    })
+
+
+@app.post("/reset-password/{token}")
+async def reset_password(
+    request: Request,
+    token: str,
+    password: str = Form(...),
+    confirm_password: str = Form(...)
+):
+    """Handle password reset."""
+    callsign = validate_reset_token(token)
+    if not callsign:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    if password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    if len(password) < config.PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {config.PASSWORD_MIN_LENGTH} characters"
+        )
+
+    # Update password
+    update_user_password(callsign, password)
+
+    # Mark token as used
+    mark_token_used(token)
+
+    # Redirect to login with success message
+    return RedirectResponse(url="/login?reset=success", status_code=303)
 
 
 # ============================================================
@@ -916,16 +1108,33 @@ async def logout(request: Request):
 # ============================================================
 
 @app.get("/dashboard", response_class=HTMLResponse)
-async def user_dashboard(request: Request, user: User = Depends(require_user)):
+async def user_dashboard(
+    request: Request,
+    user: User = Depends(require_user),
+    band: Optional[str] = None,
+    mode: Optional[str] = None,
+    confirmed: Optional[int] = None,
+    page: int = 1
+):
     """User dashboard with stats, QSOs, and medals."""
     with get_db() as conn:
-        # Get QSOs
-        cursor = conn.execute("""
-            SELECT * FROM qsos
-            WHERE competitor_callsign = ?
-            ORDER BY qso_datetime_utc DESC
-            LIMIT 50
-        """, (user.callsign,))
+        # Build QSO query with filters
+        qso_query = "SELECT * FROM qsos WHERE competitor_callsign = ?"
+        qso_params = [user.callsign]
+
+        if band:
+            qso_query += " AND band = ?"
+            qso_params.append(band)
+        if mode:
+            qso_query += " AND mode = ?"
+            qso_params.append(mode)
+        if confirmed is not None:
+            qso_query += " AND is_confirmed = ?"
+            qso_params.append(confirmed)
+
+        qso_query += " ORDER BY qso_datetime_utc DESC LIMIT 50"
+
+        cursor = conn.execute(qso_query, qso_params)
         qsos = [dict(row) for row in cursor.fetchall()]
 
         # Get medals
@@ -1032,6 +1241,8 @@ async def change_password(
     user: User = Depends(require_user)
 ):
     """Change user password."""
+    from audit import log_action
+
     # Verify current password
     session_id = authenticate_user(user.callsign, current_password)
     if not session_id:
@@ -1041,6 +1252,15 @@ async def change_password(
         raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
 
     update_user_password(user.callsign, new_password)
+
+    # Log password change
+    log_action(
+        actor_callsign=user.callsign,
+        action="password_change",
+        details="Password changed via settings",
+        ip_address=request.client.host if request.client else None
+    )
+
     return RedirectResponse(url="/settings?updated=password", status_code=303)
 
 
@@ -1101,12 +1321,104 @@ async def remove_lotw_credentials(request: Request, user: User = Depends(require
 
 
 # ============================================================
+# EXPORT ENDPOINTS
+# ============================================================
+
+@app.get("/export/qsos")
+async def export_qsos(request: Request, user: User = Depends(require_user)):
+    """Export user's QSOs as CSV."""
+    import csv
+    import io
+    from starlette.responses import StreamingResponse
+
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT dx_callsign, qso_datetime_utc, band, mode,
+                   dx_grid, dx_dxcc, is_confirmed, cool_factor
+            FROM qsos
+            WHERE competitor_callsign = ?
+            ORDER BY qso_datetime_utc DESC
+        """, (user.callsign,))
+        qsos = cursor.fetchall()
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["callsign", "datetime_utc", "band", "mode",
+                     "grid", "dxcc", "confirmed", "cool_factor"])
+
+    for qso in qsos:
+        writer.writerow([
+            qso["dx_callsign"],
+            qso["qso_datetime_utc"],
+            qso["band"],
+            qso["mode"],
+            qso["dx_grid"] or "",
+            qso["dx_dxcc"] or "",
+            "Yes" if qso["is_confirmed"] else "No",
+            qso["cool_factor"] or ""
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={user.callsign}_qsos.csv"}
+    )
+
+
+@app.get("/export/medals")
+async def export_medals(request: Request, user: User = Depends(require_user)):
+    """Export user's medals as CSV."""
+    import csv
+    import io
+    from starlette.responses import StreamingResponse
+
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT m.qso_race_medal, m.cool_factor_medal, m.total_points,
+                   s.name as sport_name, ma.start_date, ma.end_date
+            FROM medals m
+            JOIN matches ma ON m.match_id = ma.id
+            JOIN sports s ON ma.sport_id = s.id
+            WHERE m.callsign = ?
+            ORDER BY ma.start_date DESC
+        """, (user.callsign,))
+        medals = cursor.fetchall()
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["sport", "qso_race_medal", "cool_factor_medal", "total_points",
+                     "start_date", "end_date"])
+
+    for medal in medals:
+        writer.writerow([
+            medal["sport_name"],
+            medal["qso_race_medal"] or "",
+            medal["cool_factor_medal"] or "",
+            medal["total_points"],
+            medal["start_date"],
+            medal["end_date"]
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={user.callsign}_medals.csv"}
+    )
+
+
+# ============================================================
 # ADMIN ENDPOINTS
 # ============================================================
 
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_dashboard(request: Request, _: bool = Depends(verify_admin)):
     """Admin dashboard."""
+    from audit import get_audit_logs
+
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM olympiads ORDER BY start_date DESC")
         olympiads = [dict(row) for row in cursor.fetchall()]
@@ -1114,12 +1426,149 @@ async def admin_dashboard(request: Request, _: bool = Depends(verify_admin)):
         cursor = conn.execute("SELECT COUNT(*) as count FROM competitors")
         competitor_count = cursor.fetchone()["count"]
 
+    # Get recent audit logs
+    recent_audit = get_audit_logs(limit=10)
+
     return templates.TemplateResponse("admin/dashboard.html", {
         "request": request,
         "user": get_current_user(request),
         "olympiads": olympiads,
         "competitor_count": competitor_count,
+        "recent_audit": recent_audit,
     })
+
+
+@app.get("/admin/audit-log", response_class=HTMLResponse)
+async def admin_audit_log(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    action: Optional[str] = None,
+    page: int = 1
+):
+    """View audit log."""
+    from audit import get_audit_logs, get_audit_log_count
+
+    per_page = 50
+    offset = (page - 1) * per_page
+
+    logs = get_audit_logs(limit=per_page, offset=offset, action=action)
+    total = get_audit_log_count(action=action)
+
+    return templates.TemplateResponse("admin/audit_log.html", {
+        "request": request,
+        "user": get_current_user(request),
+        "logs": logs,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "action_filter": action,
+    })
+
+
+@app.get("/admin/backup")
+async def admin_backup(request: Request, _: bool = Depends(verify_admin)):
+    """Download database backup."""
+    from audit import log_action
+    from starlette.responses import FileResponse
+    from datetime import datetime
+
+    user = get_current_user(request)
+    db_path = os.environ.get("DATABASE_PATH", "ham_radio_olympics.db")
+
+    # Log the backup action
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="database_backup",
+        details="Database backup downloaded",
+        ip_address=request.client.host if request.client else None
+    )
+
+    # Generate filename with timestamp
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"ham_radio_olympics_backup_{timestamp}.db"
+
+    return FileResponse(
+        path=db_path,
+        filename=filename,
+        media_type="application/octet-stream"
+    )
+
+
+class BulkCallsignsRequest(BaseModel):
+    callsigns: List[str]
+
+
+@app.post("/admin/competitors/bulk-disable")
+async def bulk_disable_competitors(
+    request: Request,
+    data: BulkCallsignsRequest,
+    _: bool = Depends(verify_admin)
+):
+    """Bulk disable multiple competitors."""
+    from audit import log_action
+
+    user = get_current_user(request)
+    callsigns = [c.upper() for c in data.callsigns]
+
+    if not callsigns:
+        return {"message": "No callsigns provided", "disabled": 0}
+
+    with get_db() as conn:
+        placeholders = ",".join("?" * len(callsigns))
+        conn.execute(
+            f"UPDATE competitors SET is_disabled = 1 WHERE callsign IN ({placeholders})",
+            callsigns
+        )
+        # Also delete their sessions
+        conn.execute(
+            f"DELETE FROM sessions WHERE callsign IN ({placeholders})",
+            callsigns
+        )
+
+    # Log the action
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="bulk_disable",
+        target_type="competitors",
+        details=f"Disabled {len(callsigns)} competitors: {', '.join(callsigns)}",
+        ip_address=request.client.host if request.client else None
+    )
+
+    return {"message": f"Disabled {len(callsigns)} competitors", "disabled": len(callsigns)}
+
+
+@app.post("/admin/competitors/bulk-enable")
+async def bulk_enable_competitors(
+    request: Request,
+    data: BulkCallsignsRequest,
+    _: bool = Depends(verify_admin)
+):
+    """Bulk enable multiple competitors."""
+    from audit import log_action
+
+    user = get_current_user(request)
+    callsigns = [c.upper() for c in data.callsigns]
+
+    if not callsigns:
+        return {"message": "No callsigns provided", "enabled": 0}
+
+    with get_db() as conn:
+        placeholders = ",".join("?" * len(callsigns))
+        conn.execute(
+            f"UPDATE competitors SET is_disabled = 0 WHERE callsign IN ({placeholders})",
+            callsigns
+        )
+
+    # Log the action
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="bulk_enable",
+        target_type="competitors",
+        details=f"Enabled {len(callsigns)} competitors: {', '.join(callsigns)}",
+        ip_address=request.client.host if request.client else None
+    )
+
+    return {"message": f"Enabled {len(callsigns)} competitors", "enabled": len(callsigns)}
 
 
 @app.get("/admin/olympiads", response_class=HTMLResponse)
@@ -1468,14 +1917,26 @@ async def delete_match(request: Request, match_id: int):
 
 
 @app.get("/admin/competitors", response_class=HTMLResponse)
-async def admin_competitors(request: Request, _: bool = Depends(verify_admin)):
+async def admin_competitors(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    search: Optional[str] = None
+):
     """List all competitors."""
     with get_db() as conn:
-        cursor = conn.execute("""
-            SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
-            FROM competitors
-            ORDER BY registered_at DESC
-        """)
+        if search:
+            cursor = conn.execute("""
+                SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+                FROM competitors
+                WHERE callsign LIKE ?
+                ORDER BY registered_at DESC
+            """, (f"%{search}%",))
+        else:
+            cursor = conn.execute("""
+                SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+                FROM competitors
+                ORDER BY registered_at DESC
+            """)
         competitors = [dict(row) for row in cursor.fetchall()]
 
         # Get referee assignments for each referee
@@ -1507,10 +1968,110 @@ async def admin_competitors(request: Request, _: bool = Depends(verify_admin)):
     })
 
 
+@app.get("/admin/export/competitors")
+async def admin_export_competitors(request: Request, _: bool = Depends(verify_admin)):
+    """Export all competitors as CSV."""
+    import csv
+    import io
+    from starlette.responses import StreamingResponse
+
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT callsign, email, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+            FROM competitors
+            ORDER BY registered_at DESC
+        """)
+        competitors = cursor.fetchall()
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["callsign", "email", "registered_at", "last_sync_at",
+                     "is_disabled", "is_admin", "is_referee"])
+
+    for comp in competitors:
+        writer.writerow([
+            comp["callsign"],
+            comp["email"] or "",
+            comp["registered_at"],
+            comp["last_sync_at"] or "",
+            "Yes" if comp["is_disabled"] else "No",
+            "Yes" if comp["is_admin"] else "No",
+            "Yes" if comp["is_referee"] else "No"
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=competitors.csv"}
+    )
+
+
+@app.get("/admin/export/standings/{olympiad_id}")
+async def admin_export_standings(olympiad_id: int, _: bool = Depends(verify_admin)):
+    """Export olympiad standings as CSV."""
+    import csv
+    import io
+    from starlette.responses import StreamingResponse
+
+    with get_db() as conn:
+        # Verify olympiad exists
+        cursor = conn.execute("SELECT name FROM olympiads WHERE id = ?", (olympiad_id,))
+        olympiad = cursor.fetchone()
+        if not olympiad:
+            raise HTTPException(status_code=404, detail="Olympiad not found")
+
+        # Get standings with medal counts and points
+        cursor = conn.execute("""
+            SELECT
+                c.callsign,
+                COALESCE(SUM(m.total_points), 0) as total_points,
+                COUNT(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 END) as gold_count,
+                COUNT(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 END) as silver_count,
+                COUNT(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 END) as bronze_count
+            FROM competitors c
+            LEFT JOIN medals m ON c.callsign = m.callsign
+            LEFT JOIN matches ma ON m.match_id = ma.id
+            LEFT JOIN sports s ON ma.sport_id = s.id AND s.olympiad_id = ?
+            GROUP BY c.callsign
+            HAVING total_points > 0
+            ORDER BY total_points DESC, gold_count DESC, silver_count DESC, bronze_count DESC
+        """, (olympiad_id,))
+        standings = cursor.fetchall()
+
+    # Generate CSV
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["rank", "callsign", "total_points", "gold", "silver", "bronze"])
+
+    for rank, standing in enumerate(standings, 1):
+        writer.writerow([
+            rank,
+            standing["callsign"],
+            standing["total_points"],
+            standing["gold_count"],
+            standing["silver_count"],
+            standing["bronze_count"]
+        ])
+
+    output.seek(0)
+    olympiad_name = olympiad["name"].replace(" ", "_")
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={olympiad_name}_standings.csv"}
+    )
+
+
 @app.post("/admin/competitor/{callsign}/disable")
-async def disable_competitor(callsign: str, _: bool = Depends(verify_admin)):
+async def disable_competitor(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Disable a competitor's account."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
@@ -1518,6 +2079,16 @@ async def disable_competitor(callsign: str, _: bool = Depends(verify_admin)):
         conn.execute("UPDATE competitors SET is_disabled = 1 WHERE callsign = ?", (callsign,))
         # Also delete their sessions so they're logged out
         conn.execute("DELETE FROM sessions WHERE callsign = ?", (callsign,))
+
+    # Log the action
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="competitor_disabled",
+        target_type="competitor",
+        target_id=callsign,
+        details=f"Competitor {callsign} disabled by admin",
+        ip_address=request.client.host if request.client else None
+    )
 
     return {"message": f"Competitor {callsign} disabled"}
 
@@ -1713,6 +2284,181 @@ async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
         conn.execute("DELETE FROM competitors WHERE callsign = ?", (callsign.upper(),))
 
     return {"message": f"Competitor {callsign.upper()} deleted"}
+
+
+# ============================================================
+# API v1 ENDPOINTS
+# ============================================================
+
+def require_api_auth(request: Request) -> User:
+    """Require authentication for API endpoints, return JSON error if not authenticated."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return user
+
+
+@app.get("/api/v1/health")
+async def api_health():
+    """Health check endpoint."""
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/api/v1/me")
+async def api_me(user: User = Depends(require_api_auth)):
+    """Get current user information."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT callsign, email, is_admin, registered_at FROM competitors WHERE callsign = ?",
+            (user.callsign,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {
+            "callsign": row["callsign"],
+            "email": row["email"],
+            "is_admin": bool(row["is_admin"]),
+            "created_at": row["registered_at"]
+        }
+
+
+@app.get("/api/v1/standings")
+async def api_standings(olympiad_id: Optional[int] = None):
+    """Get standings for the current or specified olympiad."""
+    with get_db() as conn:
+        # Get olympiad
+        if olympiad_id:
+            cursor = conn.execute("SELECT * FROM olympiads WHERE id = ?", (olympiad_id,))
+        else:
+            cursor = conn.execute("SELECT * FROM olympiads WHERE is_active = 1 ORDER BY id DESC LIMIT 1")
+        olympiad = cursor.fetchone()
+
+        if not olympiad:
+            return {"standings": [], "olympiad": None}
+
+        # Get standings with medal counts
+        cursor = conn.execute("""
+            SELECT c.callsign,
+                   (SELECT COUNT(*) FROM qsos WHERE competitor_callsign = c.callsign) as total_qsos,
+                   COALESCE(SUM(md.total_points), 0) as points,
+                   COUNT(CASE WHEN md.qso_race_medal = 'gold' OR md.cool_factor_medal = 'gold' THEN 1 END) as gold,
+                   COUNT(CASE WHEN md.qso_race_medal = 'silver' OR md.cool_factor_medal = 'silver' THEN 1 END) as silver,
+                   COUNT(CASE WHEN md.qso_race_medal = 'bronze' OR md.cool_factor_medal = 'bronze' THEN 1 END) as bronze
+            FROM competitors c
+            LEFT JOIN medals md ON c.callsign = md.callsign
+            LEFT JOIN matches mt ON md.match_id = mt.id
+            LEFT JOIN sports s ON mt.sport_id = s.id AND s.olympiad_id = ?
+            WHERE c.is_disabled = 0
+            GROUP BY c.callsign
+            HAVING points > 0
+            ORDER BY points DESC, gold DESC, silver DESC, bronze DESC
+        """, (olympiad["id"],))
+        standings = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "standings": standings,
+            "olympiad": {
+                "id": olympiad["id"],
+                "name": olympiad["name"],
+                "start_date": olympiad["start_date"],
+                "end_date": olympiad["end_date"]
+            }
+        }
+
+
+@app.get("/api/v1/qsos")
+async def api_qsos(
+    user: User = Depends(require_api_auth),
+    page: int = 1,
+    per_page: int = 50,
+    band: Optional[str] = None,
+    mode: Optional[str] = None,
+    confirmed: Optional[bool] = None
+):
+    """Get QSOs for the current user."""
+    offset = (max(1, page) - 1) * per_page
+
+    with get_db() as conn:
+        # Build query with filters
+        query = "SELECT * FROM qsos WHERE competitor_callsign = ?"
+        params = [user.callsign]
+
+        if band:
+            query += " AND band = ?"
+            params.append(band)
+        if mode:
+            query += " AND mode = ?"
+            params.append(mode)
+        if confirmed is not None:
+            query += " AND is_confirmed = ?"
+            params.append(1 if confirmed else 0)
+
+        # Get total count
+        count_query = query.replace("SELECT *", "SELECT COUNT(*)")
+        cursor = conn.execute(count_query, params)
+        total = cursor.fetchone()[0]
+
+        # Get paginated results
+        query += " ORDER BY qso_datetime_utc DESC LIMIT ? OFFSET ?"
+        params.extend([per_page, offset])
+        cursor = conn.execute(query, params)
+        qsos = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "qsos": qsos,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "pages": (total + per_page - 1) // per_page
+            }
+        }
+
+
+@app.get("/api/v1/medals")
+async def api_medals(user: User = Depends(require_api_auth), olympiad_id: Optional[int] = None):
+    """Get medals for the current user."""
+    with get_db() as conn:
+        # Get medals with match and sport info
+        query = """
+            SELECT m.*, s.name as sport_name, s.target_type, mt.start_date, o.name as olympiad_name
+            FROM medals m
+            JOIN matches mt ON m.match_id = mt.id
+            JOIN sports s ON mt.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE m.callsign = ?
+        """
+        params = [user.callsign]
+
+        if olympiad_id:
+            query += " AND s.olympiad_id = ?"
+            params.append(olympiad_id)
+
+        query += " ORDER BY mt.start_date DESC"
+        cursor = conn.execute(query, params)
+        medals = [dict(row) for row in cursor.fetchall()]
+
+        return {"medals": medals}
+
+
+@app.get("/api/v1/sports")
+async def api_sports(olympiad_id: Optional[int] = None):
+    """Get sports for the current or specified olympiad."""
+    with get_db() as conn:
+        if olympiad_id:
+            cursor = conn.execute("SELECT * FROM sports WHERE olympiad_id = ?", (olympiad_id,))
+        else:
+            # Get active olympiad's sports
+            cursor = conn.execute("""
+                SELECT s.* FROM sports s
+                JOIN olympiads o ON s.olympiad_id = o.id
+                WHERE o.is_active = 1
+            """)
+
+        sports = [dict(row) for row in cursor.fetchall()]
+        return {"sports": sports}
 
 
 # ============================================================

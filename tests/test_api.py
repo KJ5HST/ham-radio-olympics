@@ -20,6 +20,7 @@ os.environ["TESTING"] = "1"
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 from starlette.datastructures import Headers, QueryParams
+import main
 from main import app, verify_admin_or_referee, format_target_display
 from database import reset_db, init_db, get_db
 from auth import create_session, SESSION_COOKIE_NAME
@@ -2806,7 +2807,7 @@ class TestBackgroundSync:
         from main import background_sync
 
         with patch('main.sync_all_competitors', new_callable=AsyncMock) as mock_sync:
-            with patch('main.SYNC_INTERVAL', 0.01):  # Very short interval for testing
+            with patch.object(main.config, 'SYNC_INTERVAL_SECONDS', 0.01):  # Very short interval for testing
                 # Run background_sync briefly then cancel
                 task = asyncio.create_task(background_sync())
                 await asyncio.sleep(0.05)  # Let it run a few cycles
@@ -2836,7 +2837,7 @@ class TestBackgroundSync:
             # Second call succeeds
 
         with patch('main.sync_all_competitors', side_effect=mock_sync_with_error):
-            with patch('main.SYNC_INTERVAL', 0.01):
+            with patch.object(main.config, 'SYNC_INTERVAL_SECONDS', 0.01):
                 task = asyncio.create_task(background_sync())
                 await asyncio.sleep(0.05)
                 task.cancel()
@@ -2903,3 +2904,198 @@ class TestFormatTargetDisplay:
         """Test call target just returns the value."""
         result = format_target_display("W1AW", "call")
         assert result == "W1AW"
+
+
+class TestSecurityHeaders:
+    """Test security headers middleware."""
+
+    def test_x_frame_options_header(self, client):
+        """Test X-Frame-Options header is set to DENY."""
+        response = client.get("/")
+        assert response.headers.get("X-Frame-Options") == "DENY"
+
+    def test_x_content_type_options_header(self, client):
+        """Test X-Content-Type-Options header is set."""
+        response = client.get("/")
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_x_xss_protection_header(self, client):
+        """Test X-XSS-Protection header is set."""
+        response = client.get("/")
+        assert response.headers.get("X-XSS-Protection") == "1; mode=block"
+
+    def test_referrer_policy_header(self, client):
+        """Test Referrer-Policy header is set."""
+        response = client.get("/")
+        assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+    def test_permissions_policy_header(self, client):
+        """Test Permissions-Policy header is set."""
+        response = client.get("/")
+        assert response.headers.get("Permissions-Policy") == "geolocation=(), microphone=(), camera=()"
+
+    def test_content_security_policy_header(self, client):
+        """Test Content-Security-Policy header is set."""
+        response = client.get("/")
+        csp = response.headers.get("Content-Security-Policy")
+        assert csp is not None
+        assert "default-src 'self'" in csp
+        assert "frame-ancestors 'none'" in csp
+
+    def test_hsts_not_set_for_localhost(self, client):
+        """Test HSTS is not set for localhost requests."""
+        response = client.get("/", headers={"Host": "localhost:8000"})
+        # HSTS should not be set for localhost
+        assert response.headers.get("Strict-Transport-Security") is None
+
+    def test_security_headers_on_api_endpoints(self, client):
+        """Test security headers are set on API endpoints too."""
+        response = client.get("/health")
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+    def test_security_headers_on_error_responses(self, client):
+        """Test security headers are set even on 404 responses."""
+        response = client.get("/nonexistent-page")
+        assert response.headers.get("X-Frame-Options") == "DENY"
+        assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+
+class TestCSRFTokenRotation:
+    """Test CSRF token rotation on login/logout."""
+
+    def test_csrf_token_rotates_on_login(self, client):
+        """Test CSRF token changes after login."""
+        from auth import register_user
+
+        register_user("W1CSR", "password123")
+
+        # Login - should set a new CSRF token
+        response = client.post("/login", json={
+            "callsign": "W1CSR",
+            "password": "password123"
+        }, follow_redirects=False)
+
+        # Check new CSRF token is set on login
+        new_csrf = response.cookies.get("hro_csrf")
+        assert new_csrf is not None
+        assert len(new_csrf) > 20
+
+    def test_csrf_token_rotates_on_logout(self, client):
+        """Test CSRF token changes after logout."""
+        from auth import register_user
+
+        register_user("W1LOG", "password123")
+
+        # Login first
+        response = client.post("/login", json={
+            "callsign": "W1LOG",
+            "password": "password123"
+        }, follow_redirects=False)
+        csrf_after_login = response.cookies.get("hro_csrf")
+
+        # Logout - should set a new CSRF token
+        response = client.post("/logout", follow_redirects=False)
+
+        # Check new CSRF token is set
+        new_csrf = response.cookies.get("hro_csrf")
+        assert new_csrf is not None
+        assert new_csrf != csrf_after_login
+
+    def test_csrf_tokens_are_unique(self, client):
+        """Test that each CSRF token generated is unique."""
+        from auth import register_user
+
+        register_user("W1UNQ", "password123")
+
+        # Collect CSRF tokens from multiple login/logout cycles
+        tokens = set()
+
+        for i in range(3):
+            response = client.post("/login", json={
+                "callsign": "W1UNQ",
+                "password": "password123"
+            }, follow_redirects=False)
+            if response.cookies.get("hro_csrf"):
+                tokens.add(response.cookies.get("hro_csrf"))
+
+            response = client.post("/logout", follow_redirects=False)
+            if response.cookies.get("hro_csrf"):
+                tokens.add(response.cookies.get("hro_csrf"))
+
+        # Should have multiple unique tokens
+        assert len(tokens) >= 3
+
+
+class TestAccountLockoutAPI:
+    """Test account lockout via API endpoints."""
+
+    def test_login_returns_423_when_locked(self, client):
+        """Test login endpoint returns 423 when account is locked."""
+        from auth import register_user
+        from database import get_db
+
+        register_user("W1LCK", "password123")
+
+        # Lock the account by setting locked_until in the future
+        from datetime import datetime, timedelta
+        locked_until = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE competitors SET locked_until = ?, failed_login_attempts = 5 WHERE callsign = ?",
+                (locked_until, "W1LCK")
+            )
+
+        # Try to login
+        response = client.post("/login", json={
+            "callsign": "W1LCK",
+            "password": "password123"
+        })
+
+        assert response.status_code == 423
+        assert "locked" in response.json()["detail"].lower()
+
+    def test_failed_logins_eventually_lock_account(self, client):
+        """Test that repeated failed logins lock the account."""
+        from auth import register_user
+
+        register_user("W1FLA", "password123")
+
+        # Make 5 failed attempts
+        for i in range(5):
+            response = client.post("/login", json={
+                "callsign": "W1FLA",
+                "password": "wrongpassword"
+            })
+
+        # 6th attempt should show locked
+        response = client.post("/login", json={
+            "callsign": "W1FLA",
+            "password": "password123"  # Even correct password
+        })
+
+        assert response.status_code == 423
+
+    def test_successful_login_after_lockout_expires(self, client):
+        """Test login works after lockout expires."""
+        from auth import register_user
+        from database import get_db
+        from datetime import datetime, timedelta
+
+        register_user("W1EXP", "password123")
+
+        # Set lockout in the past
+        past_time = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE competitors SET locked_until = ?, failed_login_attempts = 5 WHERE callsign = ?",
+                (past_time, "W1EXP")
+            )
+
+        # Should be able to login now
+        response = client.post("/login", json={
+            "callsign": "W1EXP",
+            "password": "password123"
+        }, follow_redirects=False)
+
+        assert response.status_code == 303  # Redirect to dashboard

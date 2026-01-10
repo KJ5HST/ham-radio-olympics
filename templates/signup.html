@@ -18,9 +18,9 @@
                 <input type="email" id="email" name="email" placeholder="you@example.com">
             </div>
 
-            <div style="margin: 20px 0; padding: 15px; background: #f7fafc; border-radius: 8px;">
+            <div style="margin: 20px 0; padding: 15px; background: var(--bg-card); border-radius: 8px;">
                 <label style="font-weight: 600; margin-bottom: 10px; display: block;">Verify Callsign & Load QSOs</label>
-                <p style="color: #718096; font-size: 0.9em; margin-bottom: 15px;">
+                <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 15px;">
                     Provide at least one set of credentials to verify callsign ownership and load your QSOs.
                 </p>
 
@@ -29,7 +29,7 @@
                     <input type="text" id="qrz_api_key" name="qrz_api_key" placeholder="XXXX-XXXX-XXXX-XXXX">
                 </div>
 
-                <div style="border-top: 1px solid #e2e8f0; margin: 15px 0; padding-top: 15px;">
+                <div style="border-top: 1px solid var(--border-color); margin: 15px 0; padding-top: 15px;">
                     <div class="form-group">
                         <label for="lotw_username">LoTW Username (optional)</label>
                         <input type="text" id="lotw_username" name="lotw_username" placeholder="Your callsign">
@@ -45,7 +45,7 @@
                         <input type="checkbox" id="store_credentials" name="store_credentials" checked style="width: auto;">
                         <span>Store credentials for automatic sync</span>
                     </label>
-                    <small style="color: #718096; display: block; margin-top: 5px;">
+                    <small style="color: var(--text-secondary); display: block; margin-top: 5px;">
                         If unchecked, you'll need to enter credentials each time you sync.
                     </small>
                 </div>
@@ -66,7 +66,7 @@
         <p style="margin-top: 15px;">Already have an account? <a href="/login">Log in</a></p>
     </div>
 
-    <div class="card" style="flex: 1; min-width: 300px; max-width: 400px; background: #e8f4f8;">
+    <div class="card" style="flex: 1; min-width: 300px; max-width: 400px;">
         <h4 style="margin-top: 0;">How to Get Your Credentials</h4>
 
         <h5 style="margin: 15px 0 10px;">QRZ API Key</h5>
@@ -77,7 +77,7 @@
             <li>Select the <strong>API</strong> tab</li>
             <li>Copy your <strong>API Key</strong></li>
         </ol>
-        <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
+        <p style="margin-top: 10px; font-size: 0.9em; color: var(--text-secondary);">
             <strong>Note:</strong> Requires QRZ XML Subscription.
         </p>
 
@@ -131,7 +131,7 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
         body.lotw_password = lotw_password;
     }
 
-    result.innerHTML = '<div class="alert" style="background: #ebf8ff; color: #2b6cb0;">Verifying credentials...</div>';
+    result.innerHTML = '<div class="alert alert-info">Verifying credentials...</div>';
 
     try {
         const resp = await fetch('/signup', {

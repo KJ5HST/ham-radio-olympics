@@ -11,11 +11,12 @@ from typing import Optional
 from dataclasses import dataclass
 
 from database import get_db
+from config import config
 
 logger = logging.getLogger(__name__)
 
-SESSION_DURATION_DAYS = 30
-SESSION_COOKIE_NAME = "hro_session"
+# Re-export for backwards compatibility
+SESSION_COOKIE_NAME = config.SESSION_COOKIE_NAME
 
 
 @dataclass
@@ -32,7 +33,7 @@ class User:
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt."""
     password_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt(rounds=12)
+    salt = bcrypt.gensalt(rounds=config.BCRYPT_ROUNDS)
     hashed = bcrypt.hashpw(password_bytes, salt)
     return hashed.decode('utf-8')
 
@@ -71,11 +72,62 @@ def _upgrade_password_hash(callsign: str, password: str) -> None:
     logger.info(f"Upgraded password hash for {callsign} from SHA-256 to bcrypt")
 
 
+def _is_account_locked(callsign: str) -> bool:
+    """Check if account is locked due to failed login attempts."""
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT locked_until FROM competitors WHERE callsign = ?",
+            (callsign,)
+        )
+        row = cursor.fetchone()
+        if row and row["locked_until"]:
+            locked_until = datetime.fromisoformat(row["locked_until"])
+            if datetime.utcnow() < locked_until:
+                return True
+            # Lockout expired, clear it
+            _clear_lockout(callsign)
+    return False
+
+
+def _record_failed_login(callsign: str) -> bool:
+    """Record a failed login attempt. Returns True if account is now locked."""
+    with get_db() as conn:
+        # Increment failed attempts
+        conn.execute(
+            "UPDATE competitors SET failed_login_attempts = failed_login_attempts + 1 WHERE callsign = ?",
+            (callsign,)
+        )
+        # Check if we need to lock
+        cursor = conn.execute(
+            "SELECT failed_login_attempts FROM competitors WHERE callsign = ?",
+            (callsign,)
+        )
+        row = cursor.fetchone()
+        if row and row["failed_login_attempts"] >= config.LOCKOUT_ATTEMPTS:
+            locked_until = datetime.utcnow() + timedelta(minutes=config.LOCKOUT_DURATION_MINUTES)
+            conn.execute(
+                "UPDATE competitors SET locked_until = ? WHERE callsign = ?",
+                (locked_until.isoformat(), callsign)
+            )
+            logger.warning(f"Account locked due to failed attempts: {callsign}")
+            return True
+    return False
+
+
+def _clear_lockout(callsign: str) -> None:
+    """Clear lockout after successful login or lockout expiry."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET failed_login_attempts = 0, locked_until = NULL WHERE callsign = ?",
+            (callsign,)
+        )
+
+
 def create_session(callsign: str) -> str:
     """Create a new session for a user."""
     session_id = secrets.token_urlsafe(32)
     now = datetime.utcnow()
-    expires = now + timedelta(days=SESSION_DURATION_DAYS)
+    expires = now + timedelta(days=config.SESSION_DURATION_DAYS)
 
     with get_db() as conn:
         # Clean up expired sessions for this user
@@ -161,8 +213,20 @@ def register_user(
 
 
 def authenticate_user(callsign: str, password: str) -> Optional[str]:
-    """Authenticate a user. Returns session_id if successful, 'disabled' if account disabled, None otherwise."""
+    """Authenticate a user.
+
+    Returns:
+        session_id if successful
+        'disabled' if account disabled
+        'locked' if account is locked
+        None if invalid credentials
+    """
     callsign = callsign.upper().strip()
+
+    # Check if account is locked first
+    if _is_account_locked(callsign):
+        logger.warning(f"Login attempt for locked account: {callsign}")
+        return "locked"
 
     with get_db() as conn:
         cursor = conn.execute(
@@ -180,6 +244,9 @@ def authenticate_user(callsign: str, password: str) -> Optional[str]:
                     logger.warning(f"Login attempt for disabled account: {callsign}")
                     return "disabled"
 
+                # Clear any failed login attempts on successful login
+                _clear_lockout(callsign)
+
                 # Upgrade legacy SHA-256 hash to bcrypt on successful login
                 if is_legacy:
                     _upgrade_password_hash(callsign, password)
@@ -188,6 +255,9 @@ def authenticate_user(callsign: str, password: str) -> Optional[str]:
                 return create_session(callsign)
             else:
                 logger.warning(f"Failed login attempt for: {callsign}")
+                # Record failed attempt and potentially lock account
+                if _record_failed_login(callsign):
+                    return "locked"
 
     return None
 

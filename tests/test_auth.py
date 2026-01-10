@@ -2,7 +2,15 @@
 Tests for authentication and user management.
 """
 
+import os
+import tempfile
 import pytest
+
+# Create temp file for test database BEFORE importing app modules
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+os.environ["DATABASE_PATH"] = _test_db_path
+
 from auth import (
     hash_password, verify_password, create_session, get_session_user,
     delete_session, register_user, authenticate_user, update_user_email,
@@ -16,6 +24,14 @@ def setup_db():
     """Reset database before each test."""
     reset_db()
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_db():
+    """Cleanup database file after all tests."""
+    yield
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
 
 
 class TestPasswordHashing:
@@ -256,3 +272,91 @@ class TestAdminRole:
 
         assert user is not None
         assert user.is_admin is True
+
+
+class TestAccountLockout:
+    """Test account lockout functionality."""
+
+    def test_failed_login_increments_counter(self):
+        """Test that failed logins increment the counter."""
+        register_user("W1ABC", "password123")
+
+        # First failed attempt
+        result = authenticate_user("W1ABC", "wrongpassword")
+        assert result is None
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT failed_login_attempts FROM competitors WHERE callsign = ?",
+                ("W1ABC",)
+            )
+            assert cursor.fetchone()["failed_login_attempts"] == 1
+
+    def test_successful_login_clears_failed_attempts(self):
+        """Test that successful login clears failed attempts."""
+        register_user("W1ABC", "password123")
+
+        # Make some failed attempts
+        authenticate_user("W1ABC", "wrongpassword")
+        authenticate_user("W1ABC", "wrongpassword")
+
+        # Successful login
+        result = authenticate_user("W1ABC", "password123")
+        assert result is not None
+        assert result != "locked"
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT failed_login_attempts FROM competitors WHERE callsign = ?",
+                ("W1ABC",)
+            )
+            assert cursor.fetchone()["failed_login_attempts"] == 0
+
+    def test_account_locks_after_max_attempts(self):
+        """Test that account locks after max failed attempts."""
+        register_user("W1ABC", "password123")
+
+        # Make 5 failed attempts (default LOCKOUT_ATTEMPTS)
+        for i in range(5):
+            result = authenticate_user("W1ABC", "wrongpassword")
+
+        # The 5th attempt should return "locked"
+        assert result == "locked"
+
+        # Subsequent attempts should also return "locked"
+        result = authenticate_user("W1ABC", "password123")
+        assert result == "locked"
+
+    def test_locked_account_cannot_login_with_correct_password(self):
+        """Test that locked account cannot login even with correct password."""
+        register_user("W1ABC", "password123")
+
+        # Lock the account
+        for _ in range(5):
+            authenticate_user("W1ABC", "wrongpassword")
+
+        # Try with correct password
+        result = authenticate_user("W1ABC", "password123")
+        assert result == "locked"
+
+    def test_lockout_expires(self):
+        """Test that lockout expires after duration."""
+        from datetime import datetime, timedelta
+        register_user("W1ABC", "password123")
+
+        # Lock the account
+        for _ in range(5):
+            authenticate_user("W1ABC", "wrongpassword")
+
+        # Manually set locked_until to past
+        with get_db() as conn:
+            past_time = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
+            conn.execute(
+                "UPDATE competitors SET locked_until = ? WHERE callsign = ?",
+                (past_time, "W1ABC")
+            )
+
+        # Should be able to login now
+        result = authenticate_user("W1ABC", "password123")
+        assert result is not None
+        assert result != "locked"

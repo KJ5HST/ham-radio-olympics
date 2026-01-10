@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log - Admin{% endblock %}
+
+{% block content %}
+<h2>Audit Log</h2>
+
+<div class="card">
+    <form method="GET" style="margin-bottom: 20px;">
+        <label for="action">Filter by action:</label>
+        <select name="action" id="action" onchange="this.form.submit()">
+            <option value="">All Actions</option>
+            <option value="login" {% if action_filter == 'login' %}selected{% endif %}>Login</option>
+            <option value="logout" {% if action_filter == 'logout' %}selected{% endif %}>Logout</option>
+            <option value="password_change" {% if action_filter == 'password_change' %}selected{% endif %}>Password Change</option>
+            <option value="competitor_disabled" {% if action_filter == 'competitor_disabled' %}selected{% endif %}>Competitor Disabled</option>
+            <option value="competitor_enabled" {% if action_filter == 'competitor_enabled' %}selected{% endif %}>Competitor Enabled</option>
+            <option value="bulk_disable" {% if action_filter == 'bulk_disable' %}selected{% endif %}>Bulk Disable</option>
+            <option value="bulk_enable" {% if action_filter == 'bulk_enable' %}selected{% endif %}>Bulk Enable</option>
+            <option value="database_backup" {% if action_filter == 'database_backup' %}selected{% endif %}>Database Backup</option>
+        </select>
+    </form>
+
+    <p>Total entries: {{ total }}</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Details</th>
+                <th>IP Address</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.timestamp }}</td>
+                <td>{{ log.actor_callsign or '-' }}</td>
+                <td>{{ log.action }}</td>
+                <td>
+                    {% if log.target_type %}
+                    {{ log.target_type }}: {{ log.target_id or '-' }}
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td>{{ log.details or '-' }}</td>
+                <td>{{ log.ip_address or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="6">No audit log entries found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if total > per_page %}
+    <div class="pagination" style="margin-top: 20px;">
+        {% if page > 1 %}
+        <a href="?page={{ page - 1 }}{% if action_filter %}&action={{ action_filter }}{% endif %}">&laquo; Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ ((total - 1) // per_page) + 1 }}</span>
+        {% if page * per_page < total %}
+        <a href="?page={{ page + 1 }}{% if action_filter %}&action={{ action_filter }}{% endif %}">Next &raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<p><a href="/admin">&larr; Back to Admin Dashboard</a></p>
+{% endblock %}
