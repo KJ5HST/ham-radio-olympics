@@ -18,7 +18,11 @@ os.environ["ENCRYPTION_KEY"] = "test-encryption-key"
 
 from database import reset_db, get_db
 from crypto import encrypt_api_key
-from sync import sync_competitor, sync_all_competitors, _upsert_qso, recompute_all_active_matches
+from sync import (
+    sync_competitor, sync_competitor_with_key, sync_competitor_lotw,
+    sync_competitor_lotw_stored, sync_all_competitors, _upsert_qso,
+    recompute_all_active_matches
+)
 from qrz_client import QSOData
 
 
@@ -484,3 +488,227 @@ class TestSyncAllCompetitors:
 
         assert result["competitors_synced"] == 1
         assert len(result["errors"]) == 1
+
+
+@pytest.fixture
+def competitor_with_lotw():
+    """Create a registered competitor with LoTW credentials."""
+    from auth import hash_password
+    with get_db() as conn:
+        encrypted_username = encrypt_api_key("W1TEST")
+        encrypted_password = encrypt_api_key("lotwpass123")
+        password_hash = hash_password("password123")
+        conn.execute("""
+            INSERT INTO competitors (callsign, password_hash, lotw_username_encrypted,
+                                    lotw_password_encrypted, registered_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("W1TEST", password_hash, encrypted_username, encrypted_password,
+              datetime.utcnow().isoformat()))
+    return "W1TEST"
+
+
+class TestSyncCompetitorLoTW:
+    """Test LoTW sync functionality."""
+
+    def test_sync_lotw_nonexistent_competitor(self):
+        """Test syncing a competitor that doesn't exist."""
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw("NOTEXIST", "user", "pass")
+        )
+        assert "error" in result
+        assert "not found" in result["error"]
+
+    @patch('sync.fetch_lotw_qsos')
+    def test_sync_lotw_success(self, mock_fetch, competitor_with_lotw):
+        """Test successful LoTW sync."""
+        mock_fetch.return_value = [
+            QSOData(
+                dx_callsign="DL1ABC",
+                qso_datetime=datetime(2026, 1, 15, 12, 0, 0),
+                band="20M",
+                mode="SSB",
+                tx_power=5.0,
+                my_dxcc=291,
+                my_grid="EM12",
+                my_sig_info=None,
+                dx_dxcc=230,
+                dx_grid="JN58",
+                dx_sig_info=None,
+                is_confirmed=True,
+                qrz_logid=None,
+            )
+        ]
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw("W1TEST", "W1TEST", "lotwpass123")
+        )
+
+        assert result["callsign"] == "W1TEST"
+        assert result["new_qsos"] == 1
+        assert result["total_fetched"] == 1
+
+    @patch('sync.fetch_lotw_qsos')
+    def test_sync_lotw_empty(self, mock_fetch, competitor_with_lotw):
+        """Test syncing when LoTW returns no QSOs."""
+        mock_fetch.return_value = []
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw("W1TEST", "W1TEST", "lotwpass123")
+        )
+        assert "message" in result
+        assert "No QSOs found" in result["message"]
+
+    @patch('sync.fetch_lotw_qsos')
+    def test_sync_lotw_api_error(self, mock_fetch, competitor_with_lotw):
+        """Test sync handles LoTW API errors."""
+        from lotw_client import LoTWError
+        mock_fetch.side_effect = LoTWError("Authentication failed")
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw("W1TEST", "W1TEST", "wrongpass")
+        )
+        assert "error" in result
+        assert "Authentication failed" in result["error"]
+
+
+class TestSyncCompetitorLoTWStored:
+    """Test LoTW sync with stored credentials."""
+
+    def test_sync_lotw_stored_no_credentials(self):
+        """Test sync fails when no LoTW credentials stored."""
+        from auth import hash_password
+        with get_db() as conn:
+            password_hash = hash_password("password123")
+            conn.execute("""
+                INSERT INTO competitors (callsign, password_hash, registered_at)
+                VALUES (?, ?, ?)
+            """, ("W1NOCREDS", password_hash, datetime.utcnow().isoformat()))
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw_stored("W1NOCREDS")
+        )
+        assert "error" in result
+        assert "not configured" in result["error"]
+
+    def test_sync_lotw_stored_nonexistent(self):
+        """Test sync fails for nonexistent competitor."""
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw_stored("NOTEXIST")
+        )
+        assert "error" in result
+        assert "not found" in result["error"]
+
+    @patch('sync.fetch_lotw_qsos')
+    def test_sync_lotw_stored_success(self, mock_fetch, competitor_with_lotw):
+        """Test successful sync using stored credentials."""
+        mock_fetch.return_value = [
+            QSOData(
+                dx_callsign="JA1XYZ",
+                qso_datetime=datetime(2026, 1, 20, 8, 30, 0),
+                band="40M",
+                mode="CW",
+                tx_power=10.0,
+                my_dxcc=291,
+                my_grid="EM12",
+                my_sig_info=None,
+                dx_dxcc=339,
+                dx_grid="PM95",
+                dx_sig_info=None,
+                is_confirmed=True,
+                qrz_logid=None,
+            )
+        ]
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw_stored("W1TEST")
+        )
+
+        assert result["callsign"] == "W1TEST"
+        assert result["new_qsos"] == 1
+
+    def test_sync_lotw_stored_decrypt_error(self):
+        """Test sync handles decryption errors for LoTW credentials."""
+        from auth import hash_password
+        with get_db() as conn:
+            password_hash = hash_password("password123")
+            conn.execute("""
+                INSERT INTO competitors (callsign, password_hash, lotw_username_encrypted,
+                                        lotw_password_encrypted, registered_at)
+                VALUES (?, ?, ?, ?, ?)
+            """, ("W1BADCREDS", password_hash, "invalid_data", "invalid_data",
+                  datetime.utcnow().isoformat()))
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_lotw_stored("W1BADCREDS")
+        )
+        assert "error" in result
+        assert "decrypt" in result["error"].lower() or "Failed" in result["error"]
+
+
+class TestSyncCompetitorWithKey:
+    """Test sync_competitor_with_key function."""
+
+    @patch('sync.fetch_qsos')
+    def test_sync_with_key_success(self, mock_fetch, registered_competitor):
+        """Test successful sync with provided API key."""
+        mock_fetch.return_value = [
+            QSOData(
+                dx_callsign="VK2ABC",
+                qso_datetime=datetime(2026, 2, 1, 15, 0, 0),
+                band="15M",
+                mode="FT8",
+                tx_power=25.0,
+                my_dxcc=291,
+                my_grid="EM12",
+                my_sig_info=None,
+                dx_dxcc=150,
+                dx_grid="QF56",
+                dx_sig_info=None,
+                is_confirmed=True,
+                qrz_logid="54321",
+            )
+        ]
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_with_key("W1TEST", "provided-api-key")
+        )
+
+        assert result["callsign"] == "W1TEST"
+        assert result["new_qsos"] == 1
+        mock_fetch.assert_called_once_with("provided-api-key", confirmed_only=False)
+
+    @patch('sync.fetch_qsos')
+    def test_sync_with_key_empty(self, mock_fetch, registered_competitor):
+        """Test sync with key when no QSOs returned."""
+        mock_fetch.return_value = []
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_with_key("W1TEST", "api-key")
+        )
+
+        assert "message" in result
+        assert "No QSOs found" in result["message"]
+
+    @patch('sync.fetch_qsos')
+    def test_sync_with_key_api_error(self, mock_fetch, registered_competitor):
+        """Test sync with key handles API errors."""
+        from qrz_client import QRZAPIError
+        mock_fetch.side_effect = QRZAPIError("Invalid API key")
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor_with_key("W1TEST", "bad-key")
+        )
+
+        assert "error" in result
+        assert "Invalid API key" in result["error"]

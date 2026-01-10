@@ -57,7 +57,7 @@ async def verify_lotw_credentials(username: str, password: str, expected_callsig
         # LoTW returns specific error messages for auth failures
         if "Username/password incorrect" in text:
             return False
-        if "not found in LoTW" in text.lower():
+        if "not found in lotw" in text.lower():
             return False
 
         # If we got ADIF header, credentials are valid
@@ -124,7 +124,7 @@ async def fetch_lotw_qsos(
         # Check for auth errors
         if "Username/password incorrect" in text:
             raise LoTWError("Authentication failed - invalid username or password")
-        if "not found in LoTW" in text.lower():
+        if "not found in lotw" in text.lower():
             raise LoTWError("Account not found in LoTW")
 
         # Parse ADIF data
