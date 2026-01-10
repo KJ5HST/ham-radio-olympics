@@ -38,7 +38,7 @@
             {% for log in logs %}
             <tr>
                 <td>{{ log.timestamp | format_datetime }}</td>
-                <td>{% if log.actor_callsign %}{{ log.actor_first_name | competitor_display(log.actor_callsign) }}{% else %}-{% endif %}</td>
+                <td>{% if log.actor_callsign %}<a href="/competitor/{{ log.actor_callsign }}">{{ log.actor_first_name | competitor_display(log.actor_callsign) }}</a>{% else %}-{% endif %}</td>
                 <td>{{ log.action }}</td>
                 <td>
                     {% if log.target_type %}
