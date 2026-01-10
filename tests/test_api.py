@@ -122,7 +122,7 @@ class TestRegistration:
         """Test that signup syncs QRZ data when API key is provided."""
         from unittest.mock import patch, AsyncMock
 
-        with patch('main.sync_competitor', new_callable=AsyncMock) as mock_sync:
+        with patch('main.sync_competitor_with_key', new_callable=AsyncMock) as mock_sync:
             mock_sync.return_value = {"synced": 0}
             response = client.post("/signup", json={
                 "callsign": "W1SYN",
@@ -130,22 +130,23 @@ class TestRegistration:
                 "qrz_api_key": "test-api-key"
             })
             assert response.status_code in [200, 303]
-            mock_sync.assert_called_once_with("W1SYN")
+            mock_sync.assert_called_once_with("W1SYN", "test-api-key")
 
-    def test_signup_requires_qrz_api_key(self, client):
-        """Test that signup requires a QRZ API key."""
+    def test_signup_requires_qrz_or_lotw(self, client):
+        """Test that signup requires either QRZ API key or LoTW credentials."""
         response = client.post("/signup", json={
             "callsign": "W1NOS",
-            "password": "password123",
-            "qrz_api_key": ""
+            "password": "password123"
+            # No QRZ API key or LoTW credentials
         })
-        assert response.status_code == 422  # Validation error
+        assert response.status_code == 400
+        assert "QRZ API key and/or LoTW" in response.json()["detail"]
 
     def test_signup_succeeds_if_sync_fails(self, client):
         """Test that signup succeeds even if QRZ sync fails."""
         from unittest.mock import patch, AsyncMock
 
-        with patch('main.sync_competitor', new_callable=AsyncMock) as mock_sync:
+        with patch('main.sync_competitor_with_key', new_callable=AsyncMock) as mock_sync:
             mock_sync.side_effect = Exception("QRZ API error")
             response = client.post("/signup", json={
                 "callsign": "W1ERR",
@@ -2078,13 +2079,14 @@ class TestAuthEndpoints:
         assert response.status_code == 422
 
     def test_signup_empty_qrz_api_key(self, client):
-        """Test signup with empty QRZ API key."""
+        """Test signup with empty QRZ API key and no LoTW credentials."""
         response = client.post("/signup", json={
             "callsign": "W1NOK",
             "password": "password123",
             "qrz_api_key": "   "  # Whitespace only
         })
-        assert response.status_code == 422
+        assert response.status_code == 400
+        assert "QRZ API key and/or LoTW" in response.json()["detail"]
 
     def test_login_page(self, client):
         """Test login page renders."""

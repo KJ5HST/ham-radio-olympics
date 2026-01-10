@@ -60,7 +60,150 @@ def init_db():
 
         # Drop old index if it exists
         conn.execute("DROP INDEX IF EXISTS idx_qsos_contestant")
+
+        # Drop and recreate sessions table to fix foreign key reference
+        conn.execute("DROP TABLE IF EXISTS sessions")
         conn.commit()
+
+        # Migration: Fix qsos table foreign key from contestants to competitors
+        if 'qsos' in tables:
+            # Check if qsos FK still points to contestants by checking sqlite_master
+            fk_info = conn.execute("PRAGMA foreign_key_list(qsos)").fetchall()
+            needs_qsos_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_qsos_migration:
+                # Recreate qsos table with correct foreign key
+                conn.execute("ALTER TABLE qsos RENAME TO qsos_old")
+                conn.execute("""
+                    CREATE TABLE qsos (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        competitor_callsign TEXT NOT NULL,
+                        dx_callsign TEXT NOT NULL,
+                        qso_datetime_utc TEXT NOT NULL,
+                        band TEXT,
+                        mode TEXT,
+                        my_dxcc INTEGER,
+                        my_grid TEXT,
+                        my_sig_info TEXT,
+                        dx_dxcc INTEGER,
+                        dx_grid TEXT,
+                        dx_sig_info TEXT,
+                        distance_km REAL,
+                        tx_power_w REAL,
+                        cool_factor REAL,
+                        is_confirmed INTEGER NOT NULL DEFAULT 0,
+                        qrz_logid TEXT,
+                        FOREIGN KEY (competitor_callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+                    )
+                """)
+                conn.execute("""
+                    INSERT INTO qsos SELECT * FROM qsos_old
+                """)
+                conn.execute("DROP TABLE qsos_old")
+                conn.commit()
+
+        # Migration: Fix medals table foreign key from contestants to competitors
+        if 'medals' in tables:
+            fk_info = conn.execute("PRAGMA foreign_key_list(medals)").fetchall()
+            needs_medals_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_medals_migration:
+                conn.execute("ALTER TABLE medals RENAME TO medals_old")
+                conn.execute("""
+                    CREATE TABLE medals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        match_id INTEGER NOT NULL,
+                        callsign TEXT NOT NULL,
+                        role TEXT NOT NULL CHECK (role IN ('work', 'activate', 'combined')),
+                        qualified INTEGER NOT NULL DEFAULT 1,
+                        qso_race_medal TEXT CHECK (qso_race_medal IN ('gold', 'silver', 'bronze', NULL)),
+                        qso_race_claim_time TEXT,
+                        cool_factor_medal TEXT CHECK (cool_factor_medal IN ('gold', 'silver', 'bronze', NULL)),
+                        cool_factor_value REAL,
+                        cool_factor_claim_time TEXT,
+                        pota_bonus INTEGER NOT NULL DEFAULT 0,
+                        total_points INTEGER NOT NULL DEFAULT 0,
+                        FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        UNIQUE (match_id, callsign, role)
+                    )
+                """)
+                conn.execute("INSERT INTO medals SELECT * FROM medals_old")
+                conn.execute("DROP TABLE medals_old")
+                conn.commit()
+
+        # Migration: Fix sport_entries table foreign key
+        if 'sport_entries' in tables:
+            fk_info = conn.execute("PRAGMA foreign_key_list(sport_entries)").fetchall()
+            needs_sport_entries_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_sport_entries_migration:
+                conn.execute("ALTER TABLE sport_entries RENAME TO sport_entries_old")
+                conn.execute("""
+                    CREATE TABLE sport_entries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        callsign TEXT NOT NULL,
+                        sport_id INTEGER NOT NULL,
+                        entered_at TEXT NOT NULL,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE (callsign, sport_id)
+                    )
+                """)
+                conn.execute("INSERT INTO sport_entries SELECT * FROM sport_entries_old")
+                conn.execute("DROP TABLE sport_entries_old")
+                conn.commit()
+
+        # Migration: Fix referee_assignments table foreign key
+        if 'referee_assignments' in tables:
+            fk_info = conn.execute("PRAGMA foreign_key_list(referee_assignments)").fetchall()
+            needs_referee_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_referee_migration:
+                conn.execute("ALTER TABLE referee_assignments RENAME TO referee_assignments_old")
+                conn.execute("""
+                    CREATE TABLE referee_assignments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        callsign TEXT NOT NULL,
+                        sport_id INTEGER NOT NULL,
+                        assigned_at TEXT NOT NULL,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE (callsign, sport_id)
+                    )
+                """)
+                conn.execute("INSERT INTO referee_assignments SELECT * FROM referee_assignments_old")
+                conn.execute("DROP TABLE referee_assignments_old")
+                conn.commit()
+
+        # Migration: Fix records table foreign key
+        if 'records' in tables:
+            fk_info = conn.execute("PRAGMA foreign_key_list(records)").fetchall()
+            needs_records_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_records_migration:
+                conn.execute("ALTER TABLE records RENAME TO records_old")
+                conn.execute("""
+                    CREATE TABLE records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sport_id INTEGER,
+                        callsign TEXT,
+                        record_type TEXT NOT NULL CHECK (record_type IN ('longest_distance', 'highest_cool_factor', 'lowest_power')),
+                        value REAL NOT NULL,
+                        qso_id INTEGER,
+                        achieved_at TEXT NOT NULL,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE SET NULL
+                    )
+                """)
+                conn.execute("INSERT INTO records SELECT * FROM records_old")
+                conn.execute("DROP TABLE records_old")
+                conn.commit()
+
+        # Migration: add LoTW credential columns if they don't exist (only for existing tables)
+        if has_competitors:
+            cursor = conn.execute("PRAGMA table_info(competitors)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'lotw_username_encrypted' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN lotw_username_encrypted TEXT")
+                conn.execute("ALTER TABLE competitors ADD COLUMN lotw_password_encrypted TEXT")
+                conn.commit()
 
         conn.executescript("""
             -- Competitors table
@@ -69,6 +212,8 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 email TEXT,
                 qrz_api_key_encrypted TEXT,
+                lotw_username_encrypted TEXT,
+                lotw_password_encrypted TEXT,
                 registered_at TEXT NOT NULL,
                 last_sync_at TEXT,
                 is_admin INTEGER NOT NULL DEFAULT 0,

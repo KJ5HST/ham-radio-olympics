@@ -17,8 +17,9 @@ from pydantic import BaseModel, field_validator
 
 from database import init_db, get_db, seed_example_olympiad
 from crypto import encrypt_api_key
-from sync import sync_competitor, sync_all_competitors, recompute_sport_matches
+from sync import sync_competitor, sync_competitor_with_key, sync_competitor_lotw, sync_competitor_lotw_stored, sync_all_competitors, recompute_sport_matches
 from qrz_client import verify_api_key
+from lotw_client import verify_lotw_credentials
 from scoring import recompute_match_medals
 from dxcc import get_country_name, get_continent_name, get_all_continents, get_all_countries
 from auth import (
@@ -82,7 +83,7 @@ def format_date(value: str, include_time: bool = False) -> str:
         # Parse ISO format
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
         if include_time:
-            return dt.strftime("%b %-d, %Y %-I:%M %p")
+            return dt.strftime("%b %-d, %Y %-I:%M %p") + " UTC"
         return dt.strftime("%b %-d, %Y")
     except (ValueError, AttributeError):
         return value
@@ -126,7 +127,10 @@ def is_valid_callsign_format(callsign: str) -> bool:
 class UserSignup(BaseModel):
     callsign: str
     password: str
-    qrz_api_key: str
+    qrz_api_key: Optional[str] = None
+    lotw_username: Optional[str] = None
+    lotw_password: Optional[str] = None
+    store_credentials: bool = True  # Whether to store credentials for auto-sync
     email: Optional[str] = None
 
     @field_validator("callsign")
@@ -142,14 +146,6 @@ class UserSignup(BaseModel):
     def validate_password(cls, v):
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters")
-        return v
-
-    @field_validator("qrz_api_key")
-    @classmethod
-    def validate_qrz_api_key(cls, v):
-        v = v.strip()
-        if not v:
-            raise ValueError("QRZ API key is required")
         return v
 
 
@@ -643,6 +639,60 @@ async def trigger_sync(callsign: Optional[str] = None):
     return result
 
 
+class QRZSyncRequest(BaseModel):
+    api_key: str
+
+
+class LoTWSyncRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/sync/qrz")
+async def trigger_qrz_sync_with_key(request: Request, sync_data: QRZSyncRequest):
+    """Trigger QRZ sync for the current user using provided API key."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    result = await sync_competitor_with_key(user.callsign, sync_data.api_key)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
+@app.post("/sync/lotw")
+async def trigger_lotw_sync(request: Request, sync_data: LoTWSyncRequest):
+    """Trigger LoTW sync for the current user using provided credentials."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    result = await sync_competitor_lotw(user.callsign, sync_data.username, sync_data.password)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
+@app.post("/sync/lotw/stored")
+async def trigger_lotw_sync_stored(request: Request):
+    """Trigger LoTW sync for the current user using stored credentials."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    result = await sync_competitor_lotw_stored(user.callsign)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
 # ============================================================
 # AUTHENTICATION ENDPOINTS
 # ============================================================
@@ -661,22 +711,57 @@ async def signup(signup_data: UserSignup):
     """Create a new user account."""
     callsign = signup_data.callsign.upper()
 
-    # Verify QRZ API key is valid AND belongs to the callsign being registered
-    is_valid = await verify_api_key(signup_data.qrz_api_key, callsign)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail="Invalid QRZ API key or key does not match callsign.")
+    # Must provide either QRZ API key or LoTW credentials
+    has_qrz = signup_data.qrz_api_key and signup_data.qrz_api_key.strip()
+    has_lotw = signup_data.lotw_username and signup_data.lotw_password
 
-    # Encrypt the API key
-    encrypted_key = encrypt_api_key(signup_data.qrz_api_key)
+    if not has_qrz and not has_lotw:
+        raise HTTPException(status_code=400, detail="Please provide QRZ API key and/or LoTW credentials")
 
-    success = register_user(callsign, signup_data.password, signup_data.email, encrypted_key)
+    encrypted_qrz_key = None
+    encrypted_lotw_username = None
+    encrypted_lotw_password = None
+
+    # Verify QRZ API key if provided
+    if has_qrz:
+        is_valid = await verify_api_key(signup_data.qrz_api_key, callsign)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="Invalid QRZ API key or key does not match callsign.")
+        # Store if user wants auto-sync
+        if signup_data.store_credentials:
+            encrypted_qrz_key = encrypt_api_key(signup_data.qrz_api_key)
+
+    # Verify LoTW credentials if provided
+    if has_lotw:
+        is_valid = await verify_lotw_credentials(signup_data.lotw_username, signup_data.lotw_password, callsign)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail="Invalid LoTW credentials or username does not match callsign.")
+        # Store if user wants auto-sync
+        if signup_data.store_credentials:
+            encrypted_lotw_username = encrypt_api_key(signup_data.lotw_username)
+            encrypted_lotw_password = encrypt_api_key(signup_data.lotw_password)
+
+    success = register_user(
+        callsign,
+        signup_data.password,
+        signup_data.email,
+        encrypted_qrz_key,
+        encrypted_lotw_username,
+        encrypted_lotw_password
+    )
     if not success:
         raise HTTPException(status_code=400, detail="Callsign already registered")
 
-    # Sync QRZ data if API key was provided
-    if signup_data.qrz_api_key:
+    # Initial sync using provided credentials (even if not stored)
+    if has_qrz:
         try:
-            await sync_competitor(callsign)
+            await sync_competitor_with_key(callsign, signup_data.qrz_api_key)
+        except Exception:
+            pass  # Don't fail signup if sync fails
+
+    if has_lotw:
+        try:
+            await sync_competitor_lotw(callsign, signup_data.lotw_username, signup_data.lotw_password)
         except Exception:
             pass  # Don't fail signup if sync fails
 
@@ -883,6 +968,46 @@ async def update_qrz_key(
             (encrypted_key, user.callsign)
         )
     return RedirectResponse(url="/settings?updated=qrz", status_code=303)
+
+
+@app.delete("/settings/qrz-key")
+async def remove_qrz_key(request: Request, user: User = Depends(require_user)):
+    """Remove stored QRZ API key."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET qrz_api_key_encrypted = NULL WHERE callsign = ?",
+            (user.callsign,)
+        )
+    return {"message": "QRZ API key removed"}
+
+
+@app.post("/settings/lotw")
+async def update_lotw_credentials(
+    request: Request,
+    lotw_username: str = Form(...),
+    lotw_password: str = Form(...),
+    user: User = Depends(require_user)
+):
+    """Update LoTW credentials."""
+    encrypted_username = encrypt_api_key(lotw_username)
+    encrypted_password = encrypt_api_key(lotw_password)
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET lotw_username_encrypted = ?, lotw_password_encrypted = ? WHERE callsign = ?",
+            (encrypted_username, encrypted_password, user.callsign)
+        )
+    return RedirectResponse(url="/settings?updated=lotw", status_code=303)
+
+
+@app.delete("/settings/lotw")
+async def remove_lotw_credentials(request: Request, user: User = Depends(require_user)):
+    """Remove stored LoTW credentials."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET lotw_username_encrypted = NULL, lotw_password_encrypted = NULL WHERE callsign = ?",
+            (user.callsign,)
+        )
+    return {"message": "LoTW credentials removed"}
 
 
 # ============================================================

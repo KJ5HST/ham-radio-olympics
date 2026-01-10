@@ -8,13 +8,14 @@ from typing import Optional
 from database import get_db
 from crypto import decrypt_api_key
 from qrz_client import fetch_qsos, QSOData, QRZAPIError
+from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
 from scoring import recompute_match_medals, update_records
 
 
 async def sync_competitor(callsign: str) -> dict:
     """
-    Sync a single competitor's QSOs from QRZ.
+    Sync a single competitor's QSOs from QRZ using stored API key.
 
     Args:
         callsign: Competitor callsign
@@ -35,7 +36,7 @@ async def sync_competitor(callsign: str) -> dict:
 
         # Check if API key is configured
         if not competitor["qrz_api_key_encrypted"]:
-            return {"error": "QRZ API key not configured. Please upload your API key file in Settings."}
+            return {"error": "QRZ API key not configured. Please add your API key in Settings."}
 
         # Decrypt API key
         try:
@@ -43,14 +44,122 @@ async def sync_competitor(callsign: str) -> dict:
         except Exception as e:
             return {"error": f"Failed to decrypt API key: {e}"}
 
-        # Fetch QSOs from QRZ
+    # Use the shared sync function with the decrypted key
+    return await sync_competitor_with_key(callsign, api_key)
+
+
+async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
+    """
+    Sync a single competitor's QSOs from QRZ using provided API key.
+
+    Args:
+        callsign: Competitor callsign
+        api_key: QRZ API key (not encrypted)
+
+    Returns:
+        dict with sync results
+    """
+    # Fetch QSOs from QRZ
+    try:
+        qsos = await fetch_qsos(api_key, confirmed_only=False)
+    except QRZAPIError as e:
+        return {"error": str(e)}
+
+    if not qsos:
+        return {"message": "No QSOs found in QRZ logbook", "new_qsos": 0, "updated_qsos": 0}
+
+    # Process and store QSOs
+    new_count = 0
+    updated_count = 0
+
+    with get_db() as conn:
+        for qso in qsos:
+            result = _upsert_qso(conn, callsign.upper(), qso)
+            if result == "new":
+                new_count += 1
+            elif result == "updated":
+                updated_count += 1
+
+        # Update last sync time
+        conn.execute(
+            "UPDATE competitors SET last_sync_at = ? WHERE callsign = ?",
+            (datetime.utcnow().isoformat(), callsign.upper())
+        )
+
+    # Recompute medals for all active matches after sync
+    recompute_all_active_matches()
+
+    return {
+        "callsign": callsign.upper(),
+        "new_qsos": new_count,
+        "updated_qsos": updated_count,
+        "total_fetched": len(qsos),
+    }
+
+
+async def sync_competitor_lotw_stored(callsign: str) -> dict:
+    """
+    Sync a competitor's QSOs from LoTW using stored credentials.
+
+    Args:
+        callsign: Competitor callsign
+
+    Returns:
+        dict with sync results
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT lotw_username_encrypted, lotw_password_encrypted FROM competitors WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        competitor = cursor.fetchone()
+
+        if not competitor:
+            return {"error": f"Competitor {callsign} not found"}
+
+        if not competitor["lotw_username_encrypted"] or not competitor["lotw_password_encrypted"]:
+            return {"error": "LoTW credentials not configured. Please add your credentials in Settings."}
+
         try:
-            qsos = await fetch_qsos(api_key, confirmed_only=False)
-        except QRZAPIError as e:
+            lotw_username = decrypt_api_key(competitor["lotw_username_encrypted"])
+            lotw_password = decrypt_api_key(competitor["lotw_password_encrypted"])
+        except Exception as e:
+            return {"error": f"Failed to decrypt LoTW credentials: {e}"}
+
+    return await sync_competitor_lotw(callsign, lotw_username, lotw_password)
+
+
+async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password: str) -> dict:
+    """
+    Sync a competitor's QSOs from LoTW using provided credentials.
+
+    Args:
+        callsign: Competitor callsign
+        lotw_username: LoTW username
+        lotw_password: LoTW password
+
+    Returns:
+        dict with sync results
+    """
+    with get_db() as conn:
+        # Verify competitor exists
+        cursor = conn.execute(
+            "SELECT * FROM competitors WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        competitor = cursor.fetchone()
+
+        if not competitor:
+            return {"error": f"Competitor {callsign} not found"}
+
+        # Fetch QSOs from LoTW
+        try:
+            qsos = await fetch_lotw_qsos(lotw_username, lotw_password, confirmed_only=False)
+        except LoTWError as e:
             return {"error": str(e)}
 
         if not qsos:
-            return {"error": "No QSOs found in QRZ logbook. Check that your API key is correct and you have QSOs logged."}
+            return {"message": "No QSOs found in LoTW", "new_qsos": 0, "updated_qsos": 0}
 
         # Process and store QSOs
         new_count = 0

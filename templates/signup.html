@@ -6,22 +6,51 @@
 <h2>Create Account</h2>
 
 <div style="display: flex; gap: 30px; flex-wrap: wrap;">
-    <div class="card" style="flex: 1; min-width: 300px; max-width: 400px;">
+    <div class="card" style="flex: 1; min-width: 300px; max-width: 500px;">
         <form id="signup-form">
             <div class="form-group">
                 <label for="callsign">Callsign</label>
                 <input type="text" id="callsign" name="callsign" required placeholder="W1ABC"
-                       pattern="[A-Za-z0-9]{3,10}" title="Valid amateur radio callsign">
+                       title="Valid amateur radio callsign" style="text-transform: uppercase;">
             </div>
             <div class="form-group">
                 <label for="email">Email (optional)</label>
                 <input type="email" id="email" name="email" placeholder="you@example.com">
             </div>
-            <div class="form-group">
-                <label for="qrz_api_key">QRZ API Key (required)</label>
-                <input type="text" id="qrz_api_key" name="qrz_api_key" required
-                       placeholder="XXXX-XXXX-XXXX-XXXX">
+
+            <div style="margin: 20px 0; padding: 15px; background: #f7fafc; border-radius: 8px;">
+                <label style="font-weight: 600; margin-bottom: 10px; display: block;">Verify Callsign & Load QSOs</label>
+                <p style="color: #718096; font-size: 0.9em; margin-bottom: 15px;">
+                    Provide at least one set of credentials to verify callsign ownership and load your QSOs.
+                </p>
+
+                <div class="form-group">
+                    <label for="qrz_api_key">QRZ API Key (optional)</label>
+                    <input type="text" id="qrz_api_key" name="qrz_api_key" placeholder="XXXX-XXXX-XXXX-XXXX">
+                </div>
+
+                <div style="border-top: 1px solid #e2e8f0; margin: 15px 0; padding-top: 15px;">
+                    <div class="form-group">
+                        <label for="lotw_username">LoTW Username (optional)</label>
+                        <input type="text" id="lotw_username" name="lotw_username" placeholder="Your callsign">
+                    </div>
+                    <div class="form-group">
+                        <label for="lotw_password">LoTW Password</label>
+                        <input type="password" id="lotw_password" name="lotw_password" placeholder="Your LoTW password">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px; margin-bottom: 0;">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="store_credentials" name="store_credentials" checked style="width: auto;">
+                        <span>Store credentials for automatic sync</span>
+                    </label>
+                    <small style="color: #718096; display: block; margin-top: 5px;">
+                        If unchecked, you'll need to enter credentials each time you sync.
+                    </small>
+                </div>
             </div>
+
             <div class="form-group">
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required minlength="8"
@@ -38,7 +67,9 @@
     </div>
 
     <div class="card" style="flex: 1; min-width: 300px; max-width: 400px; background: #e8f4f8;">
-        <h4 style="margin-top: 0;">How to Get Your QRZ API Key</h4>
+        <h4 style="margin-top: 0;">How to Get Your Credentials</h4>
+
+        <h5 style="margin: 15px 0 10px;">QRZ API Key</h5>
         <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
             <li>Log in to <a href="https://www.qrz.com" target="_blank">QRZ.com</a></li>
             <li>Go to <strong>My Logbook</strong></li>
@@ -46,12 +77,14 @@
             <li>Select the <strong>API</strong> tab</li>
             <li>Copy your <strong>API Key</strong></li>
         </ol>
-        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-            <strong>Note:</strong> A QRZ XML Subscription is required to access the API.
-            Your API key allows us to sync your QSOs from QRZ to track your competition progress.
-        </p>
         <p style="margin-top: 10px; font-size: 0.9em; color: #666;">
-            Your API key is encrypted and stored securely. We only use it to fetch your logbook data.
+            <strong>Note:</strong> Requires QRZ XML Subscription.
+        </p>
+
+        <h5 style="margin: 20px 0 10px;">LoTW Credentials</h5>
+        <p style="line-height: 1.8;">
+            Use your <a href="https://lotw.arrl.org" target="_blank">LoTW</a> login credentials
+            (same as lotw.arrl.org website).
         </p>
     </div>
 </div>
@@ -69,16 +102,42 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
         return;
     }
 
+    const qrz_api_key = document.getElementById('qrz_api_key').value.trim();
+    const lotw_username = document.getElementById('lotw_username').value.trim();
+    const lotw_password = document.getElementById('lotw_password').value;
+
+    if (!qrz_api_key && !lotw_username) {
+        result.innerHTML = '<div class="alert alert-error">Please provide QRZ API key and/or LoTW credentials</div>';
+        return;
+    }
+
+    if (lotw_username && !lotw_password) {
+        result.innerHTML = '<div class="alert alert-error">Please enter your LoTW password</div>';
+        return;
+    }
+
+    const body = {
+        callsign: document.getElementById('callsign').value,
+        email: document.getElementById('email').value || null,
+        password: password,
+        store_credentials: document.getElementById('store_credentials').checked
+    };
+
+    if (qrz_api_key) {
+        body.qrz_api_key = qrz_api_key;
+    }
+    if (lotw_username) {
+        body.lotw_username = lotw_username;
+        body.lotw_password = lotw_password;
+    }
+
+    result.innerHTML = '<div class="alert" style="background: #ebf8ff; color: #2b6cb0;">Verifying credentials...</div>';
+
     try {
         const resp = await fetch('/signup', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                callsign: document.getElementById('callsign').value,
-                email: document.getElementById('email').value || null,
-                qrz_api_key: document.getElementById('qrz_api_key').value,
-                password: password
-            })
+            body: JSON.stringify(body)
         });
 
         if (resp.redirected) {

@@ -13,6 +13,9 @@
     {% if request.query_params.get('updated') == 'email' %}Email updated successfully.
     {% elif request.query_params.get('updated') == 'password' %}Password changed successfully.
     {% elif request.query_params.get('updated') == 'qrz' %}QRZ API key updated successfully.
+    {% elif request.query_params.get('updated') == 'qrz_removed' %}QRZ API key removed.
+    {% elif request.query_params.get('updated') == 'lotw' %}LoTW credentials updated successfully.
+    {% elif request.query_params.get('updated') == 'lotw_removed' %}LoTW credentials removed.
     {% endif %}
 </div>
 {% endif %}
@@ -48,16 +51,43 @@
     <div id="password-result"></div>
 </div>
 
-<h3>QRZ Logbook API Key</h3>
+<h3>QRZ API Key</h3>
 <div class="card">
-    <p>Status: {% if user.has_qrz_key %}<span style="color: #22543d;">Configured</span>{% else %}<span style="color: #c53030;">Not configured</span>{% endif %}</p>
-    <p style="font-size: 0.9em; color: #718096;">Your QRZ API key is used to sync your confirmed QSOs. Get your key from <a href="https://logbook.qrz.com/logbook" target="_blank">QRZ Logbook Settings</a>.</p>
+    <p>Status: {% if user.has_qrz_key %}<span style="color: #22543d;">Stored</span>{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
+    <p style="font-size: 0.9em; color: #718096;">Your QRZ API key enables automatic QSO sync. Get your key from <a href="https://logbook.qrz.com/logbook" target="_blank">QRZ Logbook Settings</a> (requires QRZ XML subscription).</p>
     <form action="/settings/qrz-key" method="post">
         <div class="form-group">
             <label for="qrz_api_key">QRZ API Key</label>
-            <input type="password" id="qrz_api_key" name="qrz_api_key" required placeholder="Enter your QRZ Logbook API key">
+            <input type="text" id="qrz_api_key" name="qrz_api_key" required placeholder="XXXX-XXXX-XXXX-XXXX">
         </div>
-        <button type="submit" class="btn">{% if user.has_qrz_key %}Update{% else %}Save{% endif %} API Key</button>
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn">{% if user.has_qrz_key %}Update{% else %}Save{% endif %} API Key</button>
+            {% if user.has_qrz_key %}
+            <button type="button" class="btn" style="background: #c53030;" onclick="removeQrzKey()">Remove</button>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<h3>LoTW Credentials</h3>
+<div class="card">
+    <p>Status: {% if user.has_lotw_creds %}<span style="color: #22543d;">Stored</span>{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
+    <p style="font-size: 0.9em; color: #718096;">Your LoTW credentials enable automatic QSO sync from Logbook of the World.</p>
+    <form action="/settings/lotw" method="post">
+        <div class="form-group">
+            <label for="lotw_username">LoTW Username</label>
+            <input type="text" id="lotw_username" name="lotw_username" required placeholder="Your callsign">
+        </div>
+        <div class="form-group">
+            <label for="lotw_password">LoTW Password</label>
+            <input type="password" id="lotw_password" name="lotw_password" required placeholder="Your LoTW password">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn">{% if user.has_lotw_creds %}Update{% else %}Save{% endif %} Credentials</button>
+            {% if user.has_lotw_creds %}
+            <button type="button" class="btn" style="background: #c53030;" onclick="removeLotwCreds()">Remove</button>
+            {% endif %}
+        </div>
     </form>
 </div>
 
@@ -72,5 +102,27 @@ document.getElementById('password-form').addEventListener('submit', function(e) 
             '<div class="alert alert-error">New passwords do not match</div>';
     }
 });
+
+async function removeQrzKey() {
+    if (!confirm('Are you sure you want to remove your stored QRZ API key?')) return;
+
+    const resp = await fetch('/settings/qrz-key', {method: 'DELETE'});
+    if (resp.ok) {
+        window.location.href = '/settings?updated=qrz_removed';
+    } else {
+        alert('Failed to remove QRZ key');
+    }
+}
+
+async function removeLotwCreds() {
+    if (!confirm('Are you sure you want to remove your stored LoTW credentials?')) return;
+
+    const resp = await fetch('/settings/lotw', {method: 'DELETE'});
+    if (resp.ok) {
+        window.location.href = '/settings?updated=lotw_removed';
+    } else {
+        alert('Failed to remove LoTW credentials');
+    }
+}
 </script>
 {% endblock %}

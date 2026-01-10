@@ -75,7 +75,7 @@ def parse_qrz_response(text: str) -> Dict[str, str]:
 
     QRZ uses & as a field separator, but also encodes < > as &lt; &gt;
     in the ADIF data. We need to decode HTML entities first, then
-    use a smarter split that only splits on & followed by KEY=.
+    parse carefully to handle ADIF fields that may contain & characters.
 
     Args:
         text: Raw response text
@@ -87,24 +87,26 @@ def parse_qrz_response(text: str) -> Dict[str, str]:
     # First decode HTML entities
     decoded = html.unescape(text)
 
-    # Known QRZ response keys
-    known_keys = ['RESULT', 'REASON', 'COUNT', 'ADIF', 'LOGID', 'LOGIDS', 'DATA', 'CALLSIGN']
-
     result = {}
-    # Find each known key and extract its value
-    for key in known_keys:
-        pattern = f"{key}="
-        idx = decoded.find(pattern)
-        if idx != -1:
-            # Find where the value ends (at next known key or end)
-            value_start = idx + len(pattern)
-            value_end = len(decoded)
-            for other_key in known_keys:
-                other_pattern = f"&{other_key}="
-                other_idx = decoded.find(other_pattern, value_start)
-                if other_idx != -1 and other_idx < value_end:
-                    value_end = other_idx
-            result[key] = decoded[value_start:value_end].strip()
+
+    # Special handling for ADIF field which can contain & in its content
+    adif_marker = "ADIF="
+    adif_idx = decoded.find(adif_marker)
+    adif_content = ""
+    non_adif_text = decoded
+
+    if adif_idx != -1:
+        # ADIF field goes to the end or until we hit a known terminal field
+        adif_start = adif_idx + len(adif_marker)
+        adif_content = decoded[adif_start:]
+        non_adif_text = decoded[:adif_idx]
+        result["ADIF"] = adif_content.strip()
+
+    # Parse the non-ADIF portion as simple key=value pairs
+    for pair in non_adif_text.split("&"):
+        if "=" in pair:
+            key, value = pair.split("=", 1)
+            result[key.strip()] = value.strip()
 
     return result
 

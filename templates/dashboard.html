@@ -34,26 +34,219 @@
     <h4>Account Status</h4>
     <p><strong>Registered:</strong> {{ competitor.registered_at | format_date if competitor.registered_at else '-' }}</p>
     {% if is_own_profile %}
-    <p><strong>QRZ API Key:</strong> {% if user.has_qrz_key %}Configured{% else %}<span style="color: #c53030;">Not configured</span> - <a href="/settings">Add key</a>{% endif %}</p>
+    <p><strong>QRZ API Key:</strong> {% if user.has_qrz_key %}Stored{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
+    <p><strong>LoTW Credentials:</strong> {% if user.has_lotw_creds %}Stored{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
     {% endif %}
     <p><strong>Last Sync:</strong> {{ competitor.last_sync_at | format_datetime if competitor.last_sync_at else 'Never' }}</p>
-    {% if can_sync %}
-    <button onclick="syncQsos()" id="sync-btn" class="btn" style="margin-top: 10px;">Sync QSOs Now</button>
+    {% if is_own_profile %}
+    <div style="margin-top: 15px;">
+        <strong>Sync QSOs:</strong>
+        <div style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
+            {% if user.has_qrz_key %}
+            <button onclick="syncQrzStored()" id="sync-qrz-btn" class="btn">Sync from QRZ</button>
+            {% else %}
+            <button onclick="showQrzModal()" id="sync-qrz-btn" class="btn">Sync from QRZ</button>
+            {% endif %}
+            {% if user.has_lotw_creds %}
+            <button onclick="syncLotwStored()" id="sync-lotw-btn" class="btn" style="background: #805ad5;">Sync from LoTW</button>
+            {% else %}
+            <button onclick="showLotwModal()" id="sync-lotw-btn" class="btn" style="background: #805ad5;">Sync from LoTW</button>
+            {% endif %}
+        </div>
+        <p style="margin-top: 10px; font-size: 0.9em; color: #718096;">
+            <a href="/settings">Manage stored credentials</a>
+        </p>
+    </div>
+
+    <!-- QRZ Modal -->
+    <div id="qrz-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 400px; width: 90%; margin: 20px;">
+            <h4 style="margin-top: 0;">Sync from QRZ</h4>
+            <p style="color: #718096; font-size: 0.9em;">Enter your QRZ API key to sync your QSOs.</p>
+            <div class="form-group">
+                <label for="qrz-api-key">QRZ API Key</label>
+                <input type="text" id="qrz-api-key" placeholder="XXXX-XXXX-XXXX-XXXX">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="syncQrz()" id="qrz-submit-btn" class="btn" style="flex: 1;">Sync</button>
+                <button onclick="hideQrzModal()" class="btn" style="flex: 1; background: #718096;">Cancel</button>
+            </div>
+            <div id="qrz-result" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- LoTW Modal -->
+    <div id="lotw-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 400px; width: 90%; margin: 20px;">
+            <h4 style="margin-top: 0;">Sync from LoTW</h4>
+            <p style="color: #718096; font-size: 0.9em;">Enter your LoTW credentials to sync your QSOs.</p>
+            <div class="form-group">
+                <label for="lotw-username">LoTW Username</label>
+                <input type="text" id="lotw-username" placeholder="Your callsign" value="{{ competitor.callsign }}">
+            </div>
+            <div class="form-group">
+                <label for="lotw-password">LoTW Password</label>
+                <input type="password" id="lotw-password" placeholder="Your LoTW password">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="syncLotw()" id="lotw-submit-btn" class="btn" style="flex: 1;">Sync</button>
+                <button onclick="hideLotwModal()" class="btn" style="flex: 1; background: #718096;">Cancel</button>
+            </div>
+            <div id="lotw-result" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
     <script>
-    async function syncQsos() {
-        const btn = document.getElementById('sync-btn');
+    // QRZ sync with stored credentials
+    async function syncQrzStored() {
+        const btn = document.getElementById('sync-qrz-btn');
         const originalText = btn.textContent;
         btn.textContent = 'Syncing...';
         btn.disabled = true;
         try {
-            await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
-            location.reload();
+            const resp = await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
+            if (!resp.ok) {
+                const data = await resp.json();
+                alert('Sync failed: ' + (data.detail || 'Unknown error'));
+                btn.textContent = originalText;
+                btn.disabled = false;
+            } else {
+                location.reload();
+            }
         } catch (e) {
             btn.textContent = originalText;
             btn.disabled = false;
             alert('Sync failed. Please try again.');
         }
     }
+
+    // LoTW sync with stored credentials
+    async function syncLotwStored() {
+        const btn = document.getElementById('sync-lotw-btn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        try {
+            const resp = await fetch('/sync/lotw/stored', {method: 'POST'});
+            if (!resp.ok) {
+                const data = await resp.json();
+                alert('Sync failed: ' + (data.detail || 'Unknown error'));
+                btn.textContent = originalText;
+                btn.disabled = false;
+            } else {
+                location.reload();
+            }
+        } catch (e) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+            alert('Sync failed. Please try again.');
+        }
+    }
+
+    // QRZ modal functions
+    function showQrzModal() {
+        document.getElementById('qrz-modal').style.display = 'flex';
+        document.getElementById('qrz-api-key').focus();
+    }
+
+    function hideQrzModal() {
+        document.getElementById('qrz-modal').style.display = 'none';
+        document.getElementById('qrz-api-key').value = '';
+        document.getElementById('qrz-result').innerHTML = '';
+    }
+
+    async function syncQrz() {
+        const btn = document.getElementById('qrz-submit-btn');
+        const result = document.getElementById('qrz-result');
+        const apiKey = document.getElementById('qrz-api-key').value;
+
+        if (!apiKey) {
+            result.innerHTML = '<div class="alert alert-error">Please enter your QRZ API key</div>';
+            return;
+        }
+
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        result.innerHTML = '';
+
+        try {
+            const resp = await fetch('/sync/qrz', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({api_key: apiKey})
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                hideQrzModal();
+                location.reload();
+            } else {
+                result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Sync failed') + '</div>';
+                btn.textContent = 'Sync';
+                btn.disabled = false;
+            }
+        } catch (e) {
+            result.innerHTML = '<div class="alert alert-error">Sync failed: ' + e.message + '</div>';
+            btn.textContent = 'Sync';
+            btn.disabled = false;
+        }
+    }
+
+    // LoTW modal functions
+    function showLotwModal() {
+        document.getElementById('lotw-modal').style.display = 'flex';
+        document.getElementById('lotw-password').focus();
+    }
+
+    function hideLotwModal() {
+        document.getElementById('lotw-modal').style.display = 'none';
+        document.getElementById('lotw-password').value = '';
+        document.getElementById('lotw-result').innerHTML = '';
+    }
+
+    async function syncLotw() {
+        const btn = document.getElementById('lotw-submit-btn');
+        const result = document.getElementById('lotw-result');
+        const username = document.getElementById('lotw-username').value;
+        const password = document.getElementById('lotw-password').value;
+
+        if (!username || !password) {
+            result.innerHTML = '<div class="alert alert-error">Please enter both username and password</div>';
+            return;
+        }
+
+        btn.textContent = 'Syncing...';
+        btn.disabled = true;
+        result.innerHTML = '';
+
+        try {
+            const resp = await fetch('/sync/lotw', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: username, password: password})
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                hideLotwModal();
+                location.reload();
+            } else {
+                result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Sync failed') + '</div>';
+                btn.textContent = 'Sync';
+                btn.disabled = false;
+            }
+        } catch (e) {
+            result.innerHTML = '<div class="alert alert-error">Sync failed: ' + e.message + '</div>';
+            btn.textContent = 'Sync';
+            btn.disabled = false;
+        }
+    }
+
+    // Close modals on escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            hideQrzModal();
+            hideLotwModal();
+        }
+    });
     </script>
     {% endif %}
 </div>
@@ -191,7 +384,7 @@
 {% else %}
 <div class="card">
     {% if is_own_profile %}
-    <p>No QSOs synced yet. {% if user.has_qrz_key %}Click "Sync QSOs Now" above to import your contacts.{% else %}Add your QRZ API key in <a href="/settings">Settings</a> to get started.{% endif %}</p>
+    <p>No QSOs synced yet. Use the sync buttons above to import your contacts from QRZ or LoTW.</p>
     {% else %}
     <p>No QSOs recorded for this competitor.</p>
     {% endif %}

@@ -22,6 +22,7 @@ class User:
     callsign: str
     email: Optional[str]
     has_qrz_key: bool
+    has_lotw_creds: bool = False
     is_admin: bool = False
     is_referee: bool = False
 
@@ -73,7 +74,8 @@ def get_session_user(session_id: Optional[str]) -> Optional[User]:
     with get_db() as conn:
         now = datetime.utcnow().isoformat()
         cursor = conn.execute("""
-            SELECT c.callsign, c.email, c.qrz_api_key_encrypted, c.is_admin, c.is_referee
+            SELECT c.callsign, c.email, c.qrz_api_key_encrypted,
+                   c.lotw_username_encrypted, c.is_admin, c.is_referee
             FROM sessions s
             JOIN competitors c ON s.callsign = c.callsign
             WHERE s.id = ? AND s.expires_at > ? AND c.is_disabled = 0
@@ -85,6 +87,7 @@ def get_session_user(session_id: Optional[str]) -> Optional[User]:
                 callsign=row["callsign"],
                 email=row["email"],
                 has_qrz_key=bool(row["qrz_api_key_encrypted"]),
+                has_lotw_creds=bool(row["lotw_username_encrypted"]),
                 is_admin=bool(row["is_admin"]),
                 is_referee=bool(row["is_referee"])
             )
@@ -98,7 +101,14 @@ def delete_session(session_id: str) -> None:
         conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
 
-def register_user(callsign: str, password: str, email: Optional[str] = None, qrz_api_key_encrypted: Optional[str] = None) -> bool:
+def register_user(
+    callsign: str,
+    password: str,
+    email: Optional[str] = None,
+    qrz_api_key_encrypted: Optional[str] = None,
+    lotw_username_encrypted: Optional[str] = None,
+    lotw_password_encrypted: Optional[str] = None
+) -> bool:
     """Register a new user. Returns True if successful."""
     callsign = callsign.upper().strip()
     password_hash = hash_password(password)
@@ -114,9 +124,11 @@ def register_user(callsign: str, password: str, email: Optional[str] = None, qrz
             return False
 
         conn.execute("""
-            INSERT INTO competitors (callsign, password_hash, email, qrz_api_key_encrypted, registered_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (callsign, password_hash, email, qrz_api_key_encrypted, now))
+            INSERT INTO competitors (callsign, password_hash, email, qrz_api_key_encrypted,
+                                    lotw_username_encrypted, lotw_password_encrypted, registered_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (callsign, password_hash, email, qrz_api_key_encrypted,
+              lotw_username_encrypted, lotw_password_encrypted, now))
 
     return True
 

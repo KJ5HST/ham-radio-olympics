@@ -226,8 +226,8 @@ class TestSyncCompetitor:
         result = asyncio.get_event_loop().run_until_complete(
             sync_competitor("W1TEST")
         )
-        assert "error" in result
-        assert "No QSOs found" in result["error"]
+        assert "message" in result
+        assert "No QSOs found" in result["message"]
 
     @patch('sync.fetch_qsos')
     def test_sync_with_qsos(self, mock_fetch, registered_competitor):
