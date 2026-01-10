@@ -24,11 +24,13 @@
             <small style="color: #718096;">Leave blank to keep existing password</small>
             {% endif %}
         </div>
-        <button type="submit" class="btn">Save QRZ Credentials</button>
-        {% if qrz_configured %}
-        <button type="button" onclick="testQrz()" class="btn" style="background: #3182ce;">Test Connection</button>
-        <button type="button" onclick="clearQrz()" class="btn" style="background: #c53030;">Clear Credentials</button>
-        {% endif %}
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success"><span class="icon">💾</span> Save</button>
+            {% if qrz_configured %}
+            <button type="button" onclick="testQrz()" class="btn btn-info"><span class="icon">🔌</span> Test</button>
+            <button type="button" onclick="clearQrz()" class="btn btn-danger"><span class="icon">🗑️</span> Clear</button>
+            {% endif %}
+        </div>
     </form>
     <div id="qrz-result" style="margin-top: 1rem;"></div>
 </div>

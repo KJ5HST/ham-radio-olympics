@@ -2,11 +2,12 @@
 Encryption utilities for securing QRZ API keys.
 """
 
-import os
 import base64
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
+from config import config
 
 
 def get_encryption_key() -> bytes:
@@ -15,7 +16,7 @@ def get_encryption_key() -> bytes:
 
     Uses PBKDF2 to derive a proper Fernet key from the secret.
     """
-    secret = os.getenv("ENCRYPTION_KEY", "default-dev-key-change-in-production")
+    secret = config.ENCRYPTION_KEY
     salt = b"ham-radio-olympics-salt"
 
     kdf = PBKDF2HMAC(

@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -267,6 +268,28 @@ def competitor_display(first_name, callsign) -> str:
 
 
 templates.env.filters["competitor_display"] = competitor_display
+
+
+def pota_tooltip(value: str) -> str:
+    """Wrap POTA park references with tooltip markup.
+
+    POTA references follow format: XX-NNNN (2+ letters, dash, 4+ digits)
+    Examples: K-0001, US-12607, VE-0123, DL-0456
+    """
+    if not value:
+        return value
+    # Pattern matches POTA park references
+    pattern = r'\b([A-Z]{1,3}-\d{4,})\b'
+
+    def replace_pota(match):
+        ref = match.group(1)
+        return f'<span class="pota-ref" data-pota="{ref}">{ref}</span>'
+
+    result = re.sub(pattern, replace_pota, str(value))
+    return Markup(result)
+
+
+templates.env.filters["pota_tooltip"] = pota_tooltip
 
 # Admin key from environment
 ADMIN_KEY = config.ADMIN_KEY
@@ -631,6 +654,8 @@ async def get_match(request: Request, sport_id: int, match_id: int):
             "user": user,
             "match": match_dict,
             "target_display": target_display,
+            "target_type": sport["target_type"] if sport else None,
+            "target_value": match_dict["target_value"],
             "sport_name": sport["name"] if sport else "Unknown",
             "sport_id": sport_id,
             "medals": medals,
@@ -2591,6 +2616,140 @@ def require_api_auth(request: Request) -> User:
 async def api_health():
     """Health check endpoint."""
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+@app.get("/api/v1/park/{reference}")
+async def api_park_lookup(reference: str):
+    """Look up POTA park info with caching."""
+    import httpx
+    from datetime import timedelta
+
+    reference = reference.upper().strip()
+
+    # Check cache first (valid for 30 days)
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT name, location, grid, cached_at FROM pota_parks WHERE reference = ?",
+            (reference,)
+        )
+        cached = cursor.fetchone()
+
+        if cached:
+            cached_at = datetime.fromisoformat(cached["cached_at"])
+            if datetime.utcnow() - cached_at < timedelta(days=30):
+                return {
+                    "reference": reference,
+                    "name": cached["name"],
+                    "location": cached["location"],
+                    "grid": cached["grid"],
+                    "cached": True
+                }
+
+    # Fetch from POTA API
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"https://api.pota.app/park/{reference}",
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # POTA API returns empty/null for non-existent parks
+                if not data or not isinstance(data, dict):
+                    raise HTTPException(status_code=404, detail="Park not found")
+                name = data.get("name", "Unknown")
+                location = data.get("locationDesc", "")
+                grid = data.get("grid", "")
+
+                # Cache the result
+                with get_db() as conn:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO pota_parks (reference, name, location, grid, cached_at)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (reference, name, location, grid, datetime.utcnow().isoformat()))
+
+                return {
+                    "reference": reference,
+                    "name": name,
+                    "location": location,
+                    "grid": grid,
+                    "cached": False
+                }
+            else:
+                raise HTTPException(status_code=404, detail="Park not found")
+    except httpx.RequestError:
+        raise HTTPException(status_code=503, detail="Unable to reach POTA API")
+
+
+@app.get("/api/v1/spots")
+async def api_all_spots():
+    """Get all current POTA spots (returns list of park references with spots)."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.pota.app/spot/activator",
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                all_spots = response.json()
+                if not all_spots:
+                    return {"parks_with_spots": []}
+
+                # Get unique park references that have spots
+                parks_with_spots = list(set(
+                    spot.get("reference")
+                    for spot in all_spots
+                    if spot.get("reference")
+                ))
+
+                return {"parks_with_spots": parks_with_spots}
+            else:
+                return {"parks_with_spots": []}
+    except httpx.RequestError:
+        return {"parks_with_spots": []}
+
+
+@app.get("/api/v1/park/{reference}/spots")
+async def api_park_spots(reference: str):
+    """Get current POTA spots for a specific park."""
+    import httpx
+
+    reference = reference.upper().strip()
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.pota.app/spot/activator",
+                timeout=10.0
+            )
+            if response.status_code == 200:
+                all_spots = response.json()
+                if not all_spots:
+                    return {"spots": []}
+
+                # Filter spots for this park
+                park_spots = [
+                    {
+                        "activator": spot.get("activator"),
+                        "frequency": spot.get("frequency"),
+                        "mode": spot.get("mode"),
+                        "spotter": spot.get("spotter"),
+                        "spot_time": spot.get("spotTime"),
+                        "comments": spot.get("comments"),
+                        "qso_count": spot.get("count"),
+                        "expires_in": spot.get("expire")
+                    }
+                    for spot in all_spots
+                    if spot.get("reference") == reference
+                ]
+
+                return {"spots": park_spots, "reference": reference}
+            else:
+                return {"spots": [], "reference": reference}
+    except httpx.RequestError:
+        raise HTTPException(status_code=503, detail="Unable to reach POTA API")
 
 
 @app.get("/api/v1/me")

@@ -3,13 +3,87 @@
 {% block title %}{{ target_display }} - {{ sport_name }} - Ham Radio Olympics{% endblock %}
 
 {% block content %}
-<h2>{{ sport_name }}: {{ target_display }}</h2>
+<h2>{{ sport_name }}: {{ target_display | pota_tooltip }}</h2>
 
 <div class="card">
-    <p><strong>Target:</strong> {{ target_display }}</p>
+    <p><strong>Target:</strong> {{ target_display | pota_tooltip }}</p>
     <p><strong>Start:</strong> {{ match.start_date | format_datetime }}</p>
     <p><strong>End:</strong> {{ match.end_date | format_datetime }}</p>
 </div>
+
+{% if target_type == 'park' %}
+<h3>Live Spots at {{ target_value }}</h3>
+<div id="spots-container" class="card">
+    <p class="loading-text"><span class="loading-spinner"></span> Loading spots...</p>
+</div>
+
+<script>
+(function() {
+    async function loadSpots() {
+        const container = document.getElementById('spots-container');
+        try {
+            const resp = await fetch('/api/v1/park/{{ target_value }}/spots');
+            if (!resp.ok) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">Unable to load spots.</p>';
+                return;
+            }
+            const data = await resp.json();
+            if (!data.spots || data.spots.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-secondary);">No active spots at this park right now.</p>';
+                return;
+            }
+
+            let html = '<div class="table-responsive"><table><thead><tr>';
+            html += '<th>Activator</th><th>Frequency</th><th>Mode</th><th>QSOs</th><th>Spotted</th><th>Comments</th>';
+            html += '</tr></thead><tbody>';
+
+            for (const spot of data.spots) {
+                const spotTime = new Date(spot.spot_time + 'Z');
+                const timeAgo = formatTimeAgo(spotTime);
+                html += '<tr>';
+                html += '<td><strong>' + escapeHtml(spot.activator) + '</strong></td>';
+                html += '<td>' + escapeHtml(spot.frequency) + '</td>';
+                html += '<td>' + escapeHtml(spot.mode) + '</td>';
+                html += '<td>' + (spot.qso_count || 0) + '</td>';
+                html += '<td title="Spotted by ' + escapeHtml(spot.spotter || 'unknown') + '">' + timeAgo + '</td>';
+                html += '<td style="color: var(--text-secondary);">' + escapeHtml(spot.comments || '') + '</td>';
+                html += '</tr>';
+            }
+            html += '</tbody></table></div>';
+            html += '<p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 10px;">Data from <a href="https://pota.app/" target="_blank">pota.app</a>. Auto-refreshes every 60 seconds.</p>';
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = '<p style="color: var(--text-secondary);">Unable to load spots.</p>';
+        }
+    }
+
+    function formatTimeAgo(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) return 'just now';
+        if (diffMins === 1) return '1 min ago';
+        if (diffMins < 60) return diffMins + ' mins ago';
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours === 1) return '1 hour ago';
+        return diffHours + ' hours ago';
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Load spots immediately
+    loadSpots();
+
+    // Refresh every 60 seconds
+    setInterval(loadSpots, 60000);
+})();
+</script>
+{% endif %}
 
 {% if medals %}
 <h3>Leaderboard</h3>

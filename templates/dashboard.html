@@ -43,14 +43,14 @@
         <strong>Sync QSOs:</strong>
         <div style="display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap;">
             {% if user.has_qrz_key %}
-            <button onclick="syncQrzStored()" id="sync-qrz-btn" class="btn">Sync from QRZ</button>
+            <button onclick="syncQrzStored()" id="sync-qrz-btn" class="btn"><span class="icon">🔄</span> Sync from QRZ</button>
             {% else %}
-            <button onclick="showQrzModal()" id="sync-qrz-btn" class="btn">Sync from QRZ</button>
+            <button onclick="showQrzModal()" id="sync-qrz-btn" class="btn"><span class="icon">🔄</span> Sync from QRZ</button>
             {% endif %}
             {% if user.has_lotw_creds %}
-            <button onclick="syncLotwStored()" id="sync-lotw-btn" class="btn" style="background: #805ad5;">Sync from LoTW</button>
+            <button onclick="syncLotwStored()" id="sync-lotw-btn" class="btn btn-purple"><span class="icon">🔄</span> Sync from LoTW</button>
             {% else %}
-            <button onclick="showLotwModal()" id="sync-lotw-btn" class="btn" style="background: #805ad5;">Sync from LoTW</button>
+            <button onclick="showLotwModal()" id="sync-lotw-btn" class="btn btn-purple"><span class="icon">🔄</span> Sync from LoTW</button>
             {% endif %}
         </div>
         <p style="margin-top: 10px; font-size: 0.9em; color: #718096;">
@@ -68,8 +68,8 @@
                 <input type="text" id="qrz-api-key" placeholder="XXXX-XXXX-XXXX-XXXX">
             </div>
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button onclick="syncQrz()" id="qrz-submit-btn" class="btn" style="flex: 1;">Sync</button>
-                <button onclick="hideQrzModal()" class="btn" style="flex: 1; background: #718096;">Cancel</button>
+                <button onclick="syncQrz()" id="qrz-submit-btn" class="btn btn-success" style="flex: 1;"><span class="icon">🔄</span> Sync</button>
+                <button onclick="hideQrzModal()" class="btn btn-secondary" style="flex: 1;"><span class="icon">✕</span> Cancel</button>
             </div>
             <div id="qrz-result" style="margin-top: 10px;"></div>
         </div>
@@ -89,8 +89,8 @@
                 <input type="password" id="lotw-password" placeholder="Your LoTW password">
             </div>
             <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button onclick="syncLotw()" id="lotw-submit-btn" class="btn" style="flex: 1;">Sync</button>
-                <button onclick="hideLotwModal()" class="btn" style="flex: 1; background: #718096;">Cancel</button>
+                <button onclick="syncLotw()" id="lotw-submit-btn" class="btn btn-success" style="flex: 1;"><span class="icon">🔄</span> Sync</button>
+                <button onclick="hideLotwModal()" class="btn btn-secondary" style="flex: 1;"><span class="icon">✕</span> Cancel</button>
             </div>
             <div id="lotw-result" style="margin-top: 10px;"></div>
         </div>
@@ -328,7 +328,7 @@
         {% for medal in medals[:10] %}
         <tr>
             <td>{{ medal.sport_name }}</td>
-            <td>{{ medal.target_display }}</td>
+            <td>{{ medal.target_display | pota_tooltip }}</td>
             <td>
                 {% if medal.qso_race_medal %}
                     <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
@@ -376,7 +376,7 @@
                     <strong>{{ qso.dx_callsign }}</strong>
                 </span>
                 {% if qso.dx_sig_info or qso.my_sig_info %}
-                <span class="pota-badge" title="{{ qso.dx_sig_info or qso.my_sig_info }}">🏕️</span>
+                <span class="pota-badge">🏕️ {{ (qso.dx_sig_info or qso.my_sig_info) | pota_tooltip }}</span>
                 {% endif %}
             </td>
             <td>{{ qso.band or '-' }}</td>

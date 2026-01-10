@@ -29,10 +29,12 @@
                 {% if sport.separate_pools %} (separate){% endif %}
             </td>
             <td>
-                <a href="/admin/sport/{{ sport.id }}/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Competitors</a>
-                <a href="/admin/sport/{{ sport.id }}/matches?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Matches</a>
-                <button onclick="editSport({{ sport.id }}, '{{ sport.name }}', '{{ sport.description or '' }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn">Edit</button>
-                <button onclick="deleteSport({{ sport.id }})" class="btn btn-danger">Delete</button>
+                <div class="btn-group">
+                    <a href="/admin/sport/{{ sport.id }}/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Competitors"><span class="icon">👥</span></a>
+                    <a href="/admin/sport/{{ sport.id }}/matches?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon btn-info" title="Matches"><span class="icon">📅</span></a>
+                    <button onclick="editSport({{ sport.id }}, '{{ sport.name }}', '{{ sport.description or '' }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button onclick="deleteSport({{ sport.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -73,8 +75,10 @@
         <div class="form-group">
             <label><input type="checkbox" id="separate_pools"> Separate Pools (per-role medals)</label>
         </div>
-        <button type="submit" class="btn" id="submit-btn">Create Sport</button>
-        <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn" style="background: #718096; display: none;">Cancel</button>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Sport</button>
+            <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn btn-secondary" style="display: none;"><span class="icon">✕</span> Cancel</button>
+        </div>
     </form>
     <div id="sport-result"></div>
 </div>
@@ -94,8 +98,8 @@ function editSport(id, name, description, targetType, workEnabled, activateEnabl
     document.getElementById('activate_enabled').checked = activateEnabled;
     document.getElementById('separate_pools').checked = separatePools;
     document.getElementById('form-title').textContent = 'Edit Sport';
-    document.getElementById('submit-btn').textContent = 'Save';
-    document.getElementById('cancel-btn').style.display = 'inline-block';
+    document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
+    document.getElementById('cancel-btn').style.display = 'inline-flex';
 }
 
 function cancelEdit() {
@@ -108,7 +112,7 @@ function cancelEdit() {
     document.getElementById('activate_enabled').checked = false;
     document.getElementById('separate_pools').checked = false;
     document.getElementById('form-title').textContent = 'Create Sport';
-    document.getElementById('submit-btn').textContent = 'Create Sport';
+    document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Sport';
     document.getElementById('cancel-btn').style.display = 'none';
 }
 

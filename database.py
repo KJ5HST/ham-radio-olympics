@@ -428,6 +428,15 @@ def init_db():
                 updated_at TEXT NOT NULL
             );
 
+            -- POTA park cache table
+            CREATE TABLE IF NOT EXISTS pota_parks (
+                reference TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                location TEXT,
+                grid TEXT,
+                cached_at TEXT NOT NULL
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);

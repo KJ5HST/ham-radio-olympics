@@ -52,14 +52,16 @@
             <td>{{ olympiad.qualifying_qsos }} QSOs</td>
             <td>{% if olympiad.is_active %}<span style="color: green;">Active</span>{% else %}Inactive{% endif %}</td>
             <td>
-                <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Sports</a>
-                <button onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn">Edit</button>
-                {% if olympiad.is_active %}
-                <button onclick="deactivateOlympiad({{ olympiad.id }})" class="btn" style="background: #d69e2e;">Pause</button>
-                {% else %}
-                <button onclick="activateOlympiad({{ olympiad.id }})" class="btn" style="background: #38a169;">Activate</button>
-                {% endif %}
-                <button onclick="deleteOlympiad({{ olympiad.id }})" class="btn btn-danger">Delete</button>
+                <div class="btn-group">
+                    <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Sports"><span class="icon">🏅</span></a>
+                    <button onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    {% if olympiad.is_active %}
+                    <button onclick="deactivateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-warning" title="Pause"><span class="icon">⏸️</span></button>
+                    {% else %}
+                    <button onclick="activateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-success" title="Activate"><span class="icon">▶️</span></button>
+                    {% endif %}
+                    <button onclick="deleteOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -89,8 +91,10 @@
             <label for="qualifying_qsos">Qualifying QSOs (0 = no minimum)</label>
             <input type="number" id="qualifying_qsos" value="0" min="0">
         </div>
-        <button type="submit" class="btn" id="submit-btn">Create Olympiad</button>
-        <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn" style="background: #718096; display: none;">Cancel</button>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Olympiad</button>
+            <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn btn-secondary" style="display: none;"><span class="icon">✕</span> Cancel</button>
+        </div>
     </form>
     <div id="olympiad-result"></div>
 </div>
@@ -107,8 +111,8 @@ function editOlympiad(id, name, startDate, endDate, qualifyingQsos) {
     document.getElementById('end_date').value = endDate;
     document.getElementById('qualifying_qsos').value = qualifyingQsos;
     document.getElementById('form-title').textContent = 'Edit Olympiad';
-    document.getElementById('submit-btn').textContent = 'Save';
-    document.getElementById('cancel-btn').style.display = 'inline-block';
+    document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
+    document.getElementById('cancel-btn').style.display = 'inline-flex';
 }
 
 function cancelEdit() {
@@ -119,7 +123,7 @@ function cancelEdit() {
     document.getElementById('end_date').value = '';
     document.getElementById('qualifying_qsos').value = '0';
     document.getElementById('form-title').textContent = 'Create Olympiad';
-    document.getElementById('submit-btn').textContent = 'Create Olympiad';
+    document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Olympiad';
     document.getElementById('cancel-btn').style.display = 'none';
 }
 

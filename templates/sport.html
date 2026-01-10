@@ -23,10 +23,10 @@
     {% if user %}
     <div style="margin-top: 10px;">
         {% if is_entered %}
-        <span style="color: #38a169; font-weight: bold;">You are entered in this sport</span>
-        <button onclick="leaveSport()" class="btn btn-danger" style="margin-left: 10px;">Leave Sport</button>
+        <span style="color: #38a169; font-weight: bold;">✓ You are entered in this sport</span>
+        <button onclick="leaveSport()" class="btn btn-danger" style="margin-left: 10px;"><span class="icon">🚪</span> Leave Sport</button>
         {% else %}
-        <button onclick="enterSport()" class="btn" style="background: #38a169;">Participate</button>
+        <button onclick="enterSport()" class="btn btn-success"><span class="icon">🏅</span> Participate</button>
         {% endif %}
     </div>
     {% endif %}
@@ -87,6 +87,11 @@ async function leaveSport() {
 
 {% if matches %}
 <h3>Matches</h3>
+{% if sport.target_type == 'park' %}
+<p id="spots-summary" style="margin-bottom: 15px; color: var(--text-secondary);">
+    <span class="loading-spinner" style="vertical-align: middle;"></span> Checking for active spots...
+</p>
+{% endif %}
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -99,14 +104,65 @@ async function leaveSport() {
     <tbody>
         {% for match in matches %}
         <tr>
-            <td><strong>{{ match.target_display }}</strong></td>
+            <td>
+                <strong>{{ match.target_display | pota_tooltip }}</strong>
+                {% if sport.target_type == 'park' %}
+                <span class="live-indicator" data-park="{{ match.target_value }}" style="display: none;" title="Active on air now!">📡</span>
+                {% endif %}
+            </td>
             <td>{{ match.start_date | format_date }}</td>
             <td>{{ match.end_date | format_date }}</td>
-            <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn">View</a></td>
+            <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn btn-sm"><span class="icon">👁️</span> View</a></td>
         </tr>
         {% endfor %}
     </tbody>
 </table></div>
+
+{% if sport.target_type == 'park' %}
+<script>
+(function() {
+    async function updateLiveIndicators() {
+        try {
+            const resp = await fetch('/api/v1/spots');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const activeParks = new Set(data.parks_with_spots || []);
+
+            let activeCount = 0;
+            document.querySelectorAll('.live-indicator[data-park]').forEach(el => {
+                const park = el.getAttribute('data-park');
+                if (activeParks.has(park)) {
+                    el.style.display = 'inline';
+                    activeCount++;
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+
+            // Update summary message
+            const summary = document.getElementById('spots-summary');
+            if (summary) {
+                if (activeCount > 0) {
+                    summary.innerHTML = '<span class="live-indicator">📡</span> ' + activeCount + ' of {{ matches|length }} parks have activators on the air right now';
+                    summary.style.color = 'var(--text-primary)';
+                } else {
+                    summary.innerHTML = 'No parks reporting spots right now';
+                    summary.style.color = 'var(--text-secondary)';
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load spots:', e);
+        }
+    }
+
+    // Load immediately
+    updateLiveIndicators();
+
+    // Refresh every 60 seconds
+    setInterval(updateLiveIndicators, 60000);
+})();
+</script>
+{% endif %}
 {% else %}
 <div class="card">
     <p>No matches scheduled yet.</p>

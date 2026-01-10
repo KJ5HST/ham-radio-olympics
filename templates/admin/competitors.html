@@ -46,49 +46,51 @@
             </td>
             <td>{{ c.registered_at | format_date }}</td>
             <td>
-                <a href="/competitor/{{ c.callsign }}" class="btn">View</a>
+                <div class="btn-group">
+                    <a href="/competitor/{{ c.callsign }}" class="btn btn-sm btn-icon" title="View"><span class="icon">👤</span></a>
 
-                <!-- Role Management Dropdown -->
-                <div style="display: inline-block; position: relative;">
-                    <button onclick="toggleDropdown('role-{{ c.callsign }}')" class="btn" style="background: #4a5568;">Role</button>
-                    <div id="role-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; z-index: 100; min-width: 150px;">
-                        {% if not c.is_admin %}
-                        <button onclick="setAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Make Admin</button>
-                        {% else %}
-                        <button onclick="removeAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Remove Admin</button>
-                        {% endif %}
-                        {% if not c.is_referee %}
-                        <button onclick="setReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Make Referee</button>
-                        {% else %}
-                        <button onclick="removeReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: none; cursor: pointer;">Remove Referee</button>
-                        {% endif %}
+                    <!-- Role Management Dropdown -->
+                    <div style="display: inline-block; position: relative;">
+                        <button onclick="toggleDropdown('role-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-secondary" title="Role"><span class="icon">🎭</span></button>
+                        <div id="role-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; z-index: 100; min-width: 150px;">
+                            {% if not c.is_admin %}
+                            <button onclick="setAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: none; cursor: pointer; color: var(--text-primary);">👑 Make Admin</button>
+                            {% else %}
+                            <button onclick="removeAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: none; cursor: pointer; color: var(--text-primary);">Remove Admin</button>
+                            {% endif %}
+                            {% if not c.is_referee %}
+                            <button onclick="setReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: none; cursor: pointer; color: var(--text-primary);">🏁 Make Referee</button>
+                            {% else %}
+                            <button onclick="removeReferee('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: none; cursor: pointer; color: var(--text-primary);">Remove Referee</button>
+                            {% endif %}
+                        </div>
                     </div>
-                </div>
 
-                {% if c.is_referee %}
-                <!-- Sport Assignment Dropdown -->
-                <div style="display: inline-block; position: relative;">
-                    <button onclick="toggleDropdown('assign-{{ c.callsign }}')" class="btn" style="background: #805ad5;">Assign</button>
-                    <div id="assign-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: white; border: 1px solid #ccc; border-radius: 4px; padding: 5px; z-index: 100; min-width: 200px; max-height: 300px; overflow-y: auto;">
-                        {% for sport in all_sports %}
-                        {% set is_assigned = sport.id in (c.assigned_sports | map(attribute='id') | list) %}
-                        <button onclick="{% if is_assigned %}unassignSport('{{ c.callsign }}', {{ sport.id }}){% else %}assignSport('{{ c.callsign }}', {{ sport.id }}){% endif %}"
-                                style="display: block; width: 100%; text-align: left; padding: 5px; border: none; background: {% if is_assigned %}#e8f4e8{% else %}none{% endif %}; cursor: pointer;">
-                            {% if is_assigned %}✓ {% endif %}{{ sport.name }} ({{ sport.olympiad_name }})
-                        </button>
-                        {% endfor %}
+                    {% if c.is_referee %}
+                    <!-- Sport Assignment Dropdown -->
+                    <div style="display: inline-block; position: relative;">
+                        <button onclick="toggleDropdown('assign-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Assign Sports"><span class="icon">📋</span></button>
+                        <div id="assign-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; z-index: 100; min-width: 200px; max-height: 300px; overflow-y: auto;">
+                            {% for sport in all_sports %}
+                            {% set is_assigned = sport.id in (c.assigned_sports | map(attribute='id') | list) %}
+                            <button onclick="{% if is_assigned %}unassignSport('{{ c.callsign }}', {{ sport.id }}){% else %}assignSport('{{ c.callsign }}', {{ sport.id }}){% endif %}"
+                                    style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: {% if is_assigned %}var(--bg-card){% else %}none{% endif %}; cursor: pointer; color: var(--text-primary);">
+                                {% if is_assigned %}✓ {% endif %}{{ sport.name }} ({{ sport.olympiad_name }})
+                            </button>
+                            {% endfor %}
+                        </div>
                     </div>
-                </div>
-                {% endif %}
+                    {% endif %}
 
-                {% if c.is_disabled %}
-                <button onclick="enableCompetitor('{{ c.callsign }}')" class="btn" style="background: #38a169;">Enable</button>
-                {% else %}
-                <button onclick="disableCompetitor('{{ c.callsign }}')" class="btn" style="background: #d69e2e;">Disable</button>
-                <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn" style="background: #805ad5;">Disqualify</button>
-                {% endif %}
-                <button onclick="resetPassword('{{ c.callsign }}')" class="btn" style="background: #3182ce;">Reset PW</button>
-                <button onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-danger">Delete</button>
+                    {% if c.is_disabled %}
+                    <button onclick="enableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-success" title="Enable"><span class="icon">✓</span></button>
+                    {% else %}
+                    <button onclick="disableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-warning" title="Disable"><span class="icon">⏸️</span></button>
+                    <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Disqualify"><span class="icon">🚫</span></button>
+                    {% endif %}
+                    <button onclick="resetPassword('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-info" title="Reset Password"><span class="icon">🔑</span></button>
+                    <button onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                </div>
             </td>
         </tr>
         {% endfor %}

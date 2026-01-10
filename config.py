@@ -7,6 +7,26 @@ All configurable values are loaded from environment variables with sensible defa
 import os
 
 
+def _require_env(name: str, test_default: str) -> str:
+    """
+    Get a required environment variable.
+
+    In testing mode, returns a test default. In production, raises an error if not set.
+    """
+    value = os.getenv(name)
+    if value:
+        return value
+
+    # Allow test defaults only in testing mode
+    if os.getenv("TESTING"):
+        return test_default
+
+    raise ValueError(
+        f"Required environment variable {name} is not set. "
+        f"Set {name} in your environment or Fly.io secrets."
+    )
+
+
 class Config:
     """Application configuration loaded from environment variables."""
 
@@ -18,9 +38,9 @@ class Config:
     SESSION_COOKIE_NAME: str = "hro_session"
     CSRF_COOKIE_NAME: str = "hro_csrf"
 
-    # Security
-    ADMIN_KEY: str = os.getenv("ADMIN_KEY", "admin-secret-change-me")
-    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+    # Security - these are required in production
+    ADMIN_KEY: str = _require_env("ADMIN_KEY", "test-admin-key")
+    ENCRYPTION_KEY: str = _require_env("ENCRYPTION_KEY", "test-encryption-key")
     BCRYPT_ROUNDS: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
     # Account lockout
