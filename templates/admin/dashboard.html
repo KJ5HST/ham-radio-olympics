@@ -26,6 +26,10 @@
         <div class="value">💾</div>
         <div class="label">Backup DB</div>
     </a>
+    <div class="stat-box" style="cursor: pointer;" onclick="recomputeRecords()">
+        <div class="value">🏆</div>
+        <div class="label">Recompute Records</div>
+    </div>
 </div>
 
 <h3>Olympiads</h3>
@@ -171,6 +175,21 @@ async function deleteOlympiad(id) {
     if (!confirm('Delete this Olympiad? This cannot be undone.')) return;
     await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
     location.reload();
+}
+
+async function recomputeRecords() {
+    if (!confirm('Recompute all world records? This will recalculate records from match-qualifying QSOs.')) return;
+    try {
+        const resp = await fetch('/admin/recompute-records?admin_key=' + adminKey, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+        } else {
+            showToast('Error: ' + data.detail, 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
 }
 </script>
 {% endblock %}

@@ -2565,6 +2565,16 @@ async def clear_qrz_settings(_: bool = Depends(verify_admin)):
     return {"message": "QRZ credentials cleared"}
 
 
+@app.post("/admin/recompute-records")
+async def admin_recompute_records(_: bool = Depends(verify_admin)):
+    """Recompute all world records from match-qualifying QSOs."""
+    from scoring import recompute_all_records
+
+    recompute_all_records()
+
+    return {"message": "World records recomputed successfully"}
+
+
 # ============================================================
 # API v1 ENDPOINTS
 # ============================================================
