@@ -2491,6 +2491,191 @@ class TestUserSettings:
         assert response.status_code == 303
         assert "updated=qrz" in response.headers["location"]
 
+    def test_remove_qrz_key(self, logged_in_client):
+        """Test removing QRZ API key."""
+        response = logged_in_client.delete("/settings/qrz-key")
+        assert response.status_code == 200
+        assert response.json()["message"] == "QRZ API key removed"
+
+        # Verify key was removed
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT qrz_api_key_encrypted FROM competitors WHERE callsign = ?",
+                ("W1SET",)
+            )
+            row = cursor.fetchone()
+            assert row["qrz_api_key_encrypted"] is None
+
+    def test_update_lotw_credentials(self, logged_in_client):
+        """Test updating LoTW credentials."""
+        response = logged_in_client.post("/settings/lotw",
+            data={
+                "lotw_username": "W1SET",
+                "lotw_password": "lotwpass123"
+            },
+            follow_redirects=False)
+        assert response.status_code == 303
+        assert "updated=lotw" in response.headers["location"]
+
+        # Verify credentials were stored
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT lotw_username_encrypted, lotw_password_encrypted FROM competitors WHERE callsign = ?",
+                ("W1SET",)
+            )
+            row = cursor.fetchone()
+            assert row["lotw_username_encrypted"] is not None
+            assert row["lotw_password_encrypted"] is not None
+
+    def test_remove_lotw_credentials(self, logged_in_client):
+        """Test removing LoTW credentials."""
+        # First add credentials
+        logged_in_client.post("/settings/lotw",
+            data={
+                "lotw_username": "W1SET",
+                "lotw_password": "lotwpass123"
+            })
+
+        # Then remove them
+        response = logged_in_client.delete("/settings/lotw")
+        assert response.status_code == 200
+        assert response.json()["message"] == "LoTW credentials removed"
+
+        # Verify credentials were removed
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT lotw_username_encrypted, lotw_password_encrypted FROM competitors WHERE callsign = ?",
+                ("W1SET",)
+            )
+            row = cursor.fetchone()
+            assert row["lotw_username_encrypted"] is None
+            assert row["lotw_password_encrypted"] is None
+
+    def test_remove_qrz_key_requires_auth(self, client):
+        """Test removing QRZ key requires authentication."""
+        response = client.delete("/settings/qrz-key")
+        assert response.status_code == 401
+
+    def test_update_lotw_requires_auth(self, client):
+        """Test updating LoTW credentials requires authentication."""
+        response = client.post("/settings/lotw",
+            data={"lotw_username": "test", "lotw_password": "test"})
+        assert response.status_code == 401
+
+    def test_remove_lotw_requires_auth(self, client):
+        """Test removing LoTW credentials requires authentication."""
+        response = client.delete("/settings/lotw")
+        assert response.status_code == 401
+
+
+class TestSyncEndpoints:
+    """Test sync endpoints with provided credentials."""
+
+    @pytest.fixture
+    def logged_in_client(self, client):
+        """Create a logged-in client."""
+        client.post("/signup", json={
+            "callsign": "W1SYNC",
+            "password": "password123",
+            "qrz_api_key": "test-api-key"
+        })
+        return client
+
+    def test_sync_qrz_with_key_requires_auth(self, client):
+        """Test QRZ sync with key requires authentication."""
+        response = client.post("/sync/qrz", json={"api_key": "test-key"})
+        assert response.status_code == 401
+
+    def test_sync_qrz_with_key(self, logged_in_client):
+        """Test QRZ sync with provided API key."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_with_key', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"callsign": "W1SYNC", "new_qsos": 5, "updated_qsos": 0}
+
+            response = logged_in_client.post("/sync/qrz",
+                json={"api_key": "provided-api-key"})
+
+            assert response.status_code == 200
+            assert response.json()["new_qsos"] == 5
+            mock_sync.assert_called_once_with("W1SYNC", "provided-api-key")
+
+    def test_sync_qrz_with_key_error(self, logged_in_client):
+        """Test QRZ sync returns error on failure."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_with_key', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"error": "Invalid API key"}
+
+            response = logged_in_client.post("/sync/qrz",
+                json={"api_key": "bad-key"})
+
+            assert response.status_code == 400
+            assert "Invalid API key" in response.json()["detail"]
+
+    def test_sync_lotw_requires_auth(self, client):
+        """Test LoTW sync requires authentication."""
+        response = client.post("/sync/lotw",
+            json={"username": "test", "password": "test"})
+        assert response.status_code == 401
+
+    def test_sync_lotw_with_credentials(self, logged_in_client):
+        """Test LoTW sync with provided credentials."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"callsign": "W1SYNC", "new_qsos": 3, "updated_qsos": 1}
+
+            response = logged_in_client.post("/sync/lotw",
+                json={"username": "W1SYNC", "password": "lotwpass"})
+
+            assert response.status_code == 200
+            assert response.json()["new_qsos"] == 3
+            mock_sync.assert_called_once_with("W1SYNC", "W1SYNC", "lotwpass")
+
+    def test_sync_lotw_error(self, logged_in_client):
+        """Test LoTW sync returns error on failure."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"error": "Authentication failed"}
+
+            response = logged_in_client.post("/sync/lotw",
+                json={"username": "W1SYNC", "password": "wrongpass"})
+
+            assert response.status_code == 400
+            assert "Authentication failed" in response.json()["detail"]
+
+    def test_sync_lotw_stored_requires_auth(self, client):
+        """Test LoTW stored sync requires authentication."""
+        response = client.post("/sync/lotw/stored")
+        assert response.status_code == 401
+
+    def test_sync_lotw_stored(self, logged_in_client):
+        """Test LoTW sync with stored credentials."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_lotw_stored', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"callsign": "W1SYNC", "new_qsos": 2, "updated_qsos": 0}
+
+            response = logged_in_client.post("/sync/lotw/stored")
+
+            assert response.status_code == 200
+            assert response.json()["new_qsos"] == 2
+            mock_sync.assert_called_once_with("W1SYNC")
+
+    def test_sync_lotw_stored_no_credentials(self, logged_in_client):
+        """Test LoTW stored sync returns error when no credentials stored."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.sync_competitor_lotw_stored', new_callable=AsyncMock) as mock_sync:
+            mock_sync.return_value = {"error": "LoTW credentials not configured"}
+
+            response = logged_in_client.post("/sync/lotw/stored")
+
+            assert response.status_code == 400
+            assert "not configured" in response.json()["detail"]
+
 
 class TestBackgroundSync:
     """Test background sync functionality."""
