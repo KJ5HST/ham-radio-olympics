@@ -82,12 +82,6 @@ async def sync_competitor(callsign: str) -> dict:
         except Exception as e:
             return {"error": f"Failed to decrypt API key: {e}"}
 
-    # Try to populate name if not set
-    try:
-        await populate_competitor_name(callsign)
-    except Exception:
-        pass  # Non-critical, continue with sync
-
     # Use the shared sync function with the decrypted key
     return await sync_competitor_with_key(callsign, api_key)
 
@@ -103,6 +97,12 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     Returns:
         dict with sync results
     """
+    # Try to populate name if not set
+    try:
+        await populate_competitor_name(callsign)
+    except Exception:
+        pass  # Non-critical, continue with sync
+
     # Fetch QSOs from QRZ
     try:
         qsos = await fetch_qsos(api_key, confirmed_only=False)
@@ -185,6 +185,12 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     Returns:
         dict with sync results
     """
+    # Try to populate name if not set
+    try:
+        await populate_competitor_name(callsign)
+    except Exception:
+        pass  # Non-critical, continue with sync
+
     with get_db() as conn:
         # Verify competitor exists
         cursor = conn.execute(
