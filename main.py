@@ -434,6 +434,18 @@ def require_user(request: Request) -> User:
     return user
 
 
+def get_client_ip(request: Request) -> Optional[str]:
+    """Get real client IP, handling proxy headers from Fly.io."""
+    # Check X-Forwarded-For header (set by Fly.io proxy)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+        # The first one is the original client
+        return forwarded_for.split(",")[0].strip()
+    # Fall back to direct client IP
+    return request.client.host if request.client else None
+
+
 # ============================================================
 # PUBLIC ENDPOINTS
 # ============================================================
@@ -1003,7 +1015,7 @@ async def login(request: Request, login_data: UserLogin, background_tasks: Backg
         actor_callsign=login_data.callsign.upper(),
         action="login",
         details="Successful login",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     # Trigger background sync for the user's QSOs
@@ -1048,7 +1060,7 @@ async def logout(request: Request):
             actor_callsign=user.callsign,
             action="logout",
             details="User logged out",
-            ip_address=request.client.host if request.client else None
+            ip_address=get_client_ip(request)
         )
 
     response = RedirectResponse(url="/signup", status_code=303)
@@ -1424,7 +1436,7 @@ async def change_password(
         actor_callsign=user.callsign,
         action="password_change",
         details="Password changed via settings",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     return RedirectResponse(url="/settings?updated=password", status_code=303)
@@ -1646,7 +1658,7 @@ async def admin_backup(request: Request, _: bool = Depends(verify_admin)):
         actor_callsign=user.callsign if user else "unknown",
         action="database_backup",
         details="Database backup downloaded",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     # Generate filename with timestamp
@@ -1697,7 +1709,7 @@ async def bulk_disable_competitors(
         action="bulk_disable",
         target_type="competitors",
         details=f"Disabled {len(callsigns)} competitors: {', '.join(callsigns)}",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     return {"message": f"Disabled {len(callsigns)} competitors", "disabled": len(callsigns)}
@@ -1731,7 +1743,7 @@ async def bulk_enable_competitors(
         action="bulk_enable",
         target_type="competitors",
         details=f"Enabled {len(callsigns)} competitors: {', '.join(callsigns)}",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     return {"message": f"Enabled {len(callsigns)} competitors", "enabled": len(callsigns)}
@@ -2253,7 +2265,7 @@ async def disable_competitor(request: Request, callsign: str, _: bool = Depends(
         target_type="competitor",
         target_id=callsign,
         details=f"Competitor {callsign} disabled by admin",
-        ip_address=request.client.host if request.client else None
+        ip_address=get_client_ip(request)
     )
 
     return {"message": f"Competitor {callsign} disabled"}
