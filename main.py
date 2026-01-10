@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie
+from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, field_validator
@@ -937,7 +937,7 @@ async def login_page(request: Request):
 
 @app.post("/login")
 @limiter.limit("10/minute")
-async def login(request: Request, login_data: UserLogin):
+async def login(request: Request, login_data: UserLogin, background_tasks: BackgroundTasks):
     """Authenticate user and create session."""
     from audit import log_action
 
@@ -959,6 +959,11 @@ async def login(request: Request, login_data: UserLogin):
         details="Successful login",
         ip_address=request.client.host if request.client else None
     )
+
+    # Trigger background sync for the user's QSOs
+    callsign = login_data.callsign.upper()
+    background_tasks.add_task(sync_competitor, callsign)
+    background_tasks.add_task(sync_competitor_lotw_stored, callsign)
 
     response = RedirectResponse(url="/dashboard", status_code=303)
     response.set_cookie(
