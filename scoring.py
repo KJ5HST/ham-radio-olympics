@@ -524,3 +524,56 @@ def _update_record_if_better(
                 UPDATE records SET value = ?, qso_id = ?, achieved_at = ?
                 WHERE id = ?
             """, (value, qso_id, achieved_at, pb_record["id"]))
+
+
+def recompute_all_records():
+    """
+    Recompute all records from scratch using only QSOs that qualified for matches.
+
+    This clears existing records and rebuilds them based on QSOs that actually
+    matched a target during an active match period.
+    """
+    with get_db() as conn:
+        # Clear all existing records
+        conn.execute("DELETE FROM records")
+
+        # Get all matches with their sport config
+        cursor = conn.execute("""
+            SELECT m.id as match_id, m.start_date, m.end_date, m.target_value,
+                   s.id as sport_id, s.target_type, s.work_enabled, s.activate_enabled,
+                   s.separate_pools, o.qualifying_qsos
+            FROM matches m
+            JOIN sports s ON m.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+        """)
+        matches = [dict(row) for row in cursor.fetchall()]
+
+    # Process each match to find qualifying QSOs
+    seen_qsos = set()  # Track QSOs we've already processed for records
+
+    for match_data in matches:
+        start_date = datetime.fromisoformat(match_data["start_date"])
+        end_date = datetime.fromisoformat(match_data["end_date"])
+
+        sport_config = {
+            "target_type": match_data["target_type"],
+            "work_enabled": bool(match_data["work_enabled"]),
+            "activate_enabled": bool(match_data["activate_enabled"]),
+            "separate_pools": bool(match_data["separate_pools"]),
+        }
+
+        # Get matching QSOs for this match
+        matching = get_matching_qsos(
+            match_data["match_id"],
+            sport_config,
+            match_data["target_value"],
+            start_date,
+            end_date,
+            sport_id=match_data["sport_id"],
+        )
+
+        # Update records for each matching QSO (only once per QSO)
+        for qso in matching:
+            if qso.qso_id not in seen_qsos:
+                seen_qsos.add(qso.qso_id)
+                update_records(qso.qso_id, qso.callsign)
