@@ -1250,14 +1250,21 @@ async def change_password(
 ):
     """Change user password."""
     from audit import log_action
+    from urllib.parse import quote
 
     # Verify current password
     session_id = authenticate_user(user.callsign, current_password)
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if not session_id or session_id in ('disabled', 'locked'):
+        return RedirectResponse(
+            url="/settings?error=" + quote("Current password is incorrect"),
+            status_code=303
+        )
 
     if len(new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+        return RedirectResponse(
+            url="/settings?error=" + quote("New password must be at least 8 characters"),
+            status_code=303
+        )
 
     update_user_password(user.callsign, new_password)
 

@@ -2595,8 +2595,11 @@ class TestUserSettings:
             data={
                 "current_password": "wrongpassword",
                 "new_password": "newpassword456"
-            })
-        assert response.status_code == 400
+            },
+            follow_redirects=False)
+        assert response.status_code == 303
+        assert "error=" in response.headers["location"]
+        assert "incorrect" in response.headers["location"].lower()
 
     def test_change_password_too_short(self, logged_in_client):
         """Test changing password to short password."""
@@ -2604,8 +2607,11 @@ class TestUserSettings:
             data={
                 "current_password": "password123",
                 "new_password": "short"
-            })
-        assert response.status_code == 400
+            },
+            follow_redirects=False)
+        assert response.status_code == 303
+        assert "error=" in response.headers["location"]
+        assert "8" in response.headers["location"]  # "at least 8 characters"
 
     def test_update_qrz_key(self, logged_in_client):
         """Test updating QRZ API key."""

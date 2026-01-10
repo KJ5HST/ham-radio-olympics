@@ -20,6 +20,10 @@
 </div>
 {% endif %}
 
+{% if request.query_params.get('error') %}
+<div class="alert alert-error">{{ request.query_params.get('error') }}</div>
+{% endif %}
+
 <h3>Email Address</h3>
 <div class="card">
     <form action="/settings/email" method="post">
