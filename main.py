@@ -138,8 +138,12 @@ async def csrf_middleware(request: Request, call_next):
 
         # Only validate for form submissions, not JSON API calls
         if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
-            form = await request.form()
-            form_token = form.get("csrf_token")
+            # Read body and cache it for later use by the endpoint
+            body = await request.body()
+            # Parse form data manually to check CSRF token
+            from urllib.parse import parse_qs
+            form_data = parse_qs(body.decode())
+            form_token = form_data.get("csrf_token", [None])[0]
 
             if not form_token or form_token != csrf_token:
                 logger.warning(f"CSRF validation failed for {request.url.path}")
@@ -147,6 +151,12 @@ async def csrf_middleware(request: Request, call_next):
                     status_code=403,
                     content={"detail": "CSRF validation failed"}
                 )
+
+            # Create a new request with the cached body so endpoint can read it
+            async def receive():
+                return {"type": "http.request", "body": body}
+            request = Request(request.scope, receive)
+            request.state.csrf_token = csrf_token
 
     response = await call_next(request)
 
