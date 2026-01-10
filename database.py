@@ -392,6 +392,81 @@ def init_db():
         """)
 
 
+def backfill_records():
+    """
+    Backfill records table from existing QSOs.
+
+    This ensures personal bests and world records exist for QSOs
+    that were synced before the records feature was added.
+    Only runs if there are confirmed QSOs but no records.
+    """
+    with get_db() as conn:
+        # Check if backfill is needed
+        qso_count = conn.execute(
+            "SELECT COUNT(*) FROM qsos WHERE is_confirmed = 1 AND distance_km IS NOT NULL"
+        ).fetchone()[0]
+        record_count = conn.execute("SELECT COUNT(*) FROM records").fetchone()[0]
+
+        if qso_count == 0 or record_count > 0:
+            return  # No QSOs or records already exist
+
+        now = datetime.utcnow().isoformat()
+
+        # World record: longest distance
+        row = conn.execute("""
+            SELECT id, competitor_callsign, distance_km FROM qsos
+            WHERE distance_km IS NOT NULL AND is_confirmed = 1
+            ORDER BY distance_km DESC LIMIT 1
+        """).fetchone()
+        if row:
+            conn.execute("""
+                INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
+                VALUES (NULL, NULL, 'longest_distance', ?, ?, ?)
+            """, (row['distance_km'], row['id'], now))
+
+        # World record: highest cool factor
+        row = conn.execute("""
+            SELECT id, competitor_callsign, cool_factor FROM qsos
+            WHERE cool_factor IS NOT NULL AND is_confirmed = 1
+            ORDER BY cool_factor DESC LIMIT 1
+        """).fetchone()
+        if row:
+            conn.execute("""
+                INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
+                VALUES (NULL, NULL, 'highest_cool_factor', ?, ?, ?)
+            """, (row['cool_factor'], row['id'], now))
+
+        # Personal bests per competitor
+        callsigns = [r[0] for r in conn.execute(
+            "SELECT DISTINCT competitor_callsign FROM qsos WHERE is_confirmed = 1"
+        ).fetchall()]
+
+        for callsign in callsigns:
+            # Personal best distance
+            row = conn.execute("""
+                SELECT id, distance_km FROM qsos
+                WHERE competitor_callsign = ? AND distance_km IS NOT NULL AND is_confirmed = 1
+                ORDER BY distance_km DESC LIMIT 1
+            """, (callsign,)).fetchone()
+            if row:
+                conn.execute("""
+                    INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
+                    VALUES (NULL, ?, 'longest_distance', ?, ?, ?)
+                """, (callsign, row['distance_km'], row['id'], now))
+
+            # Personal best cool factor
+            row = conn.execute("""
+                SELECT id, cool_factor FROM qsos
+                WHERE competitor_callsign = ? AND cool_factor IS NOT NULL AND is_confirmed = 1
+                ORDER BY cool_factor DESC LIMIT 1
+            """, (callsign,)).fetchone()
+            if row:
+                conn.execute("""
+                    INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
+                    VALUES (NULL, ?, 'highest_cool_factor', ?, ?, ?)
+                """, (callsign, row['cool_factor'], row['id'], now))
+
+
 def reset_db():
     """Reset the database (for testing)."""
     db_path = _get_database_path()

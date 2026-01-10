@@ -70,9 +70,11 @@ async def background_sync():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown."""
+    from database import backfill_records
     global _sync_task
     init_db()
     seed_example_olympiad()  # Seeds example data on fresh deployments
+    backfill_records()  # Backfill records for existing QSOs if needed
     # Start background sync task
     _sync_task = asyncio.create_task(background_sync())
     yield
