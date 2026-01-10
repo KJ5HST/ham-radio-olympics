@@ -42,7 +42,7 @@
             <td>{{ record.dx_callsign or '-' }}</td>
             <td>
                 {% if record.match_id %}
-                    <a href="/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target_value }}</a>
+                    <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target_value }}</a>
                 {% else %}
                     -
                 {% endif %}
