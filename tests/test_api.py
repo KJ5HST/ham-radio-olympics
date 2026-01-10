@@ -172,6 +172,123 @@ class TestRegistration:
         assert response.status_code == 400
         assert "Invalid QRZ API key" in response.json()["detail"]
 
+    def test_signup_with_lotw_only(self, client):
+        """Test signup with LoTW credentials only (no QRZ key)."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.verify_lotw_credentials', new_callable=AsyncMock) as mock_verify:
+            with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+                mock_verify.return_value = True
+                mock_sync.return_value = {"synced": 0}
+
+                response = client.post("/signup", json={
+                    "callsign": "W1LTW",
+                    "password": "password123",
+                    "lotw_username": "W1LTW",
+                    "lotw_password": "lotwpass123"
+                })
+
+                assert response.status_code in [200, 303]
+                mock_verify.assert_called_once_with("W1LTW", "lotwpass123", "W1LTW")
+                mock_sync.assert_called_once_with("W1LTW", "W1LTW", "lotwpass123")
+
+    def test_signup_rejects_invalid_lotw_credentials(self, client):
+        """Test that signup fails when LoTW credential verification fails."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.verify_lotw_credentials', new_callable=AsyncMock) as mock_verify:
+            mock_verify.return_value = False
+
+            response = client.post("/signup", json={
+                "callsign": "W1LBAD",
+                "password": "password123",
+                "lotw_username": "W1LBAD",
+                "lotw_password": "wrongpass"
+            })
+
+            assert response.status_code == 400
+            assert "Invalid LoTW credentials" in response.json()["detail"]
+
+    def test_signup_with_lotw_succeeds_if_sync_fails(self, client):
+        """Test that signup succeeds even if LoTW sync fails."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.verify_lotw_credentials', new_callable=AsyncMock) as mock_verify:
+            with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+                mock_verify.return_value = True
+                mock_sync.side_effect = Exception("LoTW API error")
+
+                response = client.post("/signup", json={
+                    "callsign": "W1LERR",
+                    "password": "password123",
+                    "lotw_username": "W1LERR",
+                    "lotw_password": "lotwpass"
+                })
+
+                # Signup should still succeed
+                assert response.status_code in [200, 303]
+
+                # User should still be created
+                with get_db() as conn:
+                    cursor = conn.execute("SELECT callsign FROM competitors WHERE callsign = 'W1LERR'")
+                    assert cursor.fetchone() is not None
+
+    def test_signup_stores_lotw_credentials_when_requested(self, client):
+        """Test that LoTW credentials are stored when store_credentials is true."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.verify_lotw_credentials', new_callable=AsyncMock) as mock_verify:
+            with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+                mock_verify.return_value = True
+                mock_sync.return_value = {"synced": 0}
+
+                response = client.post("/signup", json={
+                    "callsign": "W1LST",
+                    "password": "password123",
+                    "lotw_username": "W1LST",
+                    "lotw_password": "lotwpass123",
+                    "store_credentials": True
+                })
+
+                assert response.status_code in [200, 303]
+
+                # Verify credentials were stored (encrypted)
+                with get_db() as conn:
+                    cursor = conn.execute(
+                        "SELECT lotw_username_encrypted, lotw_password_encrypted FROM competitors WHERE callsign = 'W1LST'"
+                    )
+                    row = cursor.fetchone()
+                    assert row["lotw_username_encrypted"] is not None
+                    assert row["lotw_password_encrypted"] is not None
+
+    def test_signup_does_not_store_lotw_credentials_when_not_requested(self, client):
+        """Test that LoTW credentials are not stored when store_credentials is false."""
+        from unittest.mock import patch, AsyncMock
+
+        with patch('main.verify_lotw_credentials', new_callable=AsyncMock) as mock_verify:
+            with patch('main.sync_competitor_lotw', new_callable=AsyncMock) as mock_sync:
+                mock_verify.return_value = True
+                mock_sync.return_value = {"synced": 0}
+
+                response = client.post("/signup", json={
+                    "callsign": "W1LNS",
+                    "password": "password123",
+                    "lotw_username": "W1LNS",
+                    "lotw_password": "lotwpass123",
+                    "store_credentials": False
+                })
+
+                assert response.status_code in [200, 303]
+
+                # Verify credentials were NOT stored
+                with get_db() as conn:
+                    cursor = conn.execute(
+                        "SELECT lotw_username_encrypted, lotw_password_encrypted FROM competitors WHERE callsign = 'W1LNS'"
+                    )
+                    row = cursor.fetchone()
+                    assert row["lotw_username_encrypted"] is None
+                    assert row["lotw_password_encrypted"] is None
+
 
 class TestCallsignValidation:
     """Test callsign format validation."""
