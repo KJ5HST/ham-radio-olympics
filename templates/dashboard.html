@@ -351,8 +351,7 @@
 </table></div>
 {% endif %}
 
-{% if is_own_profile %}
-<h3>QSO Log</h3>
+<h3>{% if is_own_profile %}QSO Log{% else %}QSOs{% endif %}</h3>
 <div class="card" style="margin-bottom: 15px;">
     <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
         <div class="form-group" style="margin-bottom: 0;">
@@ -384,18 +383,17 @@
         <div class="btn-group">
             <button type="submit" class="btn"><span class="icon">🔍</span> Filter</button>
             {% if request.query_params.get('band') or request.query_params.get('mode') or request.query_params.get('confirmed') %}
-            <a href="/dashboard" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+            <a href="{{ request.url.path }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
             {% endif %}
         </div>
+        {% if is_own_profile %}
         <div class="btn-group" style="margin-left: auto;">
             <a href="/export/qsos" class="btn btn-info"><span class="icon">📥</span> Export QSOs</a>
             <a href="/export/medals" class="btn btn-info"><span class="icon">📥</span> Export Medals</a>
         </div>
+        {% endif %}
     </form>
 </div>
-{% else %}
-<h3>Recent QSOs</h3>
-{% endif %}
 
 {% if qsos %}
 <div class="table-responsive"><table>
@@ -435,11 +433,12 @@
     </tbody>
 </table></div>
 
-{% if is_own_profile and pagination and pagination.total_pages > 1 %}
+{% if pagination %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px;">
     <span style="color: var(--text-secondary);">
         Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}-{{ [pagination.page * pagination.per_page, pagination.total_items] | min }} of {{ pagination.total_items }} QSOs
     </span>
+    {% if pagination.total_pages > 1 %}
     <div class="btn-group">
         {% if pagination.page > 1 %}
         <a href="?{% if request.query_params.get('band') %}band={{ request.query_params.get('band') }}&{% endif %}{% if request.query_params.get('mode') %}mode={{ request.query_params.get('mode') }}&{% endif %}{% if request.query_params.get('confirmed') %}confirmed={{ request.query_params.get('confirmed') }}&{% endif %}page={{ pagination.page - 1 }}" class="btn btn-sm btn-secondary">&larr; Prev</a>
@@ -449,6 +448,7 @@
         <a href="?{% if request.query_params.get('band') %}band={{ request.query_params.get('band') }}&{% endif %}{% if request.query_params.get('mode') %}mode={{ request.query_params.get('mode') }}&{% endif %}{% if request.query_params.get('confirmed') %}confirmed={{ request.query_params.get('confirmed') }}&{% endif %}page={{ pagination.page + 1 }}" class="btn btn-sm btn-secondary">Next &rarr;</a>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endif %}
 

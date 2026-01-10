@@ -736,10 +736,19 @@ async def get_records(request: Request, user: User = Depends(require_user)):
 
 
 @app.get("/competitor/{callsign}", response_class=HTMLResponse)
-async def get_competitor(request: Request, callsign: str, user: User = Depends(require_user)):
+async def get_competitor(
+    request: Request,
+    callsign: str,
+    user: User = Depends(require_user),
+    band: Optional[str] = None,
+    mode: Optional[str] = None,
+    confirmed: Optional[str] = None,
+    page: int = 1
+):
     """Get competitor's QSOs, medals, and personal bests."""
     callsign = callsign.upper()
     is_own_profile = (callsign == user.callsign)
+    per_page = 50
 
     with get_db() as conn:
         cursor = conn.execute(
@@ -754,14 +763,40 @@ async def get_competitor(request: Request, callsign: str, user: User = Depends(r
         competitor_dict = dict(competitor)
         has_qrz_key = bool(competitor_dict.pop("qrz_api_key_encrypted", None))
 
-        # Get QSOs
-        cursor = conn.execute("""
+        # Build QSO query with filters
+        base_where = "WHERE competitor_callsign = ?"
+        qso_params = [callsign]
+
+        if band:
+            base_where += " AND band = ?"
+            qso_params.append(band)
+        if mode:
+            base_where += " AND mode = ?"
+            qso_params.append(mode)
+        if confirmed and confirmed.isdigit():
+            base_where += " AND is_confirmed = ?"
+            qso_params.append(int(confirmed))
+
+        # Get total QSO count for pagination
+        cursor = conn.execute(f"SELECT COUNT(*) FROM qsos {base_where}", qso_params)
+        total_qsos = cursor.fetchone()[0]
+        total_pages = (total_qsos + per_page - 1) // per_page if total_qsos > 0 else 1
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+
+        # Get QSOs with pagination
+        cursor = conn.execute(f"""
             SELECT * FROM qsos
-            WHERE competitor_callsign = ?
+            {base_where}
             ORDER BY qso_datetime_utc DESC
-            LIMIT 50
-        """, (callsign,))
+            LIMIT ? OFFSET ?
+        """, qso_params + [per_page, offset])
         qsos = [dict(row) for row in cursor.fetchall()]
+
+        # Add country names to QSOs
+        for qso in qsos:
+            if qso.get("dx_dxcc"):
+                qso["dx_country"] = get_country_name(qso["dx_dxcc"])
 
         # Get medals
         cursor = conn.execute("""
@@ -828,6 +863,12 @@ async def get_competitor(request: Request, callsign: str, user: User = Depends(r
             "sport_entries": sport_entries,
             "is_own_profile": is_own_profile,
             "can_sync": can_sync,
+            "pagination": {
+                "page": page,
+                "total_pages": total_pages,
+                "total_items": total_qsos,
+                "per_page": per_page,
+            },
         })
 
 
@@ -1294,7 +1335,7 @@ async def user_dashboard(
     user: User = Depends(require_user),
     band: Optional[str] = None,
     mode: Optional[str] = None,
-    confirmed: Optional[int] = None,
+    confirmed: Optional[str] = None,
     page: int = 1
 ):
     """User dashboard with stats, QSOs, and medals."""
@@ -1312,9 +1353,9 @@ async def user_dashboard(
         if mode:
             base_where += " AND mode = ?"
             qso_params.append(mode)
-        if confirmed is not None:
+        if confirmed and confirmed.isdigit():
             base_where += " AND is_confirmed = ?"
-            qso_params.append(confirmed)
+            qso_params.append(int(confirmed))
 
         # Get total count for pagination
         count_query = f"SELECT COUNT(*) FROM qsos {base_where}"
