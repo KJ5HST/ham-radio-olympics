@@ -18,6 +18,10 @@
         <div class="value">📋</div>
         <div class="label">Audit Log</div>
     </a>
+    <a href="/admin/settings?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
+        <div class="value">⚙️</div>
+        <div class="label">Settings</div>
+    </a>
     <a href="/admin/backup" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">💾</div>
         <div class="label">Backup DB</div>

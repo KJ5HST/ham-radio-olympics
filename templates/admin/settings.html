@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Admin{% endblock %}
+
+{% block content %}
+<h2>Admin Settings</h2>
+<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+
+<div class="card">
+    <h3>QRZ XML API Credentials</h3>
+    <p style="color: #718096; margin-bottom: 1rem;">
+        These credentials are used for callsign lookups to fetch competitor names and country information.
+        <br>A QRZ XML subscription is required. The username is your callsign (not email).
+    </p>
+    <form id="qrz-form">
+        <div class="form-group">
+            <label for="qrz_username">QRZ Username (Callsign)</label>
+            <input type="text" id="qrz_username" value="{{ qrz_username or '' }}" placeholder="e.g., W1ABC" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group">
+            <label for="qrz_password">QRZ Password</label>
+            <input type="password" id="qrz_password" value="{{ '********' if qrz_configured else '' }}" placeholder="Enter password">
+            {% if qrz_configured %}
+            <small style="color: #718096;">Leave blank to keep existing password</small>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn">Save QRZ Credentials</button>
+        {% if qrz_configured %}
+        <button type="button" onclick="testQrz()" class="btn" style="background: #3182ce;">Test Connection</button>
+        <button type="button" onclick="clearQrz()" class="btn" style="background: #c53030;">Clear Credentials</button>
+        {% endif %}
+    </form>
+    <div id="qrz-result" style="margin-top: 1rem;"></div>
+</div>
+
+<script>
+const adminKey = new URLSearchParams(window.location.search).get('admin_key');
+
+document.getElementById('qrz-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('qrz-result');
+    const username = document.getElementById('qrz_username').value.trim().toUpperCase();
+    const password = document.getElementById('qrz_password').value;
+
+    if (!username) {
+        result.innerHTML = '<div class="alert alert-error">Username is required</div>';
+        return;
+    }
+
+    // Don't send if password is just the placeholder
+    const data = { username };
+    if (password && password !== '********') {
+        data.password = password;
+    }
+
+    try {
+        const resp = await fetch('/admin/settings/qrz?admin_key=' + adminKey, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        const respData = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + respData.message + '</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + respData.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+async function testQrz() {
+    const result = document.getElementById('qrz-result');
+    result.innerHTML = '<div class="alert">Testing connection...</div>';
+
+    try {
+        const resp = await fetch('/admin/settings/qrz/test?admin_key=' + adminKey, {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+}
+
+async function clearQrz() {
+    if (!confirm('Clear QRZ credentials? Callsign lookups will fall back to HamQTH.')) return;
+
+    const result = document.getElementById('qrz-result');
+    try {
+        const resp = await fetch('/admin/settings/qrz?admin_key=' + adminKey, {
+            method: 'DELETE'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+}
+</script>
+{% endblock %}

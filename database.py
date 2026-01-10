@@ -410,6 +410,14 @@ def init_db():
                 cached_at TEXT NOT NULL
             );
 
+            -- Settings table (key-value store for admin configuration)
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT,
+                is_encrypted INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
@@ -612,3 +620,65 @@ def seed_example_olympiad():
                 "INSERT INTO matches (sport_id, start_date, end_date, target_value) VALUES (3, ?, ?, ?)",
                 ('2026-01-01T00:00:00', '2026-12-01T23:59:59', park)
             )
+
+
+def get_setting(key: str, default: Optional[str] = None, decrypt: bool = False) -> Optional[str]:
+    """
+    Get a setting value from the database.
+
+    Args:
+        key: Setting key
+        default: Default value if not found
+        decrypt: If True, decrypt the value (for sensitive settings)
+
+    Returns:
+        Setting value or default
+    """
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT value, is_encrypted FROM settings WHERE key = ?",
+            (key,)
+        )
+        row = cursor.fetchone()
+
+        if not row or row["value"] is None:
+            return default
+
+        value = row["value"]
+        if row["is_encrypted"] and decrypt:
+            from crypto import decrypt_api_key
+            try:
+                value = decrypt_api_key(value)
+            except Exception:
+                return default
+
+        return value
+
+
+def set_setting(key: str, value: Optional[str], encrypt: bool = False) -> None:
+    """
+    Set a setting value in the database.
+
+    Args:
+        key: Setting key
+        value: Setting value (None to delete)
+        encrypt: If True, encrypt the value before storing
+    """
+    with get_db() as conn:
+        if value is None:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+            return
+
+        stored_value = value
+        if encrypt and value:
+            from crypto import encrypt_api_key
+            stored_value = encrypt_api_key(value)
+
+        conn.execute("""
+            INSERT INTO settings (key, value, is_encrypted, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                is_encrypted = excluded.is_encrypted,
+                updated_at = excluded.updated_at
+        """, (key, stored_value, 1 if encrypt else 0, datetime.utcnow().isoformat()))

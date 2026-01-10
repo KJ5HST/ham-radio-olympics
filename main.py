@@ -2453,6 +2453,100 @@ async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
 
 
 # ============================================================
+# ADMIN SETTINGS ENDPOINTS
+# ============================================================
+
+@app.get("/admin/settings", response_class=HTMLResponse)
+async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
+    """Admin settings page."""
+    from database import get_setting
+
+    # Check if QRZ is configured (don't decrypt password, just check if it exists)
+    qrz_username = get_setting("qrz_username", decrypt=True)
+    qrz_configured = qrz_username is not None and get_setting("qrz_password") is not None
+
+    return templates.TemplateResponse("admin/settings.html", {
+        "request": request,
+        "qrz_username": qrz_username,
+        "qrz_configured": qrz_configured,
+    })
+
+
+@app.post("/admin/settings/qrz")
+async def update_qrz_settings(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update QRZ API credentials."""
+    from database import set_setting, get_setting
+    from callsign_lookup import _qrz_session_key, _qrz_session_expires
+    import callsign_lookup
+
+    data = await request.json()
+    username = data.get("username", "").strip().upper()
+    password = data.get("password")
+
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    # If password not provided, keep existing
+    if not password:
+        existing_password = get_setting("qrz_password", decrypt=True)
+        if not existing_password:
+            raise HTTPException(status_code=400, detail="Password is required")
+        password = existing_password
+
+    # Store encrypted
+    set_setting("qrz_username", username, encrypt=True)
+    set_setting("qrz_password", password, encrypt=True)
+
+    # Clear cached session to force re-auth with new credentials
+    callsign_lookup._qrz_session_key = None
+    callsign_lookup._qrz_session_expires = None
+
+    return {"message": "QRZ credentials saved successfully"}
+
+
+@app.post("/admin/settings/qrz/test")
+async def test_qrz_connection(_: bool = Depends(verify_admin)):
+    """Test QRZ API connection with stored credentials."""
+    from callsign_lookup import _get_qrz_session, lookup_callsign_qrz
+    import callsign_lookup
+
+    # Clear cached session to force fresh auth
+    callsign_lookup._qrz_session_key = None
+    callsign_lookup._qrz_session_expires = None
+
+    # Try to get a session
+    session = await _get_qrz_session()
+    if not session:
+        raise HTTPException(status_code=400, detail="Failed to authenticate with QRZ. Check credentials.")
+
+    # Try a test lookup
+    info = await lookup_callsign_qrz("W1AW")  # ARRL HQ callsign
+    if info:
+        return {"message": f"Connection successful! Test lookup: {info.first_name} ({info.country})"}
+    else:
+        return {"message": "Authenticated successfully, but test lookup returned no data"}
+
+
+@app.delete("/admin/settings/qrz")
+async def clear_qrz_settings(_: bool = Depends(verify_admin)):
+    """Clear QRZ API credentials."""
+    from database import set_setting
+    import callsign_lookup
+
+    set_setting("qrz_username", None)
+    set_setting("qrz_password", None)
+
+    # Clear cached session
+    callsign_lookup._qrz_session_key = None
+    callsign_lookup._qrz_session_expires = None
+
+    return {"message": "QRZ credentials cleared"}
+
+
+# ============================================================
 # API v1 ENDPOINTS
 # ============================================================
 

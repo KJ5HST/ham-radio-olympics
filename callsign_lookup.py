@@ -9,8 +9,26 @@ from typing import Optional, Dict
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 
-from database import get_db
+from database import get_db, get_setting
 from config import config
+
+
+def _get_qrz_credentials() -> tuple[str, str]:
+    """
+    Get QRZ credentials from database settings, falling back to config/env vars.
+
+    Returns:
+        Tuple of (username, password)
+    """
+    # Try database settings first (admin-configured)
+    username = get_setting("qrz_username", decrypt=True)
+    password = get_setting("qrz_password", decrypt=True)
+
+    if username and password:
+        return username, password
+
+    # Fall back to environment variables
+    return config.QRZ_USERNAME, config.QRZ_PASSWORD
 
 
 HAMQTH_URL = "https://www.hamqth.com/xml.php"
@@ -453,8 +471,11 @@ async def _get_qrz_session() -> Optional[str]:
     """Get or refresh QRZ session key."""
     global _qrz_session_key, _qrz_session_expires
 
+    # Get credentials (from database or env vars)
+    qrz_username, qrz_password = _get_qrz_credentials()
+
     # Check if we have valid credentials
-    if not config.QRZ_USERNAME or not config.QRZ_PASSWORD:
+    if not qrz_username or not qrz_password:
         return None
 
     # Check if existing session is still valid (with 5 min buffer)
@@ -468,8 +489,8 @@ async def _get_qrz_session() -> Optional[str]:
             response = await client.get(
                 QRZ_URL,
                 params={
-                    "username": config.QRZ_USERNAME,
-                    "password": config.QRZ_PASSWORD,
+                    "username": qrz_username,
+                    "password": qrz_password,
                 },
                 timeout=10.0,
             )
@@ -585,7 +606,8 @@ async def lookup_callsign(callsign: str, use_cache: bool = True) -> Optional[Cal
             return cached
 
     # Try QRZ first (if configured)
-    if config.QRZ_USERNAME and config.QRZ_PASSWORD:
+    qrz_username, qrz_password = _get_qrz_credentials()
+    if qrz_username and qrz_password:
         info = await lookup_callsign_qrz(callsign)
         if info and info.first_name:  # Only use if we got a name
             cache_callsign(info)
