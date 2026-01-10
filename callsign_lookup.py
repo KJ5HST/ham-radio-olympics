@@ -548,9 +548,12 @@ async def lookup_callsign_qrz(callsign: str) -> Optional[CallsignInfo]:
 
             dxcc = int(dxcc_str) if dxcc_str else None
 
+            # Only use first name (drop middle name/initial)
+            first_name = fname.split()[0] if fname else None
+
             return CallsignInfo(
                 callsign=callsign.upper(),
-                first_name=fname if fname else None,
+                first_name=first_name,
                 last_name=name if name else None,
                 country=country,
                 dxcc=dxcc,
