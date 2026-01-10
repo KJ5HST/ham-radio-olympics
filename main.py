@@ -1838,6 +1838,42 @@ async def bulk_enable_competitors(
     return {"message": f"Enabled {len(callsigns)} competitors", "enabled": len(callsigns)}
 
 
+@app.post("/admin/competitors/bulk-delete")
+async def bulk_delete_competitors(
+    request: Request,
+    data: BulkCallsignsRequest,
+    _: bool = Depends(verify_admin)
+):
+    """Bulk delete multiple competitors."""
+    from audit import log_action
+
+    user = get_current_user(request)
+    callsigns = [c.upper() for c in data.callsigns]
+
+    if not callsigns:
+        return {"message": "No callsigns provided", "deleted": 0}
+
+    with get_db() as conn:
+        placeholders = ",".join("?" * len(callsigns))
+        # Delete related data first
+        conn.execute(f"DELETE FROM qsos WHERE competitor_callsign IN ({placeholders})", callsigns)
+        conn.execute(f"DELETE FROM medals WHERE callsign IN ({placeholders})", callsigns)
+        conn.execute(f"DELETE FROM sport_entries WHERE callsign IN ({placeholders})", callsigns)
+        conn.execute(f"DELETE FROM sessions WHERE callsign IN ({placeholders})", callsigns)
+        conn.execute(f"DELETE FROM competitors WHERE callsign IN ({placeholders})", callsigns)
+
+    # Log the action
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="bulk_delete",
+        target_type="competitors",
+        details=f"Deleted {len(callsigns)} competitors: {', '.join(callsigns)}",
+        ip_address=get_client_ip(request)
+    )
+
+    return {"message": f"Deleted {len(callsigns)} competitors", "deleted": len(callsigns)}
+
+
 @app.get("/admin/olympiads", response_class=HTMLResponse)
 async def admin_olympiads(request: Request, _: bool = Depends(verify_admin)):
     """List/create Olympiads."""

@@ -27,10 +27,24 @@
 <p style="color: var(--text-secondary);">Showing {{ competitors | length }} result(s) for "{{ request.query_params.get('search') }}"</p>
 {% endif %}
 
+<!-- Bulk Action Bar -->
+<div id="bulk-action-bar" style="display: none; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 4px; padding: 10px 15px; margin-bottom: 15px;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <span id="selected-count" style="font-weight: bold;">0 selected</span>
+        <div class="btn-group">
+            <button type="button" onclick="bulkEnable()" class="btn btn-sm btn-success"><span class="icon">✓</span> Enable</button>
+            <button type="button" onclick="bulkDisable()" class="btn btn-sm btn-warning"><span class="icon">⏸️</span> Disable</button>
+            <button type="button" onclick="bulkDelete()" class="btn btn-sm btn-danger"><span class="icon">🗑️</span> Delete</button>
+        </div>
+        <button type="button" onclick="clearSelection()" class="btn btn-sm btn-secondary"><span class="icon">✕</span> Clear</button>
+    </div>
+</div>
+
 {% if competitors %}
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 40px;"><input type="checkbox" id="select-all" onchange="toggleSelectAll(this)"></th>
             <th scope="col">Callsign</th>
             <th scope="col">Role</th>
             <th scope="col">Status</th>
@@ -41,6 +55,7 @@
     <tbody>
         {% for c in competitors %}
         <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
+            <td><input type="checkbox" class="competitor-checkbox" value="{{ c.callsign }}" onchange="updateBulkBar()"></td>
             <td>
                 <strong>{{ c.first_name | competitor_display(c.callsign) }}</strong>
                 {% if c.is_referee and c.assigned_sports %}
@@ -226,6 +241,111 @@ async function resetPassword(callsign) {
         showToast('Password reset successful', 'success');
     } else {
         showToast('Error: ' + data.detail, 'error');
+    }
+}
+
+// Bulk action functions
+function getSelectedCallsigns() {
+    return Array.from(document.querySelectorAll('.competitor-checkbox:checked')).map(cb => cb.value);
+}
+
+function updateBulkBar() {
+    const selected = getSelectedCallsigns();
+    const bar = document.getElementById('bulk-action-bar');
+    const count = document.getElementById('selected-count');
+    const selectAll = document.getElementById('select-all');
+    const allCheckboxes = document.querySelectorAll('.competitor-checkbox');
+
+    if (selected.length > 0) {
+        bar.style.display = 'block';
+        count.textContent = selected.length + ' selected';
+    } else {
+        bar.style.display = 'none';
+    }
+
+    // Update select-all checkbox state
+    selectAll.checked = allCheckboxes.length > 0 && selected.length === allCheckboxes.length;
+    selectAll.indeterminate = selected.length > 0 && selected.length < allCheckboxes.length;
+}
+
+function toggleSelectAll(checkbox) {
+    document.querySelectorAll('.competitor-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    updateBulkBar();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.competitor-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('select-all').checked = false;
+    updateBulkBar();
+}
+
+async function bulkEnable() {
+    const callsigns = getSelectedCallsigns();
+    if (callsigns.length === 0) return;
+    if (!confirm('Enable ' + callsigns.length + ' competitor(s)?')) return;
+
+    try {
+        const resp = await fetch('/admin/competitors/bulk-enable?admin_key=' + adminKey, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({callsigns: callsigns})
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast('Error: ' + data.detail, 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function bulkDisable() {
+    const callsigns = getSelectedCallsigns();
+    if (callsigns.length === 0) return;
+    if (!confirm('Disable ' + callsigns.length + ' competitor(s)? They will be logged out.')) return;
+
+    try {
+        const resp = await fetch('/admin/competitors/bulk-disable?admin_key=' + adminKey, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({callsigns: callsigns})
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast('Error: ' + data.detail, 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function bulkDelete() {
+    const callsigns = getSelectedCallsigns();
+    if (callsigns.length === 0) return;
+    if (!confirm('DELETE ' + callsigns.length + ' competitor(s)? This cannot be undone!')) return;
+    if (!confirm('Are you SURE? All QSOs, medals, and data for these competitors will be permanently deleted.')) return;
+
+    try {
+        const resp = await fetch('/admin/competitors/bulk-delete?admin_key=' + adminKey, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({callsigns: callsigns})
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast('Error: ' + data.detail, 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
     }
 }
 </script>
