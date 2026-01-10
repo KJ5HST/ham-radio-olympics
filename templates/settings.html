@@ -74,7 +74,7 @@
 
 <h3>Change Password</h3>
 <div class="card">
-    <form action="/settings/password" method="post" id="password-form">
+    <form action="/settings/password" method="post" id="password-form" data-loading>
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label for="current_password">Current Password</label>

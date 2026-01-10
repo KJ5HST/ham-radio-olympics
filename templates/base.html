@@ -459,6 +459,19 @@
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
         }
+        /* Mobile hamburger menu */
+        .mobile-menu-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            color: var(--accent-color);
+        }
+        .nav-links {
+            display: contents;
+        }
         /* Mobile styles */
         @media (max-width: 768px) {
             body {
@@ -478,10 +491,35 @@
             nav {
                 padding: 10px 15px;
                 margin-bottom: 15px;
+                position: relative;
+            }
+            .mobile-menu-toggle {
+                display: block;
+            }
+            .nav-links {
+                display: none;
+                width: 100%;
+                flex-direction: column;
+                gap: 0;
+                padding-top: 10px;
+            }
+            .nav-links.show {
                 display: flex;
-                flex-wrap: wrap;
+            }
+            .nav-links a {
+                display: block;
+                padding: 10px 0;
+                margin-right: 0;
+                border-top: 1px solid var(--border-color);
+            }
+            .nav-links > span {
+                float: none !important;
+                margin-left: 0;
+                padding-top: 10px;
+                border-top: 1px solid var(--border-color);
+                display: flex;
                 align-items: center;
-                gap: 10px;
+                justify-content: space-between;
             }
             nav a {
                 margin-right: 15px;
@@ -556,33 +594,38 @@
         <p>Olympic-style amateur radio competition</p>
     </header>
 
-    <nav>
-        <a href="/">Home</a>
-        {% if user %}<a href="/records">Records</a>{% endif %}
-        {% block nav_extra %}{% endblock %}
-        <span style="float: right;">
-            {% if user %}
-                <div class="dropdown">
-                    <button type="button" class="dropdown-toggle">{{ user.display_name }} &#9662;</button>
-                    <div class="dropdown-menu">
-                        <a href="/dashboard">Dashboard</a>
-                        <a href="/settings">Settings</a>
-                        {% if user.is_admin %}
-                        <a href="/admin" style="color: #c53030;">Admin</a>
-                        {% endif %}
-                        <form action="/logout" method="post" style="margin: 0;">
-                            <button type="submit">Log Out</button>
-                        </form>
+    <nav role="navigation" aria-label="Main navigation">
+        <button type="button" class="mobile-menu-toggle" id="mobile-menu-toggle" aria-label="Toggle menu" aria-expanded="false">
+            <span class="menu-icon">☰</span>
+        </button>
+        <div class="nav-links" id="nav-links">
+            <a href="/">Home</a>
+            {% if user %}<a href="/records">Records</a>{% endif %}
+            {% block nav_extra %}{% endblock %}
+            <span style="float: right;">
+                {% if user %}
+                    <div class="dropdown">
+                        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">{{ user.display_name }} &#9662;</button>
+                        <div class="dropdown-menu" role="menu">
+                            <a href="/dashboard" role="menuitem">Dashboard</a>
+                            <a href="/settings" role="menuitem">Settings</a>
+                            {% if user.is_admin %}
+                            <a href="/admin" style="color: #c53030;" role="menuitem">Admin</a>
+                            {% endif %}
+                            <form action="/logout" method="post" style="margin: 0;">
+                                <button type="submit" role="menuitem">Log Out</button>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            {% else %}
-                <a href="/signup">Sign Up</a>
-                <a href="/login">Log In</a>
-            {% endif %}
-            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
-                <span class="theme-icon">🌙</span>
-            </button>
-        </span>
+                {% else %}
+                    <a href="/signup">Sign Up</a>
+                    <a href="/login">Log In</a>
+                {% endif %}
+                <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
+                    <span class="theme-icon">🌙</span>
+                </button>
+            </span>
+        </div>
     </nav>
 
     <main id="main-content">
@@ -678,6 +721,44 @@
             });
         }
     })();
+
+    // Mobile menu toggle
+    (function() {
+        var menuToggle = document.getElementById('mobile-menu-toggle');
+        var navLinks = document.getElementById('nav-links');
+        if (menuToggle && navLinks) {
+            menuToggle.addEventListener('click', function() {
+                var isExpanded = navLinks.classList.toggle('show');
+                menuToggle.setAttribute('aria-expanded', isExpanded);
+                menuToggle.querySelector('.menu-icon').textContent = isExpanded ? '✕' : '☰';
+            });
+        }
+    })();
+
+    // Loading overlay helper
+    window.showLoading = function() {
+        var overlay = document.createElement('div');
+        overlay.className = 'loading-overlay';
+        overlay.id = 'loading-overlay';
+        overlay.innerHTML = '<div class="loading-spinner"></div>';
+        overlay.setAttribute('role', 'alert');
+        overlay.setAttribute('aria-busy', 'true');
+        overlay.setAttribute('aria-label', 'Loading');
+        document.body.appendChild(overlay);
+    };
+
+    window.hideLoading = function() {
+        var overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.remove();
+    };
+
+    // Auto-add loading state to forms with data-loading attribute
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (form.hasAttribute('data-loading')) {
+            showLoading();
+        }
+    });
 
     // POTA park tooltip functionality
     (function() {
