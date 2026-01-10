@@ -13,6 +13,44 @@ from grid_distance import grid_distance
 from scoring import recompute_match_medals, update_records
 
 
+async def populate_competitor_name(callsign: str) -> bool:
+    """
+    Look up and populate a competitor's name from callsign lookup if not already set.
+
+    Args:
+        callsign: Competitor callsign
+
+    Returns:
+        True if name was updated, False otherwise
+    """
+    from callsign_lookup import lookup_callsign
+
+    with get_db() as conn:
+        # Check if name is already set
+        cursor = conn.execute(
+            "SELECT first_name, last_name FROM competitors WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return False
+
+        # If name already set, skip lookup
+        if row["first_name"]:
+            return False
+
+        # Look up name
+        info = await lookup_callsign(callsign)
+        if info and info.first_name:
+            conn.execute(
+                "UPDATE competitors SET first_name = ?, last_name = ? WHERE callsign = ?",
+                (info.first_name, info.last_name, callsign.upper())
+            )
+            return True
+
+    return False
+
+
 async def sync_competitor(callsign: str) -> dict:
     """
     Sync a single competitor's QSOs from QRZ using stored API key.
@@ -43,6 +81,12 @@ async def sync_competitor(callsign: str) -> dict:
             api_key = decrypt_api_key(competitor["qrz_api_key_encrypted"])
         except Exception as e:
             return {"error": f"Failed to decrypt API key: {e}"}
+
+    # Try to populate name if not set
+    try:
+        await populate_competitor_name(callsign)
+    except Exception:
+        pass  # Non-critical, continue with sync
 
     # Use the shared sync function with the decrypted key
     return await sync_competitor_with_key(callsign, api_key)
