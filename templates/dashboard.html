@@ -370,7 +370,12 @@
         {% for qso in qsos %}
         <tr>
             <td>{{ qso.qso_datetime_utc | format_datetime }}</td>
-            <td><strong>{{ qso.dx_callsign }}</strong></td>
+            <td>
+                <strong>{{ qso.dx_callsign }}</strong>
+                {% if qso.dx_sig_info or qso.my_sig_info %}
+                <span class="pota-badge" title="{{ qso.dx_sig_info or qso.my_sig_info }}">🏕️</span>
+                {% endif %}
+            </td>
             <td>{{ qso.band or '-' }}</td>
             <td>{{ qso.mode or '-' }}</td>
             <td>{{ qso.tx_power_w }}W</td>
