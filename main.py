@@ -239,6 +239,25 @@ def format_datetime(value: str) -> str:
 templates.env.filters["format_date"] = format_date
 templates.env.filters["format_datetime"] = format_datetime
 
+
+def get_country_flag(dxcc_code) -> str:
+    """Get country flag emoji from DXCC code."""
+    from dxcc import get_country_name
+    from callsign_lookup import get_country_flag as _get_flag
+
+    if not dxcc_code:
+        return ""
+    try:
+        country = get_country_name(int(dxcc_code))
+        if country:
+            return _get_flag(country)
+    except (ValueError, TypeError):
+        pass
+    return ""
+
+
+templates.env.filters["country_flag"] = get_country_flag
+
 # Admin key from environment
 ADMIN_KEY = config.ADMIN_KEY
 
@@ -1242,6 +1261,11 @@ async def user_dashboard(
         cursor = conn.execute(qso_query, qso_params)
         qsos = [dict(row) for row in cursor.fetchall()]
 
+        # Add country names to QSOs
+        for qso in qsos:
+            if qso.get("dx_dxcc"):
+                qso["dx_country"] = get_country_name(qso["dx_dxcc"])
+
         # Get medals
         cursor = conn.execute("""
             SELECT m.*, ma.target_value, s.name as sport_name, s.target_type
@@ -1318,7 +1342,7 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
     """Account settings page."""
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT email, email_verified, registered_at FROM competitors WHERE callsign = ?",
+            "SELECT email, email_verified, registered_at, first_name, last_name FROM competitors WHERE callsign = ?",
             (user.callsign,)
         )
         account = dict(cursor.fetchone())
@@ -1329,6 +1353,22 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
         "account": account,
         "csrf_token": get_csrf_token(request),
     })
+
+
+@app.post("/settings/name")
+async def update_name(
+    request: Request,
+    first_name: str = Form(""),
+    last_name: str = Form(""),
+    user: User = Depends(require_user)
+):
+    """Update user name."""
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET first_name = ?, last_name = ? WHERE callsign = ?",
+            (first_name.strip() or None, last_name.strip() or None, user.callsign)
+        )
+    return RedirectResponse(url="/settings?updated=name", status_code=303)
 
 
 @app.post("/settings/email")

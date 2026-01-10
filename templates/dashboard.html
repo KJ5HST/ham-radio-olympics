@@ -371,7 +371,10 @@
         <tr>
             <td>{{ qso.qso_datetime_utc | format_datetime }}</td>
             <td>
-                <strong>{{ qso.dx_callsign }}</strong>
+                <span class="dx-callsign" title="{{ qso.dx_country or '' }}">
+                    {{ qso.dx_dxcc | country_flag }}
+                    <strong>{{ qso.dx_callsign }}</strong>
+                </span>
                 {% if qso.dx_sig_info or qso.my_sig_info %}
                 <span class="pota-badge" title="{{ qso.dx_sig_info or qso.my_sig_info }}">🏕️</span>
                 {% endif %}

@@ -221,6 +221,11 @@ def init_db():
             if 'email_verified' not in columns:
                 conn.execute("ALTER TABLE competitors ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
                 conn.commit()
+            # Migration: add name columns
+            if 'first_name' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN first_name TEXT")
+                conn.execute("ALTER TABLE competitors ADD COLUMN last_name TEXT")
+                conn.commit()
 
         conn.executescript("""
             -- Competitors table
@@ -229,6 +234,8 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 email TEXT,
                 email_verified INTEGER NOT NULL DEFAULT 0,
+                first_name TEXT,
+                last_name TEXT,
                 qrz_api_key_encrypted TEXT,
                 lotw_username_encrypted TEXT,
                 lotw_password_encrypted TEXT,
@@ -390,6 +397,17 @@ def init_db():
                 target_id TEXT,
                 details TEXT,
                 ip_address TEXT
+            );
+
+            -- Callsign cache table (for name/country lookups)
+            CREATE TABLE IF NOT EXISTS callsign_cache (
+                callsign TEXT PRIMARY KEY,
+                first_name TEXT,
+                last_name TEXT,
+                country TEXT,
+                dxcc INTEGER,
+                grid TEXT,
+                cached_at TEXT NOT NULL
             );
 
             -- Indexes for performance

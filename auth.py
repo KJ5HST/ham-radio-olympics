@@ -28,6 +28,15 @@ class User:
     has_lotw_creds: bool = False
     is_admin: bool = False
     is_referee: bool = False
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+
+    @property
+    def display_name(self) -> str:
+        """Return display name as 'FirstName (CALLSIGN)' or just 'CALLSIGN'."""
+        if self.first_name:
+            return f"{self.first_name} ({self.callsign})"
+        return self.callsign
 
 
 def hash_password(password: str) -> str:
@@ -153,7 +162,8 @@ def get_session_user(session_id: Optional[str]) -> Optional[User]:
         now = datetime.utcnow().isoformat()
         cursor = conn.execute("""
             SELECT c.callsign, c.email, c.qrz_api_key_encrypted,
-                   c.lotw_username_encrypted, c.is_admin, c.is_referee
+                   c.lotw_username_encrypted, c.is_admin, c.is_referee,
+                   c.first_name, c.last_name
             FROM sessions s
             JOIN competitors c ON s.callsign = c.callsign
             WHERE s.id = ? AND s.expires_at > ? AND c.is_disabled = 0
@@ -167,7 +177,9 @@ def get_session_user(session_id: Optional[str]) -> Optional[User]:
                 has_qrz_key=bool(row["qrz_api_key_encrypted"]),
                 has_lotw_creds=bool(row["lotw_username_encrypted"]),
                 is_admin=bool(row["is_admin"]),
-                is_referee=bool(row["is_referee"])
+                is_referee=bool(row["is_referee"]),
+                first_name=row["first_name"],
+                last_name=row["last_name"],
             )
 
     return None
