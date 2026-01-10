@@ -131,7 +131,9 @@ async def csrf_middleware(request: Request, call_next):
 
     # Validate CSRF for HTML form POSTs (not JSON API calls)
     # Skip validation for new sessions (no cookie yet) to allow first form submission
-    if request.method == "POST" and not is_new_session:
+    # Skip validation for logout (low-risk, doesn't modify data)
+    csrf_exempt_paths = ["/logout"]
+    if request.method == "POST" and not is_new_session and request.url.path not in csrf_exempt_paths:
         content_type = request.headers.get("content-type", "")
 
         # Only validate for form submissions, not JSON API calls
