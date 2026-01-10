@@ -2467,6 +2467,7 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
 
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
+        "user": get_current_user(request),
         "qrz_username": qrz_username,
         "qrz_configured": qrz_configured,
     })
