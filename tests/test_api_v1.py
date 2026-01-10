@@ -273,6 +273,18 @@ class TestAPIv1Me:
         assert "callsign" in data
         assert data["callsign"] == "W1API"
 
+    def test_me_user_deleted_from_db(self, logged_in_client):
+        """Test /api/v1/me returns 401 when user deleted from database."""
+        from database import get_db
+
+        # Delete the user from DB while keeping their session cookie
+        with get_db() as conn:
+            conn.execute("DELETE FROM competitors WHERE callsign = 'W1API'")
+
+        # Session auth fails first when user doesn't exist - returns 401
+        response = logged_in_client.get("/api/v1/me")
+        assert response.status_code == 401
+
 
 class TestAPIv1Health:
     """Test /api/v1/health endpoint."""
@@ -345,3 +357,179 @@ class TestAPIVersion:
         response = client.get("/api/health")
         # Should either 404 or redirect to versioned endpoint
         assert response.status_code in [404, 307, 308]
+
+
+class TestAPIv1QSOFilters:
+    """Test QSO endpoint filters."""
+
+    def test_qsos_filter_by_band(self, logged_in_client):
+        """Test filtering QSOs by band."""
+        from database import get_db
+
+        # Create test QSOs with different bands
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, band)
+                VALUES ('W1API', 'W2TEST', '2024-01-01T12:00:00', '20m')
+            """)
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, band)
+                VALUES ('W1API', 'W3TEST', '2024-01-01T13:00:00', '40m')
+            """)
+
+        response = logged_in_client.get("/api/v1/qsos?band=20m")
+        data = response.json()
+        assert response.status_code == 200
+        assert all(q["band"] == "20m" for q in data["qsos"])
+
+    def test_qsos_filter_by_mode(self, logged_in_client):
+        """Test filtering QSOs by mode."""
+        from database import get_db
+
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, mode)
+                VALUES ('W1API', 'W2TEST', '2024-01-01T12:00:00', 'SSB')
+            """)
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, mode)
+                VALUES ('W1API', 'W3TEST', '2024-01-01T13:00:00', 'FT8')
+            """)
+
+        response = logged_in_client.get("/api/v1/qsos?mode=SSB")
+        data = response.json()
+        assert response.status_code == 200
+        assert all(q["mode"] == "SSB" for q in data["qsos"])
+
+    def test_qsos_filter_by_confirmed(self, logged_in_client):
+        """Test filtering QSOs by confirmed status."""
+        from database import get_db
+
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, is_confirmed)
+                VALUES ('W1API', 'W2TEST', '2024-01-01T12:00:00', 1)
+            """)
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, is_confirmed)
+                VALUES ('W1API', 'W3TEST', '2024-01-01T13:00:00', 0)
+            """)
+
+        response = logged_in_client.get("/api/v1/qsos?confirmed=true")
+        data = response.json()
+        assert response.status_code == 200
+        assert all(q["is_confirmed"] == 1 for q in data["qsos"])
+
+
+class TestAPIv1MedalsFilters:
+    """Test medals endpoint filters."""
+
+    def test_medals_filter_by_olympiad(self, logged_in_client):
+        """Test filtering medals by olympiad_id."""
+        from database import get_db
+
+        with get_db() as conn:
+            # Create two olympiads
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('2024 Olympics', '2024-01-01', '2024-12-31', 0, 0)
+            """)
+            olympiad1_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('2025 Olympics', '2025-01-01', '2025-12-31', 0, 1)
+            """)
+            olympiad2_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            # Create sports and matches for each
+            conn.execute("""
+                INSERT INTO sports (olympiad_id, name, description, target_type)
+                VALUES (?, 'Sport 1', 'Desc', 'country')
+            """, (olympiad1_id,))
+            sport1_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            conn.execute("""
+                INSERT INTO matches (sport_id, start_date, end_date, target_value)
+                VALUES (?, '2024-01-01', '2024-01-31', '291')
+            """, (sport1_id,))
+            match1_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+            # Create medal for the user
+            conn.execute("""
+                INSERT INTO medals (match_id, callsign, role, qso_race_medal, total_points)
+                VALUES (?, 'W1API', 'work', 'gold', 3)
+            """, (match1_id,))
+
+        response = logged_in_client.get(f"/api/v1/medals?olympiad_id={olympiad1_id}")
+        data = response.json()
+        assert response.status_code == 200
+        assert "medals" in data
+
+
+class TestAPIv1SportsFilters:
+    """Test sports endpoint filters."""
+
+    def test_sports_filter_by_olympiad(self, client):
+        """Test filtering sports by olympiad_id."""
+        from database import get_db
+
+        with get_db() as conn:
+            # Create olympiad with sports
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('Test Olympics', '2024-01-01', '2024-12-31', 0, 0)
+            """)
+            olympiad_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute("""
+                INSERT INTO sports (olympiad_id, name, description, target_type)
+                VALUES (?, 'Test Sport', 'A sport', 'country')
+            """, (olympiad_id,))
+
+        response = client.get(f"/api/v1/sports?olympiad_id={olympiad_id}")
+        data = response.json()
+        assert response.status_code == 200
+        assert len(data["sports"]) >= 1
+
+
+class TestAPIv1StandingsFilters:
+    """Test standings endpoint filters."""
+
+    def test_standings_filter_by_olympiad(self, client):
+        """Test filtering standings by olympiad_id."""
+        from database import get_db
+
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('Filter Test', '2024-01-01', '2024-12-31', 0, 0)
+            """)
+            olympiad_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        response = client.get(f"/api/v1/standings?olympiad_id={olympiad_id}")
+        data = response.json()
+        assert response.status_code == 200
+        assert "standings" in data
+
+
+class TestExportStandingsErrors:
+    """Test export standings error handling."""
+
+    def test_export_standings_invalid_olympiad(self, admin_client):
+        """Test export standings with non-existent olympiad."""
+        response = admin_client.get("/admin/export/standings/99999")
+        assert response.status_code == 404
+
+    def test_export_standings_valid_olympiad(self, admin_client):
+        """Test export standings with valid olympiad."""
+        from database import get_db
+
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('Export Test', '2024-01-01', '2024-12-31', 0, 1)
+            """)
+            olympiad_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+        response = admin_client.get(f"/admin/export/standings/{olympiad_id}")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers.get("content-type", "")

@@ -114,7 +114,7 @@ async function removeQrzKey() {
     if (resp.ok) {
         window.location.href = '/settings?updated=qrz_removed';
     } else {
-        alert('Failed to remove QRZ key');
+        showToast('Failed to remove QRZ key', 'error');
     }
 }
 
@@ -125,7 +125,7 @@ async function removeLotwCreds() {
     if (resp.ok) {
         window.location.href = '/settings?updated=lotw_removed';
     } else {
-        alert('Failed to remove LoTW credentials');
+        showToast('Failed to remove LoTW credentials', 'error');
     }
 }
 </script>

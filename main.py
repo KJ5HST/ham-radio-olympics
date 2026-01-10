@@ -855,7 +855,11 @@ async def signup(request: Request, signup_data: UserSignup):
     if has_qrz:
         is_valid = await verify_api_key(signup_data.qrz_api_key, callsign)
         if not is_valid:
-            raise HTTPException(status_code=400, detail="Invalid QRZ API key or key does not match callsign.")
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid QRZ API key. Please verify your API key is correct and your QRZ XML subscription is active. "
+                       "You can find your API key in QRZ.com -> My Logbook -> Settings -> API tab."
+            )
         # Store if user wants auto-sync
         if signup_data.store_credentials:
             encrypted_qrz_key = encrypt_api_key(signup_data.qrz_api_key)

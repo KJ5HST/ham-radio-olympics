@@ -107,7 +107,7 @@
             const resp = await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
             if (!resp.ok) {
                 const data = await resp.json();
-                alert('Sync failed: ' + (data.detail || 'Unknown error'));
+                showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
                 btn.textContent = originalText;
                 btn.disabled = false;
             } else {
@@ -116,7 +116,7 @@
         } catch (e) {
             btn.textContent = originalText;
             btn.disabled = false;
-            alert('Sync failed. Please try again.');
+            showToast('Sync failed. Please try again.', 'error');
         }
     }
 
@@ -130,7 +130,7 @@
             const resp = await fetch('/sync/lotw/stored', {method: 'POST'});
             if (!resp.ok) {
                 const data = await resp.json();
-                alert('Sync failed: ' + (data.detail || 'Unknown error'));
+                showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
                 btn.textContent = originalText;
                 btn.disabled = false;
             } else {
@@ -139,7 +139,7 @@
         } catch (e) {
             btn.textContent = originalText;
             btn.disabled = false;
-            alert('Sync failed. Please try again.');
+            showToast('Sync failed. Please try again.', 'error');
         }
     }
 

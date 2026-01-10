@@ -252,6 +252,52 @@ class TestAdminExports:
         response = admin_client.get("/admin/export/standings/1")
         assert response.status_code != 404
 
+    def test_admin_export_standings_with_data(self, admin_client):
+        """Test admin export standings with actual standings data."""
+        from database import get_db
+        from auth import hash_password
+
+        with get_db() as conn:
+            # Create olympiad
+            conn.execute("""
+                INSERT OR IGNORE INTO olympiads (id, name, start_date, end_date, is_active)
+                VALUES (?, ?, ?, ?, ?)
+            """, (1, "Test Olympics", "2024-01-01", "2024-12-31", 1))
+
+            # Create sport
+            conn.execute("""
+                INSERT OR IGNORE INTO sports (id, olympiad_id, name, target_type)
+                VALUES (?, ?, ?, ?)
+            """, (1, 1, "Test Sport", "country"))
+
+            # Create match
+            conn.execute("""
+                INSERT OR IGNORE INTO matches (id, sport_id, start_date, end_date, target_value)
+                VALUES (?, ?, ?, ?, ?)
+            """, (1, 1, "2024-01-01", "2024-01-31", "291"))
+
+            # Create competitor with medals
+            conn.execute("""
+                INSERT OR IGNORE INTO competitors (callsign, password_hash, registered_at)
+                VALUES (?, ?, ?)
+            """, ("W1STD", hash_password("test123"), "2024-01-01"))
+
+            # Create medal with points
+            conn.execute("""
+                INSERT OR IGNORE INTO medals (match_id, callsign, role, qso_race_medal, cool_factor_medal, total_points)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (1, "W1STD", "work", "gold", "silver", 5))
+
+        response = admin_client.get("/admin/export/standings/1")
+        assert response.status_code == 200
+        assert "text/csv" in response.headers["content-type"]
+
+        # Parse CSV and verify content
+        content = response.text
+        assert "W1STD" in content
+        assert "rank" in content
+        assert "total_points" in content
+
 
 class TestPagination:
     """Test pagination functionality."""

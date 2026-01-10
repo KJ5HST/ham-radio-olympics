@@ -541,3 +541,42 @@ class TestVerifyApiKey:
         result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
         assert result is True
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_callsign_in_data_field(self):
+        """Test callsign extracted from DATA field."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&DATA=TOTAL:100,OWNER:W1ABC,DXCC:50"))
+
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
+        assert result is True
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_no_callsign_in_response_fallback(self):
+        """Test key is valid even when no callsign returned (fallback to RESULT=OK)."""
+        # If QRZ doesn't return a callsign, we just verify the key works
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&COUNT=500"))
+
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
+        assert result is True  # Fallback: key works, can't verify ownership
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_callsign_suffix_stripped(self):
+        """Test /P and /M suffixes are stripped for comparison."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=W1ABC"))
+
+        # User enters callsign with suffix, should still match
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC/P")
+        assert result is True
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_verify_key_api_suffix_stripped(self):
+        """Test API returns callsign with suffix, user enters without."""
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=W1ABC/M"))
+
+        # API returns with suffix, user enters without - should match
+        result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
+        assert result is True
+

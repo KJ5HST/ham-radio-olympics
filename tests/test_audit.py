@@ -218,6 +218,90 @@ class TestGetAuditLogs:
         assert len(logs) == 2
         assert all(log["actor_callsign"] == "W1ADM" for log in logs)
 
+    def test_get_audit_logs_filter_by_target_type(self):
+        """Test filtering logs by target type."""
+        from audit import log_action, get_audit_logs
+
+        log_action(actor_callsign="W1ADM", action="action1", target_type="competitor")
+        log_action(actor_callsign="W1ADM", action="action2", target_type="sport")
+        log_action(actor_callsign="W1ADM", action="action3", target_type="competitor")
+
+        logs = get_audit_logs(target_type="competitor")
+        assert len(logs) == 2
+        assert all(log["target_type"] == "competitor" for log in logs)
+
+    def test_get_audit_logs_with_offset(self):
+        """Test get_audit_logs respects offset."""
+        from audit import log_action, get_audit_logs
+
+        # Create multiple entries
+        for i in range(10):
+            log_action(actor_callsign="W1ADM", action=f"action_{i}")
+
+        logs = get_audit_logs(limit=5, offset=5)
+        assert len(logs) == 5
+        # Should skip first 5 (most recent) and return next 5
+
+
+class TestGetAuditLogCount:
+    """Test audit log count function."""
+
+    def test_get_audit_log_count_function_exists(self):
+        """Test get_audit_log_count function exists."""
+        from audit import get_audit_log_count
+        assert callable(get_audit_log_count)
+
+    def test_get_audit_log_count_returns_int(self):
+        """Test get_audit_log_count returns an integer."""
+        from audit import get_audit_log_count
+
+        count = get_audit_log_count()
+        assert isinstance(count, int)
+
+    def test_get_audit_log_count_all_entries(self):
+        """Test get_audit_log_count counts all entries."""
+        from audit import log_action, get_audit_log_count
+
+        initial = get_audit_log_count()
+        for i in range(5):
+            log_action(actor_callsign="W1ADM", action=f"action_{i}")
+
+        count = get_audit_log_count()
+        assert count == initial + 5
+
+    def test_get_audit_log_count_filter_by_action(self):
+        """Test get_audit_log_count filtering by action."""
+        from audit import log_action, get_audit_log_count
+
+        log_action(actor_callsign="W1ADM", action="login")
+        log_action(actor_callsign="W1ADM", action="logout")
+        log_action(actor_callsign="W1ADM", action="login")
+
+        count = get_audit_log_count(action="login")
+        assert count == 2
+
+    def test_get_audit_log_count_filter_by_actor(self):
+        """Test get_audit_log_count filtering by actor callsign."""
+        from audit import log_action, get_audit_log_count
+
+        log_action(actor_callsign="W1CNT", action="action1")
+        log_action(actor_callsign="W2CNT", action="action2")
+        log_action(actor_callsign="W1CNT", action="action3")
+
+        count = get_audit_log_count(actor_callsign="W1CNT")
+        assert count == 2
+
+    def test_get_audit_log_count_filter_by_target_type(self):
+        """Test get_audit_log_count filtering by target type."""
+        from audit import log_action, get_audit_log_count
+
+        log_action(actor_callsign="W1ADM", action="action1", target_type="competitor")
+        log_action(actor_callsign="W1ADM", action="action2", target_type="sport")
+        log_action(actor_callsign="W1ADM", action="action3", target_type="competitor")
+
+        count = get_audit_log_count(target_type="competitor")
+        assert count == 2
+
 
 class TestAuditLogEndpoint:
     """Test audit log admin endpoint."""

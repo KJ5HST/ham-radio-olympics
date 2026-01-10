@@ -38,7 +38,7 @@ async function enterSport() {
     if (resp.ok) {
         location.reload();
     } else {
-        alert('Failed to enter sport');
+        showToast('Failed to enter sport', 'error');
     }
 }
 
@@ -48,7 +48,7 @@ async function leaveSport() {
     if (resp.ok) {
         location.reload();
     } else {
-        alert('Failed to leave sport');
+        showToast('Failed to leave sport', 'error');
     }
 }
 </script>

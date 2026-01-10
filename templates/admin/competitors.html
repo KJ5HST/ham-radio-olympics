@@ -180,9 +180,11 @@ async function resetPassword(callsign) {
     const response = await fetch('/admin/competitor/' + callsign + '/reset-password?admin_key=' + adminKey, {method: 'POST'});
     const data = await response.json();
     if (response.ok) {
-        alert('New password for ' + callsign + ':\n\n' + data.new_password + '\n\nPlease share this with the user securely.');
+        // Use prompt to allow copying the password
+        prompt('New password for ' + callsign + ' (copy this):', data.new_password);
+        showToast('Password reset successful', 'success');
     } else {
-        alert('Error: ' + data.detail);
+        showToast('Error: ' + data.detail, 'error');
     }
 }
 </script>

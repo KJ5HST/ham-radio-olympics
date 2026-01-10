@@ -229,9 +229,30 @@ async def verify_api_key(api_key: str, expected_callsign: str = None) -> bool:
 
         # If expected_callsign provided, verify it matches the API key's owner
         if expected_callsign:
+            # Try multiple fields where callsign might be returned
             api_callsign = result.get("CALLSIGN", "").upper()
-            if api_callsign != expected_callsign.upper():
-                return False
+
+            # Also check DATA field which may contain OWNER or CALLSIGN
+            data_field = result.get("DATA", "")
+            if not api_callsign and data_field:
+                # Parse DATA field (format: NAME:VALUE,NAME:VALUE,...)
+                for item in data_field.split(","):
+                    if ":" in item:
+                        key, value = item.split(":", 1)
+                        key = key.strip().upper()
+                        if key in ("CALLSIGN", "OWNER", "CALL"):
+                            api_callsign = value.strip().upper()
+                            break
+
+            # If we found a callsign in the response, verify it matches
+            if api_callsign:
+                # Normalize callsigns for comparison (strip /P, /M, etc. suffixes for matching)
+                expected_base = expected_callsign.upper().split("/")[0]
+                api_base = api_callsign.split("/")[0]
+                if api_base != expected_base:
+                    return False
+            # If no callsign in response, just verify the key is valid (RESULT=OK)
+            # This is a fallback - the key works, we just can't verify ownership
 
         return True
 

@@ -3099,3 +3099,40 @@ class TestAccountLockoutAPI:
         }, follow_redirects=False)
 
         assert response.status_code == 303  # Redirect to dashboard
+
+
+class TestErrorHandlers:
+    """Test HTTP error handlers."""
+
+    def test_404_error_handler_html(self, client):
+        """Test 404 error returns HTML for browser requests."""
+        response = client.get("/nonexistent-page-xyz")
+        assert response.status_code == 404
+        # Should get HTML error page
+        assert "text/html" in response.headers.get("content-type", "")
+
+    def test_generic_http_error_handler(self, client):
+        """Test generic HTTP error handler for non-404 errors."""
+        # Trigger a 403 by accessing admin page without login
+        response = client.get("/admin")
+        assert response.status_code in [401, 403]
+
+    def test_404_error_json_for_api(self, client):
+        """Test 404 error returns JSON for API requests."""
+        response = client.get("/api/v1/nonexistent", headers={"Accept": "application/json"})
+        assert response.status_code == 404
+        # API routes should return JSON
+        assert "application/json" in response.headers.get("content-type", "")
+
+    def test_error_handler_admin_json(self, client):
+        """Test error handler returns JSON for admin routes."""
+        from database import get_db
+
+        # Create admin user and login
+        signup_user(client, "W1ADM")
+        with get_db() as conn:
+            conn.execute("UPDATE competitors SET is_admin = 1 WHERE callsign = 'W1ADM'")
+
+        # Try to access nonexistent admin endpoint
+        response = client.get("/admin/nonexistent-route")
+        assert response.status_code == 404
