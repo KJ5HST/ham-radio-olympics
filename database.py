@@ -410,11 +410,9 @@ def backfill_records():
         if qso_count == 0 or record_count > 0:
             return  # No QSOs or records already exist
 
-        now = datetime.utcnow().isoformat()
-
-        # World record: longest distance
+        # World record: longest distance (use QSO datetime, not current time)
         row = conn.execute("""
-            SELECT id, competitor_callsign, distance_km FROM qsos
+            SELECT id, competitor_callsign, distance_km, qso_datetime_utc FROM qsos
             WHERE distance_km IS NOT NULL AND is_confirmed = 1
             ORDER BY distance_km DESC LIMIT 1
         """).fetchone()
@@ -422,11 +420,11 @@ def backfill_records():
             conn.execute("""
                 INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
                 VALUES (NULL, NULL, 'longest_distance', ?, ?, ?)
-            """, (row['distance_km'], row['id'], now))
+            """, (row['distance_km'], row['id'], row['qso_datetime_utc']))
 
-        # World record: highest cool factor
+        # World record: highest cool factor (use QSO datetime, not current time)
         row = conn.execute("""
-            SELECT id, competitor_callsign, cool_factor FROM qsos
+            SELECT id, competitor_callsign, cool_factor, qso_datetime_utc FROM qsos
             WHERE cool_factor IS NOT NULL AND is_confirmed = 1
             ORDER BY cool_factor DESC LIMIT 1
         """).fetchone()
@@ -434,7 +432,7 @@ def backfill_records():
             conn.execute("""
                 INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
                 VALUES (NULL, NULL, 'highest_cool_factor', ?, ?, ?)
-            """, (row['cool_factor'], row['id'], now))
+            """, (row['cool_factor'], row['id'], row['qso_datetime_utc']))
 
         # Personal bests per competitor
         callsigns = [r[0] for r in conn.execute(
@@ -442,9 +440,9 @@ def backfill_records():
         ).fetchall()]
 
         for callsign in callsigns:
-            # Personal best distance
+            # Personal best distance (use QSO datetime, not current time)
             row = conn.execute("""
-                SELECT id, distance_km FROM qsos
+                SELECT id, distance_km, qso_datetime_utc FROM qsos
                 WHERE competitor_callsign = ? AND distance_km IS NOT NULL AND is_confirmed = 1
                 ORDER BY distance_km DESC LIMIT 1
             """, (callsign,)).fetchone()
@@ -452,11 +450,11 @@ def backfill_records():
                 conn.execute("""
                     INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
                     VALUES (NULL, ?, 'longest_distance', ?, ?, ?)
-                """, (callsign, row['distance_km'], row['id'], now))
+                """, (callsign, row['distance_km'], row['id'], row['qso_datetime_utc']))
 
-            # Personal best cool factor
+            # Personal best cool factor (use QSO datetime, not current time)
             row = conn.execute("""
-                SELECT id, cool_factor FROM qsos
+                SELECT id, cool_factor, qso_datetime_utc FROM qsos
                 WHERE competitor_callsign = ? AND cool_factor IS NOT NULL AND is_confirmed = 1
                 ORDER BY cool_factor DESC LIMIT 1
             """, (callsign,)).fetchone()
@@ -464,7 +462,7 @@ def backfill_records():
                 conn.execute("""
                     INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
                     VALUES (NULL, ?, 'highest_cool_factor', ?, ?, ?)
-                """, (callsign, row['cool_factor'], row['id'], now))
+                """, (callsign, row['cool_factor'], row['id'], row['qso_datetime_utc']))
 
 
 def reset_db():

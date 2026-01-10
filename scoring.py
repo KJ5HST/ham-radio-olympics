@@ -447,27 +447,28 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None):
             return
 
         qso = dict(qso)
-        now = datetime.utcnow().isoformat()
+        # Use QSO datetime for when record was achieved, not current time
+        achieved_at = qso["qso_datetime_utc"]
 
         # Check longest distance
         if qso["distance_km"]:
             _update_record_if_better(
                 conn, "longest_distance", qso["distance_km"],
-                qso_id, callsign, sport_id, now, higher_is_better=True
+                qso_id, callsign, sport_id, achieved_at, higher_is_better=True
             )
 
         # Check highest cool factor
         if qso["cool_factor"]:
             _update_record_if_better(
                 conn, "highest_cool_factor", qso["cool_factor"],
-                qso_id, callsign, sport_id, now, higher_is_better=True
+                qso_id, callsign, sport_id, achieved_at, higher_is_better=True
             )
 
         # Check lowest power (only for confirmed QSOs with positive power)
         if qso["tx_power_w"] and qso["tx_power_w"] > 0 and qso["is_confirmed"]:
             _update_record_if_better(
                 conn, "lowest_power", qso["tx_power_w"],
-                qso_id, callsign, sport_id, now, higher_is_better=False
+                qso_id, callsign, sport_id, achieved_at, higher_is_better=False
             )
 
 
