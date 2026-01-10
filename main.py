@@ -258,6 +258,16 @@ def get_country_flag(dxcc_code) -> str:
 
 templates.env.filters["country_flag"] = get_country_flag
 
+
+def competitor_display(first_name, callsign) -> str:
+    """Format competitor name as 'FirstName (CALLSIGN)' or just 'CALLSIGN'."""
+    if first_name:
+        return f"{first_name} ({callsign})"
+    return callsign
+
+
+templates.env.filters["competitor_display"] = competitor_display
+
 # Admin key from environment
 ADMIN_KEY = config.ADMIN_KEY
 
@@ -515,20 +525,21 @@ async def get_sport(request: Request, sport_id: int):
         for match in matches:
             match["target_display"] = format_target_display(match["target_value"], sport_dict["target_type"])
 
-        # Get cumulative standings
+        # Get cumulative standings with competitor names
         cursor = conn.execute("""
-            SELECT callsign, role,
-                   SUM(total_points) as total_points,
-                   SUM(CASE WHEN qso_race_medal = 'gold' THEN 1 ELSE 0 END +
-                       CASE WHEN cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold,
-                   SUM(CASE WHEN qso_race_medal = 'silver' THEN 1 ELSE 0 END +
-                       CASE WHEN cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver,
-                   SUM(CASE WHEN qso_race_medal = 'bronze' THEN 1 ELSE 0 END +
-                       CASE WHEN cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze
+            SELECT m.callsign, m.role, c.first_name,
+                   SUM(m.total_points) as total_points,
+                   SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END +
+                       CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold,
+                   SUM(CASE WHEN m.qso_race_medal = 'silver' THEN 1 ELSE 0 END +
+                       CASE WHEN m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver,
+                   SUM(CASE WHEN m.qso_race_medal = 'bronze' THEN 1 ELSE 0 END +
+                       CASE WHEN m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
+            LEFT JOIN competitors c ON m.callsign = c.callsign
             WHERE ma.sport_id = ?
-            GROUP BY callsign, role
+            GROUP BY m.callsign, m.role, c.first_name
             ORDER BY total_points DESC
         """, (sport_id,))
         standings = [dict(row) for row in cursor.fetchall()]
@@ -585,11 +596,13 @@ async def get_match(request: Request, sport_id: int, match_id: int):
         if not match:
             raise HTTPException(status_code=404, detail="Match not found")
 
-        # Get medal results
+        # Get medal results with competitor names
         cursor = conn.execute("""
-            SELECT * FROM medals
-            WHERE match_id = ?
-            ORDER BY total_points DESC, qso_race_claim_time ASC
+            SELECT m.*, c.first_name
+            FROM medals m
+            LEFT JOIN competitors c ON m.callsign = c.callsign
+            WHERE m.match_id = ?
+            ORDER BY m.total_points DESC, m.qso_race_claim_time ASC
         """, (match_id,))
         medals = [dict(row) for row in cursor.fetchall()]
 
@@ -661,11 +674,12 @@ async def leave_sport(sport_id: int, user: User = Depends(require_user)):
 async def get_records(request: Request, user: User = Depends(require_user)):
     """Get world records page."""
     with get_db() as conn:
-        # Global records (sport_id IS NULL, callsign IS NULL)
+        # Global records (sport_id IS NULL, callsign IS NULL) with holder names
         cursor = conn.execute("""
-            SELECT r.*, q.competitor_callsign as holder
+            SELECT r.*, q.competitor_callsign as holder, c.first_name as holder_first_name
             FROM records r
             LEFT JOIN qsos q ON r.qso_id = q.id
+            LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
             WHERE r.callsign IS NULL AND r.sport_id IS NULL
             ORDER BY r.record_type
         """)
@@ -686,7 +700,7 @@ async def get_competitor(request: Request, callsign: str, user: User = Depends(r
 
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT callsign, registered_at, last_sync_at, qrz_api_key_encrypted FROM competitors WHERE callsign = ?",
+            "SELECT callsign, first_name, registered_at, last_sync_at, qrz_api_key_encrypted FROM competitors WHERE callsign = ?",
             (callsign,)
         )
         competitor = cursor.fetchone()
@@ -1940,7 +1954,7 @@ async def admin_sport_competitors(request: Request, sport_id: int):
 
         # Get all competitors entered in this sport with their medal counts
         cursor = conn.execute("""
-            SELECT c.callsign, c.registered_at, c.is_disabled,
+            SELECT c.callsign, c.first_name, c.registered_at, c.is_disabled,
                    COUNT(DISTINCT m.id) as medal_count,
                    SUM(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
                    SUM(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
@@ -1951,7 +1965,7 @@ async def admin_sport_competitors(request: Request, sport_id: int):
                 SELECT id FROM matches WHERE sport_id = ?
             )
             WHERE se.sport_id = ?
-            GROUP BY c.callsign
+            GROUP BY c.callsign, c.first_name
             ORDER BY c.callsign
         """, (sport_id, sport_id))
         competitors = [dict(row) for row in cursor.fetchall()]
@@ -2078,14 +2092,14 @@ async def admin_competitors(
     with get_db() as conn:
         if search:
             cursor = conn.execute("""
-                SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+                SELECT callsign, first_name, registered_at, last_sync_at, is_disabled, is_admin, is_referee
                 FROM competitors
                 WHERE callsign LIKE ?
                 ORDER BY registered_at DESC
             """, (f"%{search}%",))
         else:
             cursor = conn.execute("""
-                SELECT callsign, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+                SELECT callsign, first_name, registered_at, last_sync_at, is_disabled, is_admin, is_referee
                 FROM competitors
                 ORDER BY registered_at DESC
             """)

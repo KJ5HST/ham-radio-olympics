@@ -70,7 +70,7 @@ async function leaveSport() {
         {% for standing in standings[:20] %}
         <tr>
             <td>{{ loop.index }}</td>
-            <td><a href="/competitor/{{ standing.callsign }}">{{ standing.callsign }}</a></td>
+            <td><a href="/competitor/{{ standing.callsign }}">{{ standing.first_name | competitor_display(standing.callsign) }}</a></td>
             <td class="medal-gold">{{ standing.gold }}</td>
             <td class="medal-silver">{{ standing.silver }}</td>
             <td class="medal-bronze">{{ standing.bronze }}</td>

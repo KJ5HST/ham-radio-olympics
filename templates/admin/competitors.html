@@ -21,7 +21,7 @@
         {% for c in competitors %}
         <tr{% if c.is_disabled %} style="opacity: 0.6;"{% endif %}>
             <td>
-                <strong>{{ c.callsign }}</strong>
+                <strong>{{ c.first_name | competitor_display(c.callsign) }}</strong>
                 {% if c.is_referee and c.assigned_sports %}
                 <br><small style="color: #805ad5;">
                     Referees: {% for s in c.assigned_sports %}{{ s.name }}{% if not loop.last %}, {% endif %}{% endfor %}

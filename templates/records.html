@@ -32,7 +32,7 @@
             </td>
             <td>
                 {% if record.holder %}
-                    <a href="/competitor/{{ record.holder }}">{{ record.holder }}</a>
+                    <a href="/competitor/{{ record.holder }}">{{ record.holder_first_name | competitor_display(record.holder) }}</a>
                 {% else %}
                     -
                 {% endif %}

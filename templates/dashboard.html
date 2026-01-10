@@ -6,9 +6,9 @@
 
 {% block content %}
 {% if is_own_profile %}
-<h2>Welcome, {{ competitor.callsign }}</h2>
+<h2>Welcome, {{ competitor.first_name | competitor_display(competitor.callsign) }}</h2>
 {% else %}
-<h2>{{ competitor.callsign }}</h2>
+<h2>{{ competitor.first_name | competitor_display(competitor.callsign) }}</h2>
 {% endif %}
 
 <div class="stats">
