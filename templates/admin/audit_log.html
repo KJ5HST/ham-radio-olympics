@@ -37,7 +37,7 @@
         <tbody>
             {% for log in logs %}
             <tr>
-                <td>{{ log.timestamp }}</td>
+                <td>{{ log.timestamp | format_datetime }}</td>
                 <td>{{ log.actor_callsign or '-' }}</td>
                 <td>{{ log.action }}</td>
                 <td>
