@@ -16,6 +16,7 @@
     {% elif request.query_params.get('updated') == 'qrz_removed' %}QRZ API key removed.
     {% elif request.query_params.get('updated') == 'lotw' %}LoTW credentials updated successfully.
     {% elif request.query_params.get('updated') == 'lotw_removed' %}LoTW credentials removed.
+    {% elif request.query_params.get('updated') == 'verification_sent' %}Verification email sent. Please check your inbox.
     {% endif %}
 </div>
 {% endif %}
@@ -32,7 +33,22 @@
             <label for="email">Email</label>
             <input type="email" id="email" name="email" value="{{ account.email or '' }}" placeholder="you@example.com">
         </div>
-        <button type="submit" class="btn">Update Email</button>
+        {% if account.email %}
+        <p style="margin-bottom: 15px;">
+            Status:
+            {% if account.email_verified %}
+            <span style="color: #22543d;">Verified</span>
+            {% else %}
+            <span style="color: #c53030;">Not verified</span>
+            {% endif %}
+        </p>
+        {% endif %}
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn">Update Email</button>
+            {% if account.email and not account.email_verified %}
+            <button type="button" class="btn" style="background: #718096;" onclick="resendVerification()">Resend Verification</button>
+            {% endif %}
+        </div>
     </form>
 </div>
 
@@ -130,6 +146,15 @@ async function removeLotwCreds() {
         window.location.href = '/settings?updated=lotw_removed';
     } else {
         showToast('Failed to remove LoTW credentials', 'error');
+    }
+}
+
+async function resendVerification() {
+    const resp = await fetch('/settings/resend-verification', {method: 'POST'});
+    if (resp.redirected) {
+        window.location.href = resp.url;
+    } else if (!resp.ok) {
+        showToast('Failed to send verification email', 'error');
     }
 }
 </script>

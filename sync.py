@@ -231,40 +231,38 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             pass  # Invalid grid format
 
     if existing:
-        # Update if confirmation status changed
-        if existing["is_confirmed"] != qso.is_confirmed:
-            conn.execute("""
-                UPDATE qsos SET
-                    is_confirmed = ?,
-                    band = ?,
-                    mode = ?,
-                    tx_power_w = ?,
-                    my_dxcc = ?,
-                    my_grid = ?,
-                    my_sig_info = ?,
-                    dx_dxcc = ?,
-                    dx_grid = ?,
-                    dx_sig_info = ?,
-                    distance_km = ?,
-                    cool_factor = ?
-                WHERE id = ?
-            """, (
-                1 if qso.is_confirmed else 0,
-                qso.band,
-                qso.mode,
-                qso.tx_power,
-                qso.my_dxcc,
-                qso.my_grid,
-                qso.my_sig_info,
-                qso.dx_dxcc,
-                qso.dx_grid,
-                qso.dx_sig_info,
-                distance_km,
-                cool_factor,
-                existing["id"],
-            ))
-            return "updated"
-        return None
+        # Always update to capture any field changes (confirmation, sig_info, etc.)
+        conn.execute("""
+            UPDATE qsos SET
+                is_confirmed = ?,
+                band = ?,
+                mode = ?,
+                tx_power_w = ?,
+                my_dxcc = ?,
+                my_grid = ?,
+                my_sig_info = ?,
+                dx_dxcc = ?,
+                dx_grid = ?,
+                dx_sig_info = ?,
+                distance_km = ?,
+                cool_factor = ?
+            WHERE id = ?
+        """, (
+            1 if qso.is_confirmed else 0,
+            qso.band,
+            qso.mode,
+            qso.tx_power,
+            qso.my_dxcc,
+            qso.my_grid,
+            qso.my_sig_info,
+            qso.dx_dxcc,
+            qso.dx_grid,
+            qso.dx_sig_info,
+            distance_km,
+            cool_factor,
+            existing["id"],
+        ))
+        return "updated"
     else:
         # Insert new QSO
         cursor = conn.execute("""

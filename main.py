@@ -912,6 +912,19 @@ async def signup(request: Request, signup_data: UserSignup):
         except Exception:
             pass  # Don't fail signup if sync fails
 
+    # Send welcome email if email was provided
+    if signup_data.email:
+        from email_service import send_welcome_email, create_email_verification_token, send_email_verification
+        try:
+            await send_welcome_email(callsign, signup_data.email)
+            # Also send verification email
+            token = create_email_verification_token(callsign)
+            base_url = str(request.base_url).rstrip("/")
+            verification_url = f"{base_url}/verify-email/{token}"
+            await send_email_verification(callsign, signup_data.email, verification_url)
+        except Exception:
+            pass  # Don't fail signup if email fails
+
     # Auto-login after signup
     session_id = authenticate_user(callsign, signup_data.password)
 
@@ -1126,6 +1139,75 @@ async def reset_password(
     return RedirectResponse(url="/login?reset=success", status_code=303)
 
 
+@app.get("/verify-email/{token}")
+async def verify_email(request: Request, token: str):
+    """Verify user's email address."""
+    from email_service import validate_email_verification_token, mark_email_verification_token_used
+
+    callsign = validate_email_verification_token(token)
+    if not callsign:
+        return templates.TemplateResponse("message.html", {
+            "request": request,
+            "title": "Verification Failed",
+            "message": "Invalid or expired verification link. Please request a new verification email from your settings.",
+            "type": "error"
+        })
+
+    # Mark email as verified
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE competitors SET email_verified = 1 WHERE callsign = ?",
+            (callsign,)
+        )
+
+    # Mark token as used
+    mark_email_verification_token_used(token)
+
+    return templates.TemplateResponse("message.html", {
+        "request": request,
+        "title": "Email Verified",
+        "message": "Your email address has been verified successfully!",
+        "type": "success"
+    })
+
+
+@app.post("/settings/resend-verification")
+async def resend_verification(request: Request, user: User = Depends(require_user)):
+    """Resend email verification."""
+    from email_service import create_email_verification_token, send_email_verification
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT email, email_verified FROM competitors WHERE callsign = ?",
+            (user.callsign,)
+        )
+        row = cursor.fetchone()
+
+        if not row or not row["email"]:
+            return RedirectResponse(
+                url="/settings?error=Please+add+an+email+address+first",
+                status_code=303
+            )
+
+        if row["email_verified"]:
+            return RedirectResponse(
+                url="/settings?error=Your+email+is+already+verified",
+                status_code=303
+            )
+
+        # Create and send verification email
+        token = create_email_verification_token(user.callsign)
+        base_url = str(request.base_url).rstrip("/")
+        verification_url = f"{base_url}/verify-email/{token}"
+
+        await send_email_verification(user.callsign, row["email"], verification_url)
+
+    return RedirectResponse(
+        url="/settings?updated=verification_sent",
+        status_code=303
+    )
+
+
 # ============================================================
 # USER DASHBOARD & SETTINGS
 # ============================================================
@@ -1236,7 +1318,7 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
     """Account settings page."""
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT email, registered_at FROM competitors WHERE callsign = ?",
+            "SELECT email, email_verified, registered_at FROM competitors WHERE callsign = ?",
             (user.callsign,)
         )
         account = dict(cursor.fetchone())

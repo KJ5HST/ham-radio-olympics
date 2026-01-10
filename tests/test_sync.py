@@ -138,8 +138,8 @@ class TestUpsertQSO:
             row = cursor.fetchone()
             assert row["is_confirmed"] == 1
 
-    def test_no_update_if_unchanged(self, registered_competitor):
-        """Test no update if QSO hasn't changed."""
+    def test_always_updates_existing_qso(self, registered_competitor):
+        """Test that existing QSOs are always updated to capture any field changes."""
         qso = QSOData(
             dx_callsign="DL1ABC",
             qso_datetime=datetime(2026, 1, 15, 12, 0, 0),
@@ -160,7 +160,8 @@ class TestUpsertQSO:
             _upsert_qso(conn, "W1TEST", qso)
             result = _upsert_qso(conn, "W1TEST", qso)
 
-        assert result is None
+        # Always returns "updated" to ensure we never miss field changes
+        assert result == "updated"
 
     def test_distance_calculated(self, registered_competitor):
         """Test that distance is calculated from grids."""

@@ -529,6 +529,309 @@ class TestPasswordResetEndpoints:
         assert validate_reset_token(token) is None
 
 
+class TestMedalNotificationEmail:
+    """Test medal notification email functionality."""
+
+    def test_render_medal_notification_template(self):
+        """Test medal notification template renders correctly."""
+        from email_service import render_email_template
+
+        html = render_email_template(
+            "medal_notification",
+            callsign="W1ABC",
+            sport_name="DX Challenge",
+            match_name="January 2026",
+            medal_type="gold",
+            competition="Distance",
+            points=3
+        )
+
+        assert "W1ABC" in html
+        assert "DX Challenge" in html
+        assert "January 2026" in html
+        assert "Gold" in html or "gold" in html
+        assert "Distance" in html
+        assert "+3" in html
+
+    def test_medal_notification_has_medal_color(self):
+        """Test medal notification uses appropriate medal color."""
+        from email_service import render_email_template
+
+        html = render_email_template(
+            "medal_notification",
+            callsign="W1ABC",
+            sport_name="Test Sport",
+            match_name="Test Match",
+            medal_type="gold",
+            competition="Distance",
+            points=3
+        )
+
+        assert "#FFD700" in html  # Gold color
+
+    @pytest.mark.asyncio
+    async def test_send_medal_notification_email(self):
+        """Test sending medal notification email."""
+        from email_service import send_medal_notification_email
+
+        with patch('email_service._get_backend') as mock_backend:
+            mock_backend.return_value = AsyncMock(return_value=True)
+            result = await send_medal_notification_email(
+                callsign="W1ABC",
+                email="test@example.com",
+                sport_name="DX Challenge",
+                match_name="January 2026",
+                medal_type="gold",
+                competition="Distance",
+                points=3
+            )
+
+        assert result is True
+
+
+class TestMatchReminderEmail:
+    """Test match reminder email functionality."""
+
+    def test_render_match_reminder_template(self):
+        """Test match reminder template renders correctly."""
+        from email_service import render_email_template
+
+        html = render_email_template(
+            "match_reminder",
+            callsign="W1ABC",
+            sport_name="POTA Championship",
+            match_name="Week 1",
+            target_value="K-0001",
+            start_date="2026-01-15",
+            end_date="2026-01-21"
+        )
+
+        assert "W1ABC" in html
+        assert "POTA Championship" in html
+        assert "Week 1" in html
+        assert "K-0001" in html
+        assert "2026-01-15" in html
+        assert "2026-01-21" in html
+
+    @pytest.mark.asyncio
+    async def test_send_match_reminder_email(self):
+        """Test sending match reminder email."""
+        from email_service import send_match_reminder_email
+
+        with patch('email_service._get_backend') as mock_backend:
+            mock_backend.return_value = AsyncMock(return_value=True)
+            result = await send_match_reminder_email(
+                callsign="W1ABC",
+                email="test@example.com",
+                sport_name="POTA Championship",
+                match_name="Week 1",
+                target_value="K-0001",
+                start_date="2026-01-15",
+                end_date="2026-01-21"
+            )
+
+        assert result is True
+
+
+class TestEmailVerification:
+    """Test email verification functionality."""
+
+    def test_render_email_verification_template(self):
+        """Test email verification template renders correctly."""
+        from email_service import render_email_template
+
+        html = render_email_template(
+            "email_verification",
+            callsign="W1ABC",
+            verification_url="https://example.com/verify-email/abc123"
+        )
+
+        assert "W1ABC" in html
+        assert "https://example.com/verify-email/abc123" in html
+        assert "verify" in html.lower()
+
+    def test_create_email_verification_token(self):
+        """Test creating an email verification token."""
+        from auth import register_user
+        from email_service import create_email_verification_token
+
+        register_user("W1VER", "password123", "test@example.com")
+        token = create_email_verification_token("W1VER")
+
+        assert token is not None
+        assert len(token) > 20
+
+    def test_create_email_verification_token_stores_in_database(self):
+        """Test verification token is stored in database."""
+        from auth import register_user
+        from email_service import create_email_verification_token
+        from database import get_db
+
+        register_user("W1VDB", "password123", "test@example.com")
+        token = create_email_verification_token("W1VDB")
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM email_verification_tokens WHERE token = ?",
+                (token,)
+            )
+            row = cursor.fetchone()
+            assert row is not None
+            assert row["callsign"] == "W1VDB"
+
+    def test_validate_email_verification_token_valid(self):
+        """Test validating a valid verification token."""
+        from auth import register_user
+        from email_service import create_email_verification_token, validate_email_verification_token
+
+        register_user("W1VAL", "password123", "test@example.com")
+        token = create_email_verification_token("W1VAL")
+
+        callsign = validate_email_verification_token(token)
+        assert callsign == "W1VAL"
+
+    def test_validate_email_verification_token_invalid(self):
+        """Test validating an invalid verification token."""
+        from email_service import validate_email_verification_token
+
+        callsign = validate_email_verification_token("invalid-token-12345")
+        assert callsign is None
+
+    def test_validate_email_verification_token_expired(self):
+        """Test validating an expired verification token."""
+        from auth import register_user
+        from email_service import create_email_verification_token, validate_email_verification_token
+        from database import get_db
+        from datetime import datetime, timedelta
+
+        register_user("W1EXP", "password123", "test@example.com")
+        token = create_email_verification_token("W1EXP")
+
+        # Expire the token manually
+        with get_db() as conn:
+            past = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+            conn.execute(
+                "UPDATE email_verification_tokens SET expires_at = ? WHERE token = ?",
+                (past, token)
+            )
+
+        callsign = validate_email_verification_token(token)
+        assert callsign is None
+
+    def test_validate_email_verification_token_already_used(self):
+        """Test validating an already-used verification token."""
+        from auth import register_user
+        from email_service import create_email_verification_token, validate_email_verification_token, mark_email_verification_token_used
+
+        register_user("W1USE", "password123", "test@example.com")
+        token = create_email_verification_token("W1USE")
+
+        # Mark as used
+        mark_email_verification_token_used(token)
+
+        callsign = validate_email_verification_token(token)
+        assert callsign is None
+
+    def test_verification_token_expires_after_24_hours(self):
+        """Test verification tokens expire after 24 hours by default."""
+        from auth import register_user
+        from email_service import create_email_verification_token
+        from database import get_db
+        from datetime import datetime, timedelta
+
+        register_user("W1H24", "password123", "test@example.com")
+        token = create_email_verification_token("W1H24")
+
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT expires_at FROM email_verification_tokens WHERE token = ?",
+                (token,)
+            )
+            row = cursor.fetchone()
+            expires_at = datetime.fromisoformat(row["expires_at"])
+            now = datetime.utcnow()
+
+            # Should expire roughly 24 hours from now (allow 5 min tolerance)
+            diff = expires_at - now
+            assert timedelta(hours=23, minutes=55) < diff < timedelta(hours=24, minutes=5)
+
+    @pytest.mark.asyncio
+    async def test_send_email_verification(self):
+        """Test sending email verification email."""
+        from email_service import send_email_verification
+
+        with patch('email_service._get_backend') as mock_backend:
+            mock_backend.return_value = AsyncMock(return_value=True)
+            result = await send_email_verification(
+                callsign="W1ABC",
+                email="test@example.com",
+                verification_url="https://example.com/verify-email/abc123"
+            )
+
+        assert result is True
+
+
+class TestWelcomeEmail:
+    """Test welcome email functionality."""
+
+    @pytest.mark.asyncio
+    async def test_send_welcome_email(self):
+        """Test sending welcome email."""
+        from email_service import send_welcome_email
+
+        with patch('email_service._get_backend') as mock_backend:
+            mock_backend.return_value = AsyncMock(return_value=True)
+            result = await send_welcome_email(
+                callsign="W1ABC",
+                email="test@example.com"
+            )
+
+        assert result is True
+
+
+class TestEmailVerificationEndpoints:
+    """Test email verification API endpoints."""
+
+    def test_verify_email_with_valid_token(self, client):
+        """Test verifying email with valid token."""
+        from auth import register_user
+        from email_service import create_email_verification_token
+
+        register_user("W1VEP", "password123", "test@example.com")
+        token = create_email_verification_token("W1VEP")
+
+        response = client.get(f"/verify-email/{token}")
+        assert response.status_code == 200
+        assert "verified" in response.text.lower() or "success" in response.text.lower()
+
+    def test_verify_email_with_invalid_token(self, client):
+        """Test verifying email with invalid token."""
+        response = client.get("/verify-email/invalid-token-12345")
+        assert response.status_code == 200  # Returns a message page
+        assert "invalid" in response.text.lower() or "expired" in response.text.lower()
+
+    def test_verify_email_updates_database(self, client):
+        """Test verifying email updates email_verified flag."""
+        from auth import register_user
+        from email_service import create_email_verification_token
+        from database import get_db
+
+        register_user("W1UPD", "password123", "test@example.com")
+        token = create_email_verification_token("W1UPD")
+
+        # Verify email
+        client.get(f"/verify-email/{token}")
+
+        # Check database
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT email_verified FROM competitors WHERE callsign = ?",
+                ("W1UPD",)
+            )
+            row = cursor.fetchone()
+            assert row["email_verified"] == 1
+
+
 @pytest.fixture
 def client():
     """Create test client."""

@@ -5,7 +5,7 @@ LoTW (Logbook of the World) client for fetching QSO data.
 import httpx
 from typing import List, Optional
 from datetime import datetime
-from qrz_client import QSOData, parse_adif
+from qrz_client import QSOData, parse_adif, _extract_pota_from_comment
 
 
 LOTW_REPORT_URL = "https://lotw.arrl.org/lotwuser/lotwreport.adi"
@@ -202,6 +202,22 @@ def parse_lotw_qso(raw_qso: dict) -> Optional[QSOData]:
     if qsl_rcvd == "Y" or lotw_qsl_rcvd == "Y":
         is_confirmed = True
 
+    # Check multiple possible field names for POTA/SIG info
+    # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF
+    # Also check COMMENT field as fallback (some users put park refs there)
+    my_sig_info = (
+        raw_qso.get("MY_SIG_INFO") or
+        raw_qso.get("MY_POTA_REF") or
+        raw_qso.get("MY_WWFF_REF") or
+        _extract_pota_from_comment(raw_qso.get("MY_COMMENT", ""))
+    )
+    dx_sig_info = (
+        raw_qso.get("SIG_INFO") or
+        raw_qso.get("POTA_REF") or
+        raw_qso.get("WWFF_REF") or
+        _extract_pota_from_comment(raw_qso.get("COMMENT", ""))
+    )
+
     return QSOData(
         dx_callsign=call.upper(),
         qso_datetime=qso_datetime,
@@ -210,10 +226,10 @@ def parse_lotw_qso(raw_qso: dict) -> Optional[QSOData]:
         tx_power=tx_power,
         my_dxcc=my_dxcc,
         my_grid=raw_qso.get("MY_GRIDSQUARE"),
-        my_sig_info=raw_qso.get("MY_SIG_INFO"),
+        my_sig_info=my_sig_info,
         dx_dxcc=dx_dxcc,
         dx_grid=raw_qso.get("GRIDSQUARE"),
-        dx_sig_info=raw_qso.get("SIG_INFO"),
+        dx_sig_info=dx_sig_info,
         is_confirmed=is_confirmed,
         qrz_logid=None,  # LoTW doesn't use QRZ log IDs
     )

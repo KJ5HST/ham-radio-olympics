@@ -64,9 +64,14 @@ def init_db():
         # Drop old index if it exists
         conn.execute("DROP INDEX IF EXISTS idx_qsos_contestant")
 
-        # Drop and recreate sessions table to fix foreign key reference
-        conn.execute("DROP TABLE IF EXISTS sessions")
-        conn.commit()
+        # Migration: Fix sessions table foreign key (only if needed)
+        # Check if sessions table has FK pointing to old 'contestants' table
+        if 'sessions' in tables:
+            fk_info = conn.execute("PRAGMA foreign_key_list(sessions)").fetchall()
+            needs_sessions_migration = any(fk[2] == 'contestants' for fk in fk_info)
+            if needs_sessions_migration:
+                conn.execute("DROP TABLE sessions")
+                conn.commit()
 
         # Migration: Fix qsos table foreign key from contestants to competitors
         if 'qsos' in tables:
@@ -212,6 +217,10 @@ def init_db():
                 conn.execute("ALTER TABLE competitors ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
                 conn.execute("ALTER TABLE competitors ADD COLUMN locked_until TEXT")
                 conn.commit()
+            # Migration: add email_verified column
+            if 'email_verified' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0")
+                conn.commit()
 
         conn.executescript("""
             -- Competitors table
@@ -219,6 +228,7 @@ def init_db():
                 callsign TEXT PRIMARY KEY,
                 password_hash TEXT NOT NULL,
                 email TEXT,
+                email_verified INTEGER NOT NULL DEFAULT 0,
                 qrz_api_key_encrypted TEXT,
                 lotw_username_encrypted TEXT,
                 lotw_password_encrypted TEXT,
@@ -242,6 +252,16 @@ def init_db():
 
             -- Password reset tokens table
             CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                token TEXT PRIMARY KEY,
+                callsign TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Email verification tokens table
+            CREATE TABLE IF NOT EXISTS email_verification_tokens (
                 token TEXT PRIMARY KEY,
                 callsign TEXT NOT NULL,
                 created_at TEXT NOT NULL,

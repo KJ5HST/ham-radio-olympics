@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 50px auto; text-align: center;">
+    {% if type == "success" %}
+    <div style="font-size: 48px; margin-bottom: 20px;">&#10003;</div>
+    {% elif type == "error" %}
+    <div style="font-size: 48px; margin-bottom: 20px;">&#10007;</div>
+    {% else %}
+    <div style="font-size: 48px; margin-bottom: 20px;">&#8505;</div>
+    {% endif %}
+
+    <h2>{{ title }}</h2>
+    <p>{{ message }}</p>
+
+    <div style="margin-top: 30px;">
+        <a href="/dashboard" class="btn">Go to Dashboard</a>
+    </div>
+</div>
+{% endblock %}

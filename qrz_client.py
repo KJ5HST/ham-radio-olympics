@@ -32,6 +32,30 @@ class QSOData:
     qrz_logid: Optional[str]
 
 
+# POTA park reference pattern: 1-2 letter country code, dash, 4-5 digits
+# Examples: US-3310, K-0001, VE-1234, G-0001, DL-0001
+POTA_PATTERN = re.compile(r'\b([A-Z]{1,2}-\d{4,5})\b', re.IGNORECASE)
+
+
+def _extract_pota_from_comment(comment: str) -> Optional[str]:
+    """
+    Extract POTA park reference from a comment field.
+
+    Args:
+        comment: The comment text to search
+
+    Returns:
+        Park reference (e.g., "US-3310") if found, None otherwise
+    """
+    if not comment:
+        return None
+
+    match = POTA_PATTERN.search(comment)
+    if match:
+        return match.group(1).upper()
+    return None
+
+
 def parse_adif(adif_string: str) -> List[Dict[str, str]]:
     """
     Parse ADIF format data into a list of QSO dictionaries.
@@ -176,6 +200,22 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     if qsl_rcvd == "Y" or lotw_qsl_rcvd == "Y" or app_qrzlog_status == "C":
         is_confirmed = True
 
+    # Check multiple possible field names for POTA/SIG info
+    # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF
+    # Also check COMMENT field as fallback (some users put park refs there)
+    my_sig_info = (
+        raw_qso.get("MY_SIG_INFO") or
+        raw_qso.get("MY_POTA_REF") or
+        raw_qso.get("MY_WWFF_REF") or
+        _extract_pota_from_comment(raw_qso.get("MY_COMMENT", ""))
+    )
+    dx_sig_info = (
+        raw_qso.get("SIG_INFO") or
+        raw_qso.get("POTA_REF") or
+        raw_qso.get("WWFF_REF") or
+        _extract_pota_from_comment(raw_qso.get("COMMENT", ""))
+    )
+
     return QSOData(
         dx_callsign=call.upper(),
         qso_datetime=qso_datetime,
@@ -184,10 +224,10 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
         tx_power=tx_power,
         my_dxcc=my_dxcc,
         my_grid=raw_qso.get("MY_GRIDSQUARE"),
-        my_sig_info=raw_qso.get("MY_SIG_INFO"),
+        my_sig_info=my_sig_info,
         dx_dxcc=dx_dxcc,
         dx_grid=raw_qso.get("GRIDSQUARE"),
-        dx_sig_info=raw_qso.get("SIG_INFO"),
+        dx_sig_info=dx_sig_info,
         is_confirmed=is_confirmed,
         qrz_logid=raw_qso.get("APP_QRZLOG_LOGID"),
     )
