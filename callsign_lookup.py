@@ -1,6 +1,6 @@
 """
 Callsign lookup service for fetching operator names and country info.
-Uses HamQTH (free) for lookups with local caching.
+Uses QRZ XML API (if configured) with HamQTH as fallback, and local caching.
 """
 
 import httpx
@@ -10,10 +10,16 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 
 from database import get_db
+from config import config
 
 
 HAMQTH_URL = "https://www.hamqth.com/xml.php"
+QRZ_URL = "https://xmldata.qrz.com/xml/current/"
 CACHE_DURATION_DAYS = 30
+
+# QRZ session key cache (in-memory, refreshed on expiry or error)
+_qrz_session_key: Optional[str] = None
+_qrz_session_expires: Optional[datetime] = None
 
 
 @dataclass
@@ -443,9 +449,122 @@ async def lookup_callsign_hamqth(callsign: str) -> Optional[CallsignInfo]:
         return None
 
 
+async def _get_qrz_session() -> Optional[str]:
+    """Get or refresh QRZ session key."""
+    global _qrz_session_key, _qrz_session_expires
+
+    # Check if we have valid credentials
+    if not config.QRZ_USERNAME or not config.QRZ_PASSWORD:
+        return None
+
+    # Check if existing session is still valid (with 5 min buffer)
+    if _qrz_session_key and _qrz_session_expires:
+        if datetime.utcnow() < _qrz_session_expires - timedelta(minutes=5):
+            return _qrz_session_key
+
+    # Get new session
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                QRZ_URL,
+                params={
+                    "username": config.QRZ_USERNAME,
+                    "password": config.QRZ_PASSWORD,
+                },
+                timeout=10.0,
+            )
+
+            if response.status_code != 200:
+                return None
+
+            root = ET.fromstring(response.text)
+
+            # Check for error
+            error = root.find(".//{http://xmldata.qrz.com}Error")
+            if error is not None:
+                return None
+
+            # Get session key
+            session = root.find(".//{http://xmldata.qrz.com}Key")
+            if session is None:
+                return None
+
+            _qrz_session_key = session.text
+            # QRZ sessions last 24 hours, but we'll refresh more frequently
+            _qrz_session_expires = datetime.utcnow() + timedelta(hours=1)
+
+            return _qrz_session_key
+    except Exception:
+        return None
+
+
+async def lookup_callsign_qrz(callsign: str) -> Optional[CallsignInfo]:
+    """Look up callsign using QRZ XML API (requires subscription)."""
+    global _qrz_session_key
+
+    session_key = await _get_qrz_session()
+    if not session_key:
+        return None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                QRZ_URL,
+                params={
+                    "s": session_key,
+                    "callsign": callsign.upper(),
+                },
+                timeout=10.0,
+            )
+
+            if response.status_code != 200:
+                return None
+
+            root = ET.fromstring(response.text)
+
+            # Check for session error (need to re-auth)
+            error = root.find(".//{http://xmldata.qrz.com}Error")
+            if error is not None:
+                error_text = error.text or ""
+                if "session" in error_text.lower() or "invalid" in error_text.lower():
+                    # Clear session and retry once
+                    _qrz_session_key = None
+                    session_key = await _get_qrz_session()
+                    if session_key:
+                        return await lookup_callsign_qrz(callsign)
+                return None
+
+            # Extract callsign data
+            callsign_elem = root.find(".//{http://xmldata.qrz.com}Callsign")
+            if callsign_elem is None:
+                return None
+
+            # Get name fields
+            fname = callsign_elem.findtext("{http://xmldata.qrz.com}fname", "")
+            name = callsign_elem.findtext("{http://xmldata.qrz.com}name", "")
+            country = callsign_elem.findtext("{http://xmldata.qrz.com}country", None)
+            grid = callsign_elem.findtext("{http://xmldata.qrz.com}grid", None)
+            dxcc_str = callsign_elem.findtext("{http://xmldata.qrz.com}dxcc", None)
+
+            dxcc = int(dxcc_str) if dxcc_str else None
+
+            return CallsignInfo(
+                callsign=callsign.upper(),
+                first_name=fname if fname else None,
+                last_name=name if name else None,
+                country=country,
+                dxcc=dxcc,
+                grid=grid,
+            )
+    except Exception:
+        return None
+
+
 async def lookup_callsign(callsign: str, use_cache: bool = True) -> Optional[CallsignInfo]:
     """
     Look up callsign information.
+
+    Tries QRZ XML API first (if configured), then falls back to HamQTH.
 
     Args:
         callsign: The callsign to look up
@@ -462,7 +581,14 @@ async def lookup_callsign(callsign: str, use_cache: bool = True) -> Optional[Cal
         if cached:
             return cached
 
-    # Try HamQTH
+    # Try QRZ first (if configured)
+    if config.QRZ_USERNAME and config.QRZ_PASSWORD:
+        info = await lookup_callsign_qrz(callsign)
+        if info and info.first_name:  # Only use if we got a name
+            cache_callsign(info)
+            return info
+
+    # Fall back to HamQTH
     info = await lookup_callsign_hamqth(callsign)
 
     if info:

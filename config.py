@@ -48,6 +48,10 @@ class Config:
         "bronze": int(os.getenv("MEDAL_POINTS_BRONZE", "1")),
     }
 
+    # QRZ XML API credentials (for callsign lookups)
+    QRZ_USERNAME: str = os.getenv("QRZ_USERNAME", "")
+    QRZ_PASSWORD: str = os.getenv("QRZ_PASSWORD", "")
+
     # Email settings (for future use)
     EMAIL_BACKEND: str = os.getenv("EMAIL_BACKEND", "console")
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
