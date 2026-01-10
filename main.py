@@ -688,10 +688,11 @@ async def get_records(request: Request, user: User = Depends(require_user)):
     with get_db() as conn:
         # Global records (sport_id IS NULL, callsign IS NULL) with holder names and match info
         cursor = conn.execute("""
-            SELECT r.*, q.competitor_callsign as holder, q.dx_callsign,
+            SELECT r.record_type, r.value, r.qso_id, r.achieved_at, r.match_id,
+                   q.competitor_callsign as holder, q.dx_callsign,
                    c.first_name as holder_first_name,
-                   m.id as match_id, m.target_value,
-                   s.id as sport_id, s.name as sport_name
+                   m.target_value,
+                   s.id as linked_sport_id, s.name as sport_name
             FROM records r
             LEFT JOIN qsos q ON r.qso_id = q.id
             LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
