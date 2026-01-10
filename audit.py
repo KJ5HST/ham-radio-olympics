@@ -58,22 +58,27 @@ def get_audit_logs(
     Returns:
         List of audit log entries as dictionaries
     """
-    query = "SELECT * FROM audit_log WHERE 1=1"
+    query = """
+        SELECT a.*, c.first_name as actor_first_name
+        FROM audit_log a
+        LEFT JOIN competitors c ON a.actor_callsign = c.callsign
+        WHERE 1=1
+    """
     params = []
 
     if action:
-        query += " AND action = ?"
+        query += " AND a.action = ?"
         params.append(action)
 
     if actor_callsign:
-        query += " AND actor_callsign = ?"
+        query += " AND a.actor_callsign = ?"
         params.append(actor_callsign)
 
     if target_type:
-        query += " AND target_type = ?"
+        query += " AND a.target_type = ?"
         params.append(target_type)
 
-    query += " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY a.timestamp DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     with get_db() as conn:
