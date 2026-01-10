@@ -45,7 +45,7 @@
             <td>
                 <div class="btn-group">
                     <a href="/competitor/{{ c.callsign }}" class="btn btn-sm btn-icon" title="View"><span class="icon">👤</span></a>
-                    <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Disqualify"><span class="icon">🚫</span></button>
+                    <button type="button" onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Disqualify"><span class="icon">🚫</span></button>
                 </div>
             </td>
         </tr>

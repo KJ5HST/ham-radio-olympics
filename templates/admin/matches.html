@@ -37,8 +37,8 @@
             <td>{{ match.end_date | format_datetime }}</td>
             <td>
                 <div class="btn-group">
-                    <button onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
-                    <button onclick="deleteMatch({{ match.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="deleteMatch({{ match.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
         </tr>

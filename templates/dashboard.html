@@ -351,8 +351,53 @@
 </table></div>
 {% endif %}
 
-{% if qsos %}
+{% if is_own_profile %}
+<h3>QSO Log</h3>
+<div class="card" style="margin-bottom: 15px;">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="band">Band</label>
+            <select id="band" name="band" style="min-width: 100px;">
+                <option value="">All Bands</option>
+                {% for b in ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'] %}
+                <option value="{{ b }}" {% if request.query_params.get('band') == b %}selected{% endif %}>{{ b }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="mode">Mode</label>
+            <select id="mode" name="mode" style="min-width: 100px;">
+                <option value="">All Modes</option>
+                {% for m in ['SSB', 'CW', 'FT8', 'FT4', 'RTTY', 'PSK31', 'FM', 'AM', 'DIGI'] %}
+                <option value="{{ m }}" {% if request.query_params.get('mode') == m %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="confirmed">Status</label>
+            <select id="confirmed" name="confirmed" style="min-width: 120px;">
+                <option value="">All QSOs</option>
+                <option value="1" {% if request.query_params.get('confirmed') == '1' %}selected{% endif %}>Confirmed</option>
+                <option value="0" {% if request.query_params.get('confirmed') == '0' %}selected{% endif %}>Unconfirmed</option>
+            </select>
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn"><span class="icon">🔍</span> Filter</button>
+            {% if request.query_params.get('band') or request.query_params.get('mode') or request.query_params.get('confirmed') %}
+            <a href="/dashboard" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+            {% endif %}
+        </div>
+        <div class="btn-group" style="margin-left: auto;">
+            <a href="/export/qsos" class="btn btn-info"><span class="icon">📥</span> Export QSOs</a>
+            <a href="/export/medals" class="btn btn-info"><span class="icon">📥</span> Export Medals</a>
+        </div>
+    </form>
+</div>
+{% else %}
 <h3>Recent QSOs</h3>
+{% endif %}
+
+{% if qsos %}
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -389,6 +434,24 @@
         {% endfor %}
     </tbody>
 </table></div>
+
+{% if is_own_profile and pagination and pagination.total_pages > 1 %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px;">
+    <span style="color: var(--text-secondary);">
+        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}-{{ [pagination.page * pagination.per_page, pagination.total_items] | min }} of {{ pagination.total_items }} QSOs
+    </span>
+    <div class="btn-group">
+        {% if pagination.page > 1 %}
+        <a href="?{% if request.query_params.get('band') %}band={{ request.query_params.get('band') }}&{% endif %}{% if request.query_params.get('mode') %}mode={{ request.query_params.get('mode') }}&{% endif %}{% if request.query_params.get('confirmed') %}confirmed={{ request.query_params.get('confirmed') }}&{% endif %}page={{ pagination.page - 1 }}" class="btn btn-sm btn-secondary">&larr; Prev</a>
+        {% endif %}
+        <span class="btn btn-sm" style="cursor: default;">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+        {% if pagination.page < pagination.total_pages %}
+        <a href="?{% if request.query_params.get('band') %}band={{ request.query_params.get('band') }}&{% endif %}{% if request.query_params.get('mode') %}mode={{ request.query_params.get('mode') }}&{% endif %}{% if request.query_params.get('confirmed') %}confirmed={{ request.query_params.get('confirmed') }}&{% endif %}page={{ pagination.page + 1 }}" class="btn btn-sm btn-secondary">Next &rarr;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% else %}
 <div class="card">
     {% if is_own_profile %}

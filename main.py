@@ -1298,24 +1298,35 @@ async def user_dashboard(
     page: int = 1
 ):
     """User dashboard with stats, QSOs, and medals."""
+    per_page = 50
+    offset = (page - 1) * per_page
+
     with get_db() as conn:
         # Build QSO query with filters
-        qso_query = "SELECT * FROM qsos WHERE competitor_callsign = ?"
+        base_where = "WHERE competitor_callsign = ?"
         qso_params = [user.callsign]
 
         if band:
-            qso_query += " AND band = ?"
+            base_where += " AND band = ?"
             qso_params.append(band)
         if mode:
-            qso_query += " AND mode = ?"
+            base_where += " AND mode = ?"
             qso_params.append(mode)
         if confirmed is not None:
-            qso_query += " AND is_confirmed = ?"
+            base_where += " AND is_confirmed = ?"
             qso_params.append(confirmed)
 
-        qso_query += " ORDER BY qso_datetime_utc DESC LIMIT 50"
+        # Get total count for pagination
+        count_query = f"SELECT COUNT(*) FROM qsos {base_where}"
+        cursor = conn.execute(count_query, qso_params)
+        total_qsos = cursor.fetchone()[0]
+        total_pages = (total_qsos + per_page - 1) // per_page if total_qsos > 0 else 1
 
-        cursor = conn.execute(qso_query, qso_params)
+        # Ensure page is within bounds
+        page = max(1, min(page, total_pages))
+
+        qso_query = f"SELECT * FROM qsos {base_where} ORDER BY qso_datetime_utc DESC LIMIT ? OFFSET ?"
+        cursor = conn.execute(qso_query, qso_params + [per_page, offset])
         qsos = [dict(row) for row in cursor.fetchall()]
 
         # Add country names to QSOs
@@ -1391,6 +1402,12 @@ async def user_dashboard(
         },
         "is_own_profile": True,
         "can_sync": user.has_qrz_key,
+        "pagination": {
+            "page": page,
+            "total_pages": total_pages,
+            "total_items": total_qsos,
+            "per_page": per_page,
+        },
     })
 
 
@@ -2129,23 +2146,34 @@ async def delete_match(request: Request, match_id: int):
 async def admin_competitors(
     request: Request,
     _: bool = Depends(verify_admin),
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    page: int = 1
 ):
     """List all competitors."""
+    per_page = 50
+    offset = (page - 1) * per_page
+
     with get_db() as conn:
-        if search:
-            cursor = conn.execute("""
-                SELECT callsign, first_name, registered_at, last_sync_at, is_disabled, is_admin, is_referee
-                FROM competitors
-                WHERE callsign LIKE ?
-                ORDER BY registered_at DESC
-            """, (f"%{search}%",))
-        else:
-            cursor = conn.execute("""
-                SELECT callsign, first_name, registered_at, last_sync_at, is_disabled, is_admin, is_referee
-                FROM competitors
-                ORDER BY registered_at DESC
-            """)
+        # Build query with optional search
+        base_where = "WHERE callsign LIKE ?" if search else ""
+        params = [f"%{search}%"] if search else []
+
+        # Get total count
+        count_query = f"SELECT COUNT(*) FROM competitors {base_where}"
+        cursor = conn.execute(count_query, params)
+        total_count = cursor.fetchone()[0]
+        total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 1
+        page = max(1, min(page, total_pages))
+
+        # Get paginated results
+        query = f"""
+            SELECT callsign, first_name, registered_at, last_sync_at, is_disabled, is_admin, is_referee
+            FROM competitors
+            {base_where}
+            ORDER BY registered_at DESC
+            LIMIT ? OFFSET ?
+        """
+        cursor = conn.execute(query, params + [per_page, offset])
         competitors = [dict(row) for row in cursor.fetchall()]
 
         # Get referee assignments for each referee
@@ -2174,6 +2202,12 @@ async def admin_competitors(
         "user": get_current_user(request),
         "competitors": competitors,
         "all_sports": all_sports,
+        "pagination": {
+            "page": page,
+            "total_pages": total_pages,
+            "total_items": total_count,
+            "per_page": per_page,
+        },
     })
 
 

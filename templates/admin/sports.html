@@ -32,8 +32,8 @@
                 <div class="btn-group">
                     <a href="/admin/sport/{{ sport.id }}/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Competitors"><span class="icon">👥</span></a>
                     <a href="/admin/sport/{{ sport.id }}/matches?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon btn-info" title="Matches"><span class="icon">📅</span></a>
-                    <button onclick="editSport({{ sport.id }}, '{{ sport.name }}', '{{ sport.description or '' }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
-                    <button onclick="deleteSport({{ sport.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                    <button type="button" onclick="editSport({{ sport.id }}, '{{ sport.name | e }}', '{{ (sport.description or '') | e }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="deleteSport({{ sport.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
         </tr>

@@ -6,6 +6,27 @@
 <h2>Competitors</h2>
 <p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
 
+<div class="card" style="margin-bottom: 20px;">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+        <input type="hidden" name="admin_key" value="{{ request.query_params.get('admin_key', '') }}">
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+            <label for="search">Search Callsign</label>
+            <input type="text" id="search" name="search" value="{{ request.query_params.get('search', '') }}" placeholder="W1ABC...">
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn"><span class="icon">🔍</span> Search</button>
+            {% if request.query_params.get('search') %}
+            <a href="/admin/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+            {% endif %}
+        </div>
+        <a href="/admin/export/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-info"><span class="icon">📥</span> Export CSV</a>
+    </form>
+</div>
+
+{% if request.query_params.get('search') %}
+<p style="color: var(--text-secondary);">Showing {{ competitors | length }} result(s) for "{{ request.query_params.get('search') }}"</p>
+{% endif %}
+
 {% if competitors %}
 <div class="table-responsive"><table>
     <thead>
@@ -51,7 +72,7 @@
 
                     <!-- Role Management Dropdown -->
                     <div style="display: inline-block; position: relative;">
-                        <button onclick="toggleDropdown('role-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-secondary" title="Role"><span class="icon">🎭</span></button>
+                        <button type="button" onclick="toggleDropdown('role-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-secondary" title="Role"><span class="icon">🎭</span></button>
                         <div id="role-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; z-index: 100; min-width: 150px;">
                             {% if not c.is_admin %}
                             <button onclick="setAdmin('{{ c.callsign }}')" style="display: block; width: 100%; text-align: left; padding: 8px; border: none; background: none; cursor: pointer; color: var(--text-primary);">👑 Make Admin</button>
@@ -69,7 +90,7 @@
                     {% if c.is_referee %}
                     <!-- Sport Assignment Dropdown -->
                     <div style="display: inline-block; position: relative;">
-                        <button onclick="toggleDropdown('assign-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Assign Sports"><span class="icon">📋</span></button>
+                        <button type="button" onclick="toggleDropdown('assign-{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Assign Sports"><span class="icon">📋</span></button>
                         <div id="assign-{{ c.callsign }}" class="dropdown-menu" style="display: none; position: absolute; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; padding: 5px; z-index: 100; min-width: 200px; max-height: 300px; overflow-y: auto;">
                             {% for sport in all_sports %}
                             {% set is_assigned = sport.id in (c.assigned_sports | map(attribute='id') | list) %}
@@ -83,19 +104,37 @@
                     {% endif %}
 
                     {% if c.is_disabled %}
-                    <button onclick="enableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-success" title="Enable"><span class="icon">✓</span></button>
+                    <button type="button" onclick="enableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-success" title="Enable"><span class="icon">✓</span></button>
                     {% else %}
-                    <button onclick="disableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-warning" title="Disable"><span class="icon">⏸️</span></button>
-                    <button onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Disqualify"><span class="icon">🚫</span></button>
+                    <button type="button" onclick="disableCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-warning" title="Disable"><span class="icon">⏸️</span></button>
+                    <button type="button" onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Disqualify"><span class="icon">🚫</span></button>
                     {% endif %}
-                    <button onclick="resetPassword('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-info" title="Reset Password"><span class="icon">🔑</span></button>
-                    <button onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                    <button type="button" onclick="resetPassword('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-info" title="Reset Password"><span class="icon">🔑</span></button>
+                    <button type="button" onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table></div>
+
+{% if pagination and pagination.total_pages > 1 %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px;">
+    <span style="color: var(--text-secondary);">
+        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }}-{{ [pagination.page * pagination.per_page, pagination.total_items] | min }} of {{ pagination.total_items }} competitors
+    </span>
+    <div class="btn-group">
+        {% if pagination.page > 1 %}
+        <a href="?admin_key={{ request.query_params.get('admin_key', '') }}{% if request.query_params.get('search') %}&search={{ request.query_params.get('search') }}{% endif %}&page={{ pagination.page - 1 }}" class="btn btn-sm btn-secondary">&larr; Prev</a>
+        {% endif %}
+        <span class="btn btn-sm" style="cursor: default;">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+        {% if pagination.page < pagination.total_pages %}
+        <a href="?admin_key={{ request.query_params.get('admin_key', '') }}{% if request.query_params.get('search') %}&search={{ request.query_params.get('search') }}{% endif %}&page={{ pagination.page + 1 }}" class="btn btn-sm btn-secondary">Next &rarr;</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 {% else %}
 <p>No competitors registered yet.</p>
 {% endif %}
@@ -114,7 +153,7 @@ function toggleDropdown(id) {
 
 // Close dropdowns when clicking outside
 document.addEventListener('click', function(e) {
-    if (!e.target.matches('button')) {
+    if (!e.target.closest('button') && !e.target.closest('.dropdown-menu')) {
         document.querySelectorAll('.dropdown-menu').forEach(d => d.style.display = 'none');
     }
 });

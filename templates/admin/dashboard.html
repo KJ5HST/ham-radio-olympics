@@ -54,13 +54,13 @@
             <td>
                 <div class="btn-group">
                     <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Sports"><span class="icon">🏅</span></a>
-                    <button onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name | e }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     {% if olympiad.is_active %}
-                    <button onclick="deactivateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-warning" title="Pause"><span class="icon">⏸️</span></button>
+                    <button type="button" onclick="deactivateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-warning" title="Pause"><span class="icon">⏸️</span></button>
                     {% else %}
-                    <button onclick="activateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-success" title="Activate"><span class="icon">▶️</span></button>
+                    <button type="button" onclick="activateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-success" title="Activate"><span class="icon">▶️</span></button>
                     {% endif %}
-                    <button onclick="deleteOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
+                    <button type="button" onclick="deleteOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
         </tr>
