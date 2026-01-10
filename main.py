@@ -2479,13 +2479,22 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     # Get the detail message from the exception
     detail = getattr(exc, 'detail', None) or "An error occurred"
 
-    # For API requests or requests with specific error details, return JSON
     accept_header = request.headers.get("accept", "")
+    content_type = request.headers.get("content-type", "")
+    # Treat as API request if: API path, admin path, sync path, accepts JSON, or sends JSON body
     is_api_request = (
+        request.url.path.startswith("/api/") or
         request.url.path.startswith("/admin/") or
+        request.url.path.startswith("/sync") or
+        request.url.path.startswith("/sport/") or
+        request.url.path.startswith("/olympiad/sports") or
         "application/json" in accept_header or
-        detail != "Not Found"  # Preserve specific error messages
+        "application/json" in content_type
     )
+
+    # For 401 errors on non-API requests, redirect to login page
+    if exc.status_code == 401 and not is_api_request:
+        return RedirectResponse(url="/login", status_code=303)
 
     if is_api_request:
         return JSONResponse(status_code=exc.status_code, content={"detail": detail})

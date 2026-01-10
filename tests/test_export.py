@@ -84,9 +84,10 @@ class TestExportQSOs:
         assert response.status_code != 404
 
     def test_export_qsos_requires_auth(self, client):
-        """Test export QSOs requires authentication."""
-        response = client.get("/export/qsos")
-        assert response.status_code in [401, 403, 302, 303]
+        """Test export QSOs requires authentication - redirects to login."""
+        response = client.get("/export/qsos", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_export_qsos_returns_csv(self, logged_in_client):
         """Test export QSOs returns CSV content type."""
@@ -165,9 +166,10 @@ class TestExportMedals:
         assert response.status_code != 404
 
     def test_export_medals_requires_auth(self, client):
-        """Test export medals requires authentication."""
-        response = client.get("/export/medals")
-        assert response.status_code in [401, 403, 302, 303]
+        """Test export medals requires authentication - redirects to login."""
+        response = client.get("/export/medals", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_export_medals_returns_csv(self, logged_in_client):
         """Test export medals returns CSV content type."""

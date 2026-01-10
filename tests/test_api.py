@@ -697,9 +697,10 @@ class TestCompetitorEndpoints:
         assert response.status_code == 404
 
     def test_get_competitor_requires_auth(self, client):
-        """Test competitor page requires authentication."""
+        """Test competitor page requires authentication - redirects to login."""
         response = client.get("/competitor/ANYONE", follow_redirects=False)
-        assert response.status_code == 401
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_delete_competitor(self, client, admin_headers):
         """Test admin can delete competitor."""
@@ -1445,9 +1446,10 @@ class TestRecordsEndpoint:
     """Test records endpoint."""
 
     def test_get_records_requires_auth(self, client):
-        """Test records page requires authentication."""
+        """Test records page requires authentication - redirects to login."""
         response = client.get("/records", follow_redirects=False)
-        assert response.status_code == 401
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_get_records_empty(self, client):
         """Test getting records page when none exist."""
@@ -1794,7 +1796,7 @@ class TestSportEndpointsPublic:
 
     def test_get_olympiad_sports_no_active(self, client):
         """Test getting sports when no active olympiad."""
-        response = client.get("/olympiad/sports")
+        response = client.get("/olympiad/sports", headers={"Accept": "application/json"})
         assert response.status_code == 404
         assert "No active Olympiad" in response.json()["detail"]
 
@@ -2292,9 +2294,10 @@ class TestUserDashboard:
         return client
 
     def test_dashboard_requires_auth(self, client):
-        """Test dashboard requires authentication."""
-        response = client.get("/dashboard")
-        assert response.status_code == 401
+        """Test dashboard requires authentication - redirects to login."""
+        response = client.get("/dashboard", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_dashboard_renders(self, logged_in_client):
         """Test dashboard renders for logged-in user."""
@@ -2450,9 +2453,10 @@ class TestUserDashboard:
         assert "EU" in response.text
 
     def test_settings_requires_auth(self, client):
-        """Test settings requires authentication."""
-        response = client.get("/settings")
-        assert response.status_code == 401
+        """Test settings requires authentication - redirects to login."""
+        response = client.get("/settings", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_settings_renders(self, logged_in_client):
         """Test settings renders for logged-in user."""
@@ -2506,12 +2510,13 @@ class TestUserDashboard:
         assert "Sign Up" not in response.text
 
     def test_competitor_page_requires_auth_when_logged_out(self, client):
-        """Test competitor page requires authentication when logged out."""
+        """Test competitor page requires authentication when logged out - redirects to login."""
         # First create a competitor
         client.post("/signup", json={"callsign": "W1TEST", "password": "password123", "qrz_api_key": "test-api-key"})
         client.post("/logout")  # Log out
         response = client.get("/competitor/W1TEST", follow_redirects=False)
-        assert response.status_code == 401
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_sport_page_shows_logout_when_logged_in(self, logged_in_client, admin_headers):
         """Test sport page shows logout when logged in."""
@@ -2671,20 +2676,23 @@ class TestUserSettings:
             assert row["lotw_password_encrypted"] is None
 
     def test_remove_qrz_key_requires_auth(self, client):
-        """Test removing QRZ key requires authentication."""
-        response = client.delete("/settings/qrz-key")
-        assert response.status_code == 401
+        """Test removing QRZ key requires authentication - redirects to login."""
+        response = client.delete("/settings/qrz-key", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_update_lotw_requires_auth(self, client):
-        """Test updating LoTW credentials requires authentication."""
+        """Test updating LoTW credentials requires authentication - redirects to login."""
         response = client.post("/settings/lotw",
-            data={"lotw_username": "test", "lotw_password": "test"})
-        assert response.status_code == 401
+            data={"lotw_username": "test", "lotw_password": "test"}, follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
     def test_remove_lotw_requires_auth(self, client):
-        """Test removing LoTW credentials requires authentication."""
-        response = client.delete("/settings/lotw")
-        assert response.status_code == 401
+        """Test removing LoTW credentials requires authentication - redirects to login."""
+        response = client.delete("/settings/lotw", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers.get("location") == "/login"
 
 
 class TestSyncEndpoints:
