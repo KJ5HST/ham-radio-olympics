@@ -270,6 +270,47 @@ def init_db():
                 conn.execute("ALTER TABLE matches ADD COLUMN allowed_modes TEXT")
                 conn.commit()
 
+        # Migration: add max_power_w column to matches table
+        if 'matches' in tables:
+            cursor = conn.execute("PRAGMA table_info(matches)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'max_power_w' not in columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN max_power_w INTEGER")
+                conn.commit()
+
+        # Migration: update sports table to support 'any' target_type
+        # SQLite doesn't support modifying CHECK constraints, so we need to recreate the table
+        if 'sports' in tables:
+            # Check current CHECK constraint by looking at table definition
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='sports'"
+            ).fetchone()
+            if table_sql and "'any'" not in table_sql[0]:
+                # Need to recreate table with updated CHECK constraint
+                # Disable foreign keys to allow dropping referenced table
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE sports RENAME TO sports_old")
+                conn.execute("""
+                    CREATE TABLE sports (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        olympiad_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid', 'any')),
+                        work_enabled INTEGER NOT NULL DEFAULT 1,
+                        activate_enabled INTEGER NOT NULL DEFAULT 0,
+                        separate_pools INTEGER NOT NULL DEFAULT 0,
+                        allowed_modes TEXT,
+                        FOREIGN KEY (olympiad_id) REFERENCES olympiads(id) ON DELETE CASCADE
+                    )
+                """)
+                conn.execute("INSERT INTO sports SELECT * FROM sports_old")
+                conn.execute("DROP TABLE sports_old")
+                # Recreate index
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sports_olympiad ON sports(olympiad_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -336,7 +377,7 @@ def init_db():
                 olympiad_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 description TEXT,
-                target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid')),
+                target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid', 'any')),
                 work_enabled INTEGER NOT NULL DEFAULT 1,
                 activate_enabled INTEGER NOT NULL DEFAULT 0,
                 separate_pools INTEGER NOT NULL DEFAULT 0,
@@ -352,6 +393,7 @@ def init_db():
                 end_date TEXT NOT NULL,
                 target_value TEXT NOT NULL,
                 allowed_modes TEXT,
+                max_power_w INTEGER,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
             );
 

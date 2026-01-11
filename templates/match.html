@@ -9,6 +9,9 @@
     <p><strong>Target:</strong> {{ target_display | pota_tooltip }}</p>
     <p><strong>Start:</strong> {{ match.start_date | format_datetime }}</p>
     <p><strong>End:</strong> {{ match.end_date | format_datetime }}</p>
+    {% if match.max_power_w %}
+    <p><strong>Max Power:</strong> {{ match.max_power_w }}W (QRP)</p>
+    {% endif %}
 </div>
 
 {% if target_type == 'park' %}

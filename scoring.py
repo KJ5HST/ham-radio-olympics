@@ -100,7 +100,7 @@ def matches_target(
 
     Args:
         qso: QSO dictionary from database
-        target_type: 'continent', 'country', 'park', 'call', 'grid'
+        target_type: 'continent', 'country', 'park', 'call', 'grid', 'any'
         target_value: The target value to match
         mode: 'work' (check DX fields) or 'activate' (check MY_ fields)
 
@@ -108,6 +108,10 @@ def matches_target(
         True if QSO matches target
     """
     target_value = target_value.upper().strip()
+
+    # 'any' target type matches all QSOs (useful for general activity periods)
+    if target_type == "any":
+        return True
 
     if target_type == "continent":
         if mode == "work":
@@ -198,6 +202,7 @@ def get_matching_qsos(
     end_date: datetime,
     sport_id: int = None,
     match_allowed_modes: str = None,
+    max_power_w: int = None,
 ) -> List[MatchingQSO]:
     """
     Find all QSOs that match a specific Match.
@@ -210,6 +215,7 @@ def get_matching_qsos(
         end_date: Match end datetime
         sport_id: Sport ID (only competitors who opted in are included)
         match_allowed_modes: Match-level mode restriction (overrides sport if set)
+        max_power_w: Maximum allowed TX power in watts (None means no limit)
 
     Returns:
         List of MatchingQSO objects
@@ -241,6 +247,12 @@ def get_matching_qsos(
             # Check if QSO mode is allowed (applies to both work and activate)
             if not is_mode_allowed(qso.get("mode"), allowed_modes):
                 continue
+
+            # Check power limit (for QRP competitions)
+            if max_power_w is not None:
+                tx_power = qso.get("tx_power_w")
+                if tx_power is None or tx_power > max_power_w:
+                    continue
 
             # Check work mode
             if work_enabled:
@@ -449,6 +461,7 @@ def recompute_match_medals(match_id: int):
             end_date,
             sport_id=match_data["sport_id"],
             match_allowed_modes=match_data.get("allowed_modes"),
+            max_power_w=match_data.get("max_power_w"),
         )
 
         # Compute medals
@@ -828,7 +841,7 @@ def recompute_all_records():
         # Get all matches with their sport config
         cursor = conn.execute("""
             SELECT m.id as match_id, m.start_date, m.end_date, m.target_value,
-                   m.allowed_modes as match_allowed_modes,
+                   m.allowed_modes as match_allowed_modes, m.max_power_w,
                    s.id as sport_id, s.target_type, s.work_enabled, s.activate_enabled,
                    s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
             FROM matches m
@@ -861,6 +874,7 @@ def recompute_all_records():
             end_date,
             sport_id=match_data["sport_id"],
             match_allowed_modes=match_data.get("match_allowed_modes"),
+            max_power_w=match_data.get("max_power_w"),
         )
 
         # Update records for each matching QSO (only once per QSO)

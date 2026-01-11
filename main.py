@@ -422,7 +422,7 @@ class SportCreate(BaseModel):
     @field_validator('target_type')
     @classmethod
     def validate_target_type(cls, v):
-        valid_types = {'continent', 'country', 'park', 'call', 'grid'}
+        valid_types = {'continent', 'country', 'park', 'call', 'grid', 'any'}
         if v not in valid_types:
             raise ValueError(f'target_type must be one of: {", ".join(valid_types)}')
         return v
@@ -433,6 +433,7 @@ class MatchCreate(BaseModel):
     end_date: str
     target_value: str
     allowed_modes: Optional[str] = None
+    max_power_w: Optional[int] = None
 
     @field_validator('start_date', 'end_date')
     @classmethod
@@ -442,6 +443,13 @@ class MatchCreate(BaseModel):
             datetime.fromisoformat(v.replace('Z', '+00:00'))
         except ValueError:
             raise ValueError('Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)')
+        return v
+
+    @field_validator('max_power_w')
+    @classmethod
+    def validate_max_power(cls, v):
+        if v is not None and v <= 0:
+            raise ValueError('max_power_w must be positive')
         return v
 
 
@@ -2474,9 +2482,9 @@ async def create_match(request: Request, sport_id: int, match: MatchCreate):
             )
 
         cursor = conn.execute("""
-            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes)
-            VALUES (?, ?, ?, ?, ?)
-        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes))
+            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w))
 
         return {"id": cursor.lastrowid, "message": "Match created"}
 
@@ -2533,9 +2541,9 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
 
         conn.execute("""
             UPDATE matches
-            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?
+            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?, max_power_w = ?
             WHERE id = ?
-        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match_id))
+        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match_id))
 
     # Recompute medals for this match (outside connection to avoid lock)
     recompute_match_medals(match_id)

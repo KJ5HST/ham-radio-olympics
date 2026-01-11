@@ -28,6 +28,7 @@
             <th scope="col">Start Date</th>
             <th scope="col">End Date</th>
             <th scope="col">Mode Override</th>
+            <th scope="col">Max Power</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -38,9 +39,10 @@
             <td>{{ match.start_date | format_datetime }}</td>
             <td>{{ match.end_date | format_datetime }}</td>
             <td>{{ match.allowed_modes or '-' }}</td>
+            <td>{% if match.max_power_w %}{{ match.max_power_w }}W{% else %}-{% endif %}</td>
             <td>
                 <div class="btn-group">
-                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}', {{ match.max_power_w or 'null' }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     <button type="button" onclick="deleteMatch({{ match.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -92,6 +94,11 @@
             </div>
             <small style="color: #718096;">If checked, overrides sport-level mode restrictions for this match only.</small>
         </div>
+        <div class="form-group">
+            <label for="max_power_w">Max Power (watts)</label>
+            <input type="number" id="max_power_w" min="1" placeholder="Leave blank for no limit">
+            <small style="color: #718096;">Limit this match to QRP contacts. Only QSOs at or below this power will qualify.</small>
+        </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Match</button>
             <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn btn-secondary" style="display: none;"><span class="icon">✕</span> Cancel</button>
@@ -132,13 +139,14 @@ function setDefaultTimes() {
 }
 setDefaultTimes();
 
-function editMatch(id, targetValue, startDate, endDate, allowedModes) {
+function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW) {
     editingId = id;
     document.getElementById('match_id').value = id;
     document.getElementById('target_value').value = targetValue;
     document.getElementById('start_date').value = startDate;
     document.getElementById('end_date').value = endDate;
     setSelectedModes(allowedModes);
+    document.getElementById('max_power_w').value = maxPowerW || '';
     document.getElementById('form-title').textContent = 'Edit Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
     document.getElementById('cancel-btn').style.display = 'inline-flex';
@@ -150,6 +158,7 @@ function cancelEdit() {
     document.getElementById('target_value').value = '';
     setDefaultTimes();
     setSelectedModes(null);
+    document.getElementById('max_power_w').value = '';
     document.getElementById('form-title').textContent = 'Create Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Match';
     document.getElementById('cancel-btn').style.display = 'none';
@@ -158,11 +167,13 @@ function cancelEdit() {
 document.getElementById('match-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const result = document.getElementById('match-result');
+    const maxPowerVal = document.getElementById('max_power_w').value;
     const data = {
         target_value: document.getElementById('target_value').value,
         start_date: document.getElementById('start_date').value + ':00',
         end_date: document.getElementById('end_date').value + ':00',
-        allowed_modes: getSelectedModes()
+        allowed_modes: getSelectedModes(),
+        max_power_w: maxPowerVal ? parseInt(maxPowerVal, 10) : null
     };
     try {
         let resp;
