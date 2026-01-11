@@ -133,9 +133,9 @@
                 <td>{{ member.first_name or '' }} {{ member.last_name or '' }}</td>
                 <td>{{ member.total_points | int }}</td>
                 <td>
-                    {% if member.gold > 0 %}<span class="medal gold">{{ member.gold }}G</span>{% endif %}
-                    {% if member.silver > 0 %}<span class="medal silver">{{ member.silver }}S</span>{% endif %}
-                    {% if member.bronze > 0 %}<span class="medal bronze">{{ member.bronze }}B</span>{% endif %}
+                    {% if member.gold > 0 %}<span class="medal-count">🥇{{ member.gold }}</span> {% endif %}
+                    {% if member.silver > 0 %}<span class="medal-count">🥈{{ member.silver }}</span> {% endif %}
+                    {% if member.bronze > 0 %}<span class="medal-count">🥉{{ member.bronze }}</span> {% endif %}
                     {% if member.gold == 0 and member.silver == 0 and member.bronze == 0 %}-{% endif %}
                 </td>
                 <td>{{ member.joined_at | format_date }}</td>
@@ -257,6 +257,7 @@ document.getElementById('edit-team-form')?.addEventListener('submit', async func
         const resp = await fetch('/team/' + teamId, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({name, description: description || null})
         });
 
@@ -279,7 +280,11 @@ async function deleteTeam() {
     if (!confirm('This will remove all members from the team. Are you absolutely sure?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId, {method: 'DELETE'});
+        const resp = await fetch('/team/' + teamId, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         if (resp.ok) {
             window.location.href = '/teams';
         } else {
@@ -293,7 +298,11 @@ async function deleteTeam() {
 
 async function requestToJoin() {
     try {
-        const resp = await fetch('/team/' + teamId + '/request', {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast(data.message, 'success');
@@ -310,7 +319,11 @@ async function leaveTeam() {
     if (!confirm('Are you sure you want to leave this team?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/leave', {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/leave', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             window.location.href = '/teams';
@@ -326,7 +339,11 @@ async function removeMember(callsign) {
     if (!confirm('Remove ' + callsign + ' from the team?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/remove/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/remove/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             window.location.reload();
@@ -342,7 +359,11 @@ async function transferCaptaincy(callsign) {
     if (!confirm('Transfer team captaincy to ' + callsign + '? You will no longer be captain.')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/transfer/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/transfer/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             window.location.reload();
@@ -362,7 +383,11 @@ async function inviteMember() {
     }
 
     try {
-        const resp = await fetch('/team/' + teamId + '/invite/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/invite/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast(data.message, 'success');
@@ -377,7 +402,11 @@ async function inviteMember() {
 
 async function approveRequest(callsign) {
     try {
-        const resp = await fetch('/team/' + teamId + '/approve/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/approve/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast(data.message, 'success');
@@ -394,7 +423,11 @@ async function declineRequest(callsign) {
     if (!confirm('Decline request from ' + callsign + '?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast('Request declined', 'success');
@@ -411,7 +444,11 @@ async function cancelInvite(callsign) {
     if (!confirm('Cancel invite to ' + callsign + '?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast('Invite cancelled', 'success');

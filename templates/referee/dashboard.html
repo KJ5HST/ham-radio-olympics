@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Referee Dashboard - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>Referee Dashboard</h2>
+<p>Welcome, {{ user.callsign }}! Manage your assigned sports below.</p>
+
+{% if assigned_sports %}
+<h3>Your Assigned Sports</h3>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Sport</th>
+            <th scope="col">Olympiad</th>
+            <th scope="col">Target Type</th>
+            <th scope="col">Matches</th>
+            <th scope="col">Participants</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for sport in assigned_sports %}
+        <tr>
+            <td><strong>{{ sport.name }}</strong></td>
+            <td>{{ sport.olympiad_name }}</td>
+            <td>{{ sport.target_type | title }}</td>
+            <td>{{ sport.match_count }}</td>
+            <td>{{ sport.participant_count }}</td>
+            <td>
+                <div class="btn-group">
+                    <a href="/admin/sport/{{ sport.id }}/matches" class="btn btn-sm" title="Manage Matches"><span class="icon">📅</span> Matches</a>
+                    <a href="/admin/sport/{{ sport.id }}/competitors" class="btn btn-sm btn-secondary" title="Competitors"><span class="icon">👥</span> Competitors</a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% else %}
+<div class="card">
+    <p>You don't have any sport assignments yet. Contact an administrator to be assigned to sports.</p>
+</div>
+{% endif %}
+
+<h3>Referee Actions</h3>
+<div class="card">
+    <p>As a referee, you can:</p>
+    <ul style="margin-left: 20px; margin-top: 10px;">
+        <li><strong>Manage Matches</strong> - Create, edit, and delete matches for your assigned sports</li>
+        <li><strong>View Competitors</strong> - See all competitors in your assigned sports</li>
+        <li><strong>Disqualify Competitors</strong> - Remove competitors from your assigned sports for rule violations</li>
+    </ul>
+</div>
+{% endblock %}

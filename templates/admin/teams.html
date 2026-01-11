@@ -208,7 +208,9 @@ async function addMember() {
 
     try {
         const resp = await fetch('/admin/team/' + currentTeamId + '/add/' + callsign, {
-            method: 'POST'
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (resp.ok) {
@@ -229,7 +231,8 @@ async function deleteTeam(teamId, teamName) {
     try {
         const resp = await fetch('/admin/team/' + teamId, {
             method: 'DELETE',
-            headers: {'Content-Type': 'application/json'}
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
         });
         if (resp.ok) {
             window.location.reload();

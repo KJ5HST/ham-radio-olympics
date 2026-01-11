@@ -53,7 +53,7 @@
         <tr>
             <td><strong>{{ olympiad.name }}</strong></td>
             <td>{{ olympiad.start_date | format_date }} to {{ olympiad.end_date | format_date }}</td>
-            <td>{{ olympiad.qualifying_qsos }} QSOs</td>
+            <td>{% if olympiad.qualifying_qsos == 0 %}None{% else %}{{ olympiad.qualifying_qsos }} QSOs{% endif %}</td>
             <td>{% if olympiad.is_active %}<span style="color: green;">Active</span>{% else %}Inactive{% endif %}</td>
             <td>
                 <div class="btn-group">

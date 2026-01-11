@@ -117,6 +117,10 @@
 
 <script>
 function showCreateTeamModal() {
+    {% if user_team %}
+    showToast('You are already on a team. Leave your current team first.', 'error');
+    return;
+    {% endif %}
     document.getElementById('create-team-modal').style.display = 'flex';
 }
 
@@ -131,11 +135,16 @@ document.getElementById('create-team-form').addEventListener('submit', async fun
 
     const name = document.getElementById('team-name').value.trim();
     const description = document.getElementById('team-description').value.trim();
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = 'Creating...';
+    submitBtn.disabled = true;
 
     try {
         const resp = await fetch('/team', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({name, description: description || null})
         });
 
@@ -144,12 +153,15 @@ document.getElementById('create-team-form').addEventListener('submit', async fun
         if (resp.ok) {
             window.location.href = '/team/' + data.team_id;
         } else {
-            document.getElementById('create-team-result').innerHTML =
-                '<div class="alert alert-error">' + (data.detail || 'Failed to create team') + '</div>';
+            hideCreateTeamModal();
+            showToast(data.detail || 'Failed to create team', 'error');
         }
     } catch (err) {
-        document.getElementById('create-team-result').innerHTML =
-            '<div class="alert alert-error">Network error. Please try again.</div>';
+        hideCreateTeamModal();
+        showToast('Network error. Please try again.', 'error');
+    } finally {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     }
 });
 

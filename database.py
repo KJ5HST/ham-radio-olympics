@@ -569,6 +569,9 @@ def backfill_records():
     This ensures personal bests and world records exist for QSOs
     that were synced before the records feature was added.
     Only runs if there are confirmed QSOs but no records.
+
+    Uses recompute_all_records() to ensure only QSOs that fall within
+    match date ranges are considered for records.
     """
     with get_db() as conn:
         # Check if backfill is needed
@@ -580,59 +583,9 @@ def backfill_records():
         if qso_count == 0 or record_count > 0:
             return  # No QSOs or records already exist
 
-        # World record: longest distance (use QSO datetime, not current time)
-        row = conn.execute("""
-            SELECT id, competitor_callsign, distance_km, qso_datetime_utc FROM qsos
-            WHERE distance_km IS NOT NULL AND is_confirmed = 1
-            ORDER BY distance_km DESC LIMIT 1
-        """).fetchone()
-        if row:
-            conn.execute("""
-                INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-                VALUES (NULL, NULL, 'longest_distance', ?, ?, ?)
-            """, (row['distance_km'], row['id'], row['qso_datetime_utc']))
-
-        # World record: highest cool factor (use QSO datetime, not current time)
-        row = conn.execute("""
-            SELECT id, competitor_callsign, cool_factor, qso_datetime_utc FROM qsos
-            WHERE cool_factor IS NOT NULL AND is_confirmed = 1
-            ORDER BY cool_factor DESC LIMIT 1
-        """).fetchone()
-        if row:
-            conn.execute("""
-                INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-                VALUES (NULL, NULL, 'highest_cool_factor', ?, ?, ?)
-            """, (row['cool_factor'], row['id'], row['qso_datetime_utc']))
-
-        # Personal bests per competitor
-        callsigns = [r[0] for r in conn.execute(
-            "SELECT DISTINCT competitor_callsign FROM qsos WHERE is_confirmed = 1"
-        ).fetchall()]
-
-        for callsign in callsigns:
-            # Personal best distance (use QSO datetime, not current time)
-            row = conn.execute("""
-                SELECT id, distance_km, qso_datetime_utc FROM qsos
-                WHERE competitor_callsign = ? AND distance_km IS NOT NULL AND is_confirmed = 1
-                ORDER BY distance_km DESC LIMIT 1
-            """, (callsign,)).fetchone()
-            if row:
-                conn.execute("""
-                    INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-                    VALUES (NULL, ?, 'longest_distance', ?, ?, ?)
-                """, (callsign, row['distance_km'], row['id'], row['qso_datetime_utc']))
-
-            # Personal best cool factor (use QSO datetime, not current time)
-            row = conn.execute("""
-                SELECT id, cool_factor, qso_datetime_utc FROM qsos
-                WHERE competitor_callsign = ? AND cool_factor IS NOT NULL AND is_confirmed = 1
-                ORDER BY cool_factor DESC LIMIT 1
-            """, (callsign,)).fetchone()
-            if row:
-                conn.execute("""
-                    INSERT INTO records (sport_id, callsign, record_type, value, qso_id, achieved_at)
-                    VALUES (NULL, ?, 'highest_cool_factor', ?, ?, ?)
-                """, (callsign, row['cool_factor'], row['id'], row['qso_datetime_utc']))
+    # Use recompute_all_records which properly filters by match date ranges
+    from scoring import recompute_all_records
+    recompute_all_records()
 
 
 def reset_db():

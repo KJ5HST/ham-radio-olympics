@@ -150,7 +150,11 @@ document.getElementById('password-form').addEventListener('submit', function(e) 
 async function removeQrzKey() {
     if (!confirm('Are you sure you want to remove your stored QRZ API key?')) return;
 
-    const resp = await fetch('/settings/qrz-key', {method: 'DELETE'});
+    const resp = await fetch('/settings/qrz-key', {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
+    });
     if (resp.ok) {
         window.location.href = '/settings?updated=qrz_removed';
     } else {
@@ -161,7 +165,11 @@ async function removeQrzKey() {
 async function removeLotwCreds() {
     if (!confirm('Are you sure you want to remove your stored LoTW credentials?')) return;
 
-    const resp = await fetch('/settings/lotw', {method: 'DELETE'});
+    const resp = await fetch('/settings/lotw', {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
+    });
     if (resp.ok) {
         window.location.href = '/settings?updated=lotw_removed';
     } else {
@@ -170,7 +178,11 @@ async function removeLotwCreds() {
 }
 
 async function resendVerification() {
-    const resp = await fetch('/settings/resend-verification', {method: 'POST'});
+    const resp = await fetch('/settings/resend-verification', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
+    });
     if (resp.redirected) {
         window.location.href = resp.url;
     } else if (!resp.ok) {

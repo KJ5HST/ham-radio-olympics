@@ -25,7 +25,7 @@ from crypto import encrypt_api_key
 from sync import sync_competitor, sync_competitor_with_key, sync_competitor_lotw, sync_competitor_lotw_stored, sync_all_competitors, recompute_sport_matches
 from qrz_client import verify_api_key
 from lotw_client import verify_lotw_credentials
-from scoring import recompute_match_medals
+from scoring import recompute_match_medals, compute_team_standings
 from dxcc import get_country_name, get_continent_name, get_all_continents, get_all_countries
 from auth import (
     register_user, authenticate_user, get_session_user, delete_session,
@@ -681,6 +681,42 @@ async def get_sport(request: Request, sport_id: int):
         })
 
 
+@app.get("/olympiad/sport/{sport_id}/participants", response_class=HTMLResponse)
+async def get_sport_participants(request: Request, sport_id: int):
+    """View all participants in a Sport."""
+    user = get_current_user(request)
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM sports WHERE id = ?", (sport_id,))
+        sport = cursor.fetchone()
+        if not sport:
+            raise HTTPException(status_code=404, detail="Sport not found")
+
+        # Get all competitors entered in this sport with their medal counts and points
+        cursor = conn.execute("""
+            SELECT c.callsign, c.first_name, c.last_name,
+                   COALESCE(SUM(m.total_points), 0) as total_points,
+                   SUM(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
+                   SUM(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
+                   SUM(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count
+            FROM sport_entries se
+            JOIN competitors c ON se.callsign = c.callsign
+            LEFT JOIN medals m ON m.callsign = c.callsign AND m.match_id IN (
+                SELECT id FROM matches WHERE sport_id = ?
+            )
+            WHERE se.sport_id = ?
+            GROUP BY c.callsign, c.first_name, c.last_name
+            ORDER BY total_points DESC, c.callsign
+        """, (sport_id, sport_id))
+        participants = [dict(row) for row in cursor.fetchall()]
+
+    return templates.TemplateResponse("sport_participants.html", {
+        "request": request,
+        "user": user,
+        "sport": dict(sport),
+        "participants": participants,
+    })
+
+
 @app.get("/olympiad/sport/{sport_id}/matches")
 async def get_sport_matches(sport_id: int):
     """List all Matches in a Sport."""
@@ -892,17 +928,24 @@ async def get_competitor(
                 qso["dx_country"] = get_country_name(qso["dx_dxcc"])
 
         # Get medals with qualifying QSO info
+        # Use subqueries with MIN(id) to avoid cartesian product when multiple QSOs have same timestamp
         cursor = conn.execute("""
-            SELECT m.*, ma.target_value, s.name as sport_name, s.target_type,
+            SELECT m.*, ma.target_value, s.id as sport_id, s.name as sport_name, s.target_type,
                    qr.dx_callsign as qso_race_dx,
                    qc.dx_callsign as cool_factor_dx
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
             JOIN sports s ON ma.sport_id = s.id
-            LEFT JOIN qsos qr ON qr.competitor_callsign = m.callsign
-                AND qr.qso_datetime_utc = m.qso_race_claim_time
-            LEFT JOIN qsos qc ON qc.competitor_callsign = m.callsign
-                AND qc.qso_datetime_utc = m.cool_factor_claim_time
+            LEFT JOIN qsos qr ON qr.id = (
+                SELECT MIN(id) FROM qsos
+                WHERE competitor_callsign = m.callsign
+                AND qso_datetime_utc = m.qso_race_claim_time
+            )
+            LEFT JOIN qsos qc ON qc.id = (
+                SELECT MIN(id) FROM qsos
+                WHERE competitor_callsign = m.callsign
+                AND qso_datetime_utc = m.cool_factor_claim_time
+            )
             WHERE m.callsign = ?
             ORDER BY ma.start_date DESC
         """, (callsign,))
@@ -946,6 +989,28 @@ async def get_competitor(
         # Can sync if: viewing own profile with QRZ key, OR admin/referee viewing someone with QRZ key
         can_sync = has_qrz_key and (is_own_profile or user.is_admin or user.is_referee)
 
+        # Get team info if viewing own profile
+        user_team = None
+        team_member_count = 0
+        is_team_captain = False
+        pending_team_invites = []
+        if is_own_profile:
+            user_team = get_user_team(conn, callsign)
+            if user_team:
+                cursor = conn.execute("SELECT COUNT(*) FROM team_members WHERE team_id = ?", (user_team["id"],))
+                team_member_count = cursor.fetchone()[0]
+                is_team_captain = user_team["captain_callsign"] == callsign
+            else:
+                # Get pending team invites
+                cursor = conn.execute("""
+                    SELECT ti.*, t.name as team_name
+                    FROM team_invites ti
+                    JOIN teams t ON ti.team_id = t.id
+                    WHERE ti.callsign = ? AND ti.invite_type = 'invite'
+                    ORDER BY ti.created_at DESC
+                """, (callsign,))
+                pending_team_invites = cursor.fetchall()
+
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
             "user": user,
@@ -968,6 +1033,10 @@ async def get_competitor(
                 "total_items": total_qsos,
                 "per_page": per_page,
             },
+            "user_team": user_team,
+            "team_member_count": team_member_count,
+            "is_team_captain": is_team_captain,
+            "pending_team_invites": pending_team_invites,
         })
 
 
@@ -1517,7 +1586,7 @@ async def user_dashboard(
 
         # Get medals
         cursor = conn.execute("""
-            SELECT m.*, ma.target_value, s.name as sport_name, s.target_type
+            SELECT m.*, ma.target_value, s.id as sport_id, s.name as sport_name, s.target_type
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
             JOIN sports s ON ma.sport_id = s.id
@@ -1852,6 +1921,48 @@ async def export_medals(request: Request, user: User = Depends(require_user)):
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={user.callsign}_medals.csv"}
     )
+
+
+# ============================================================
+# REFEREE ENDPOINTS
+# ============================================================
+
+def verify_referee_access(request: Request):
+    """Verify the user is a referee."""
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user = get_session_user(session_id)
+    if not user or not user.is_referee:
+        raise HTTPException(status_code=403, detail="Referee access required")
+    return user
+
+
+@app.get("/referee", response_class=HTMLResponse)
+async def referee_dashboard(request: Request):
+    """Referee dashboard showing assigned sports."""
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    user = get_session_user(session_id)
+    if not user or not user.is_referee:
+        raise HTTPException(status_code=403, detail="Referee access required")
+
+    with get_db() as conn:
+        # Get sports assigned to this referee with counts
+        cursor = conn.execute("""
+            SELECT s.id, s.name, s.target_type, o.name as olympiad_name,
+                   (SELECT COUNT(*) FROM matches m WHERE m.sport_id = s.id) as match_count,
+                   (SELECT COUNT(*) FROM sport_entries se WHERE se.sport_id = s.id) as participant_count
+            FROM referee_assignments ra
+            JOIN sports s ON ra.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE ra.callsign = ?
+            ORDER BY o.start_date DESC, s.name
+        """, (user.callsign,))
+        assigned_sports = [dict(row) for row in cursor.fetchall()]
+
+    return templates.TemplateResponse("referee/dashboard.html", {
+        "request": request,
+        "user": user,
+        "assigned_sports": assigned_sports,
+    })
 
 
 # ============================================================
@@ -2977,7 +3088,7 @@ async def admin_teams_page(
         # Get teams with member counts
         cursor = conn.execute(f"""
             SELECT t.*,
-                   COUNT(tm.callsign) as member_count,
+                   COUNT(DISTINCT tm.callsign) as member_count,
                    COALESCE(SUM(m.total_points), 0) as total_points
             FROM teams t
             LEFT JOIN team_members tm ON t.id = tm.team_id
@@ -3063,6 +3174,9 @@ async def admin_create_team(
             VALUES (?, ?, 'admin_create_team', 'team', ?, ?)
         """, (now, user.callsign if user else None, str(team_id), f"Created team: {name}"))
 
+    # Recompute team standings
+    recompute_all_team_standings()
+
     return RedirectResponse(url="/admin/teams", status_code=303)
 
 
@@ -3129,6 +3243,9 @@ async def admin_add_team_member(request: Request, team_id: int, callsign: str, _
             VALUES (?, ?, 'admin_add_team_member', 'team', ?, ?)
         """, (now, user.callsign if user else None, str(team_id), f"Added {callsign} to team"))
 
+    # Recompute team standings
+    recompute_all_team_standings()
+
     return {"message": f"{callsign} added to team"}
 
 
@@ -3165,6 +3282,9 @@ async def admin_remove_team_member(request: Request, team_id: int, callsign: str
             INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
             VALUES (?, ?, 'admin_remove_team_member', 'team', ?, ?)
         """, (now, user.callsign if user else None, str(team_id), f"Removed {callsign} from team"))
+
+    # Recompute team standings
+    recompute_all_team_standings()
 
     return {"message": f"{callsign} removed from team"}
 
@@ -3214,6 +3334,19 @@ def get_user_team(conn, callsign: str):
         WHERE tm.callsign = ?
     """, (callsign,))
     return cursor.fetchone()
+
+
+def recompute_all_team_standings():
+    """Recompute team standings for all sports and matches."""
+    with get_db() as conn:
+        sports = conn.execute("SELECT id FROM sports").fetchall()
+        for sport in sports:
+            sport_id = sport[0]
+            compute_team_standings(sport_id)
+            # Also compute per-match standings
+            matches = conn.execute("SELECT id FROM matches WHERE sport_id = ?", (sport_id,)).fetchall()
+            for match in matches:
+                compute_team_standings(sport_id, match[0])
 
 
 def get_team_members(conn, team_id: int):
@@ -3428,7 +3561,10 @@ async def create_team(request: Request, data: CreateTeamRequest):
             VALUES (?, ?, 'create_team', 'team', ?, ?)
         """, (now, user.callsign, str(team_id), f"Created team: {data.name}"))
 
-        return {"message": "Team created successfully", "team_id": team_id}
+    # Recompute team standings
+    recompute_all_team_standings()
+
+    return {"message": "Team created successfully", "team_id": team_id}
 
 
 @app.put("/team/{team_id}")
@@ -3647,7 +3783,10 @@ async def approve_join_request(request: Request, team_id: int, callsign: str):
             VALUES (?, ?, ?)
         """, (team_id, callsign, now))
 
-        return {"message": f"{callsign} has been added to the team"}
+    # Recompute team standings
+    recompute_all_team_standings()
+
+    return {"message": f"{callsign} has been added to the team"}
 
 
 @app.post("/team/{team_id}/decline/{callsign}")
@@ -3769,6 +3908,9 @@ async def leave_team(request: Request, team_id: int):
             (team_id, user.callsign)
         )
 
+        # Recompute team standings
+        recompute_all_team_standings()
+
         # Log action
         now = datetime.utcnow().isoformat()
         conn.execute("""
@@ -3814,6 +3956,9 @@ async def remove_team_member(request: Request, team_id: int, callsign: str):
             "DELETE FROM team_members WHERE team_id = ? AND callsign = ?",
             (team_id, callsign)
         )
+
+        # Recompute team standings
+        recompute_all_team_standings()
 
         # Log action
         now = datetime.utcnow().isoformat()

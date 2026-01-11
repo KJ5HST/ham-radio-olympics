@@ -671,6 +671,9 @@
                         <div class="dropdown-menu" role="menu">
                             <a href="/dashboard" role="menuitem">Dashboard</a>
                             <a href="/settings" role="menuitem">Settings</a>
+                            {% if user.is_referee %}
+                            <a href="/referee" style="color: #805ad5;" role="menuitem">Referee</a>
+                            {% endif %}
                             {% if user.is_admin %}
                             <a href="/admin" style="color: #c53030;" role="menuitem">Admin</a>
                             {% endif %}

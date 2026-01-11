@@ -79,6 +79,7 @@ async function testQrz() {
     try {
         const resp = await fetch('/admin/settings/qrz/test', {
             method: 'POST',
+            headers: {'Content-Type': 'application/json'},
             credentials: 'same-origin'
         });
         const data = await resp.json();
@@ -99,6 +100,7 @@ async function clearQrz() {
     try {
         const resp = await fetch('/admin/settings/qrz', {
             method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
             credentials: 'same-origin'
         });
         const data = await resp.json();

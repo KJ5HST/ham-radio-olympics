@@ -19,7 +19,7 @@
     {% if sport.separate_pools %}
     <p><em>Work and Activate have separate medal pools</em></p>
     {% endif %}
-    <p><strong>Participants:</strong> {{ entry_count }}</p>
+    <p><strong>Participants:</strong> {{ entry_count }} <a href="/olympiad/sport/{{ sport.id }}/participants" title="View participants"><span class="icon">👥</span></a></p>
     {% if user %}
     <div style="margin-top: 10px;">
         {% if is_entered %}
@@ -36,6 +36,7 @@
 async function enterSport() {
     const resp = await fetch('/sport/{{ sport.id }}/enter', {
         method: 'POST',
+        headers: {'Content-Type': 'application/json'},
         credentials: 'same-origin'
     });
     if (resp.ok) {
@@ -50,6 +51,7 @@ async function leaveSport() {
     if (!confirm('Leave this sport? You can re-enter later.')) return;
     const resp = await fetch('/sport/{{ sport.id }}/leave', {
         method: 'POST',
+        headers: {'Content-Type': 'application/json'},
         credentials: 'same-origin'
     });
     if (resp.ok) {

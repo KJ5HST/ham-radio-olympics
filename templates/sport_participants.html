@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Participants - {{ sport.name }} - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>{{ sport.name }} Participants</h2>
+<p><a href="/olympiad/sport/{{ sport.id }}">&larr; Back to {{ sport.name }}</a></p>
+
+<div class="card" style="margin-bottom: 20px;">
+    <p><strong>Total Participants:</strong> {{ participants | length }}</p>
+</div>
+
+{% if participants %}
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Callsign</th>
+            <th scope="col">Name</th>
+            <th scope="col">Medals</th>
+            <th scope="col">Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in participants %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/competitor/{{ p.callsign }}"><strong>{{ p.callsign }}</strong></a></td>
+            <td>{{ p.first_name or '' }} {{ p.last_name or '' }}</td>
+            <td>
+                {% if p.gold_count %}<span class="medal-count"><span class="gold">{{ p.gold_count }}G</span></span> {% endif %}
+                {% if p.silver_count %}<span class="medal-count"><span class="silver">{{ p.silver_count }}S</span></span> {% endif %}
+                {% if p.bronze_count %}<span class="medal-count"><span class="bronze">{{ p.bronze_count }}B</span></span> {% endif %}
+                {% if not p.gold_count and not p.silver_count and not p.bronze_count %}-{% endif %}
+            </td>
+            <td>{{ p.total_points | int }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% else %}
+<div class="card">
+    <p>No participants have entered this sport yet.</p>
+</div>
+{% endif %}
+{% endblock %}

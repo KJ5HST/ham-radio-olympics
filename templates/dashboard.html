@@ -12,22 +12,22 @@
 {% endif %}
 
 <div class="stats">
-    <div class="stat-box">
+    <a href="#medals-section" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">🥇 <span class="medal-gold">{{ medal_summary.gold }}</span></div>
         <div class="label">Gold</div>
-    </div>
-    <div class="stat-box">
+    </a>
+    <a href="#medals-section" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">🥈 <span class="medal-silver">{{ medal_summary.silver }}</span></div>
         <div class="label">Silver</div>
-    </div>
-    <div class="stat-box">
+    </a>
+    <a href="#medals-section" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">🥉 <span class="medal-bronze">{{ medal_summary.bronze }}</span></div>
         <div class="label">Bronze</div>
-    </div>
-    <div class="stat-box">
+    </a>
+    <a href="#medals-section" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">{{ medal_summary.total_points }}</div>
         <div class="label">Points</div>
-    </div>
+    </a>
 </div>
 
 <div class="card">
@@ -112,7 +112,11 @@
         const btn = document.getElementById('sync-qrz-btn');
         setButtonLoading(btn, true);
         try {
-            const resp = await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
+            const resp = await fetch('/sync?callsign={{ competitor.callsign }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin'
+            });
             const data = await resp.json();
             if (!resp.ok) {
                 showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
@@ -132,7 +136,11 @@
         const btn = document.getElementById('sync-lotw-btn');
         setButtonLoading(btn, true);
         try {
-            const resp = await fetch('/sync/lotw/stored', {method: 'POST'});
+            const resp = await fetch('/sync/lotw/stored', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin'
+            });
             const data = await resp.json();
             if (!resp.ok) {
                 showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
@@ -305,7 +313,11 @@ async function leaveTeam(teamId) {
     if (!confirm('Are you sure you want to leave this team?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/leave', {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/leave', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             window.location.reload();
@@ -319,7 +331,11 @@ async function leaveTeam(teamId) {
 
 async function acceptInvite(teamId) {
     try {
-        const resp = await fetch('/team/' + teamId + '/accept', {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/accept', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast(data.message, 'success');
@@ -336,7 +352,11 @@ async function rejectInvite(teamId) {
     if (!confirm('Decline this team invite?')) return;
 
     try {
-        const resp = await fetch('/team/' + teamId + '/reject', {method: 'POST'});
+        const resp = await fetch('/team/' + teamId + '/reject', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast('Invite declined', 'success');
@@ -413,7 +433,7 @@ async function rejectInvite(teamId) {
 {% endif %}
 
 {% if medals %}
-<h3>{% if is_own_profile %}Recent {% endif %}Medals</h3>
+<h3 id="medals-section">{% if is_own_profile %}Recent {% endif %}Medals</h3>
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -422,16 +442,17 @@ async function rejectInvite(teamId) {
             <th scope="col">QSO Race</th>
             <th scope="col">Cool Factor</th>
             <th scope="col">Points</th>
+            <th scope="col"></th>
         </tr>
     </thead>
     <tbody>
         {% for medal in medals[:10] %}
         <tr>
-            <td>{{ medal.sport_name }}</td>
+            <td><a href="/olympiad/sport/{{ medal.sport_id }}">{{ medal.sport_name }}</a></td>
             <td>{{ medal.target_display | pota_tooltip }}</td>
             <td>
                 {% if medal.qso_race_medal %}
-                    <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
+                    {% if medal.qso_race_medal == 'gold' %}🥇{% elif medal.qso_race_medal == 'silver' %}🥈{% elif medal.qso_race_medal == 'bronze' %}🥉{% endif %}
                     {% if medal.qso_race_dx %}
                     <small style="color: var(--text-secondary);" title="QSO with {{ medal.qso_race_dx }} at {{ medal.qso_race_claim_time }}">{{ medal.qso_race_dx }}</small>
                     {% endif %}
@@ -441,7 +462,7 @@ async function rejectInvite(teamId) {
             </td>
             <td>
                 {% if medal.cool_factor_medal %}
-                    <span class="medal-{{ medal.cool_factor_medal }}">{{ medal.cool_factor_medal | upper }}</span>
+                    {% if medal.cool_factor_medal == 'gold' %}🥇{% elif medal.cool_factor_medal == 'silver' %}🥈{% elif medal.cool_factor_medal == 'bronze' %}🥉{% endif %}
                     {% if medal.cool_factor_dx %}
                     <small style="color: var(--text-secondary);" title="QSO with {{ medal.cool_factor_dx }} (CF: {{ '%.1f' | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})">{{ medal.cool_factor_dx }}</small>
                     {% endif %}
@@ -450,6 +471,7 @@ async function rejectInvite(teamId) {
                 {% endif %}
             </td>
             <td>{{ medal.total_points }}</td>
+            <td><a href="/olympiad/sport/{{ medal.sport_id }}/match/{{ medal.match_id }}" class="btn btn-sm" title="View match details"><span class="icon">👁️</span></a></td>
         </tr>
         {% endfor %}
     </tbody>
