@@ -24,7 +24,7 @@
     <div style="margin-top: 10px;">
         {% if is_entered %}
         <span style="color: #38a169; font-weight: bold;">✓ You are entered in this sport</span>
-        <button onclick="leaveSport()" class="btn btn-danger" style="margin-left: 10px;"><span class="icon">🚪</span> Leave Sport</button>
+        <button type="button" class="btn" style="background: #c53030; margin-left: 10px;" onclick="leaveSport()">Leave Sport</button>
         {% else %}
         <button onclick="enterSport()" class="btn btn-success"><span class="icon">🏅</span> Participate</button>
         {% endif %}
