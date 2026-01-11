@@ -18,7 +18,10 @@
     {% endif %}
 </div>
 {% else %}
-<p style="margin-bottom: 20px;"><a href="/login">Log in</a> to create or join a team.</p>
+<div class="card" style="margin-bottom: 20px;">
+    <p>Want to compete as a team? <a href="/login">Log in</a> to create or join a team.</p>
+    <button type="button" class="btn btn-success" onclick="window.location.href='/login'">Log in to Create a Team</button>
+</div>
 {% endif %}
 
 {% if teams %}
