@@ -1,18 +1,20 @@
 # Ham Radio Olympics
 
-Amateur radio competition server with QRZ Logbook integration. Designed for clubs to do a variety of competitions ("matches" aka first to confirm a contact in Texas) for a multitude of interests (aka "sports" like POTA) throughout a season (aka "Olympiad"). The activities are pretty flexible, but at this point scoring is pretty static and has some room for improvement, but it's a start.
+Amateur radio competition server with LoTW and QRZ Logbook integration. Designed for clubs to do a variety of competitions ("matches") for a multitude of interests ("sports" like POTA) throughout a season (aka "Olympiad"). The activities are pretty flexible, but at this point scoring is pretty static and has some room for improvement, but it's a start.
 
 ## Features
 
 - **Olympiad/Sport/Match Hierarchy** - Like real Olympics
 - **QRZ Integration** - Automatic QSO sync with confirmation status
+- **LoTW Integration** - Automatic QSO sync with confirmation status
 - **Two Scoring Events per Match**:
-  - QSO Race (first three people to log a qualifying QSO)
-  - Cool Factor (efficiency: distance/power rewards QRP)
-- **Medal System** - Gold (3pts), Silver (2pts), Bronze (1pt), POTA Bonus (+1pt)
+  - QSO Race (first three people to log a qualifying QSO win medals)
+  - Cool Factor (efficiency: distance/power rewards 3 most efficient operators with medals)
+- **Medal System** - Gold (3pts), Silver (2pts), Bronze (1pt), POTA Bonus (+1pt), Park-to-park (+2)
 - **Work/Activate Modes** - Hunter and activator competitions
-- **Separate or Combined Pools** - Configurable per Sport
+- **Separate or Combined Pools** - Medals awarded are configurable per Sport
 - **World Records & Personal Bests** - Tracked automatically
+- **Mode Restrictions** - Allow only certain modes to qualify for points and awards.
 
 ## Quick Start
 
