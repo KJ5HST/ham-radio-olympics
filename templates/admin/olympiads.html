@@ -116,13 +116,19 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
 });
 
 async function activateOlympiad(id) {
-    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function deleteOlympiad(id) {
     if (!confirm('Delete this Olympiad and all its Sports/Matches?')) return;
-    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 </script>

@@ -15,9 +15,10 @@ def get_encryption_key() -> bytes:
     Get or derive the encryption key from environment variable.
 
     Uses PBKDF2 to derive a proper Fernet key from the secret.
+    Salt is configurable via ENCRYPTION_SALT environment variable for per-deployment security.
     """
     secret = config.ENCRYPTION_KEY
-    salt = b"ham-radio-olympics-salt"
+    salt = config.ENCRYPTION_SALT.encode()
 
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),

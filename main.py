@@ -63,9 +63,9 @@ async def background_sync():
         await asyncio.sleep(config.SYNC_INTERVAL_SECONDS)
         try:
             await sync_all_competitors()
-        except Exception:
+        except Exception as e:
             # Log error but keep running
-            pass
+            logger.exception(f"Background sync failed: {e}")
 
 
 @asynccontextmanager
@@ -130,15 +130,20 @@ async def csrf_middleware(request: Request, call_next):
         response = await call_next(request)
         return response
 
-    # Validate CSRF for HTML form POSTs (not JSON API calls)
+    # Validate CSRF for all POSTs except JSON API calls
+    # JSON requires CORS preflight and cannot be submitted via simple HTML forms
     # Skip validation for new sessions (no cookie yet) to allow first form submission
     # Skip validation for logout (low-risk, doesn't modify data)
     csrf_exempt_paths = ["/logout"]
     if request.method == "POST" and not is_new_session and request.url.path not in csrf_exempt_paths:
         content_type = request.headers.get("content-type", "")
 
-        # Only validate for form submissions, not JSON API calls
-        if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        # JSON API calls are exempt (require CORS preflight, can't be forged via HTML forms)
+        # All other content types (form, text/plain, empty) require CSRF validation
+        # Non-form content types will fail token parsing and be rejected
+        is_json_api = "application/json" in content_type
+
+        if not is_json_api:
             # Read body and cache it for later use by the endpoint
             body = await request.body()
             # Parse form data manually to check CSRF token
@@ -276,16 +281,20 @@ def pota_tooltip(value: str) -> str:
     POTA references follow format: XX-NNNN (2+ letters, dash, 4+ digits)
     Examples: K-0001, US-12607, VE-0123, DL-0456
     """
+    import html
     if not value:
         return value
+    # Escape the entire value first to prevent XSS
+    escaped_value = html.escape(str(value))
     # Pattern matches POTA park references
     pattern = r'\b([A-Z]{1,3}-\d{4,})\b'
 
     def replace_pota(match):
         ref = match.group(1)
+        # ref is already escaped since it comes from escaped_value
         return f'<span class="pota-ref" data-pota="{ref}">{ref}</span>'
 
-    result = re.sub(pattern, replace_pota, str(value))
+    result = re.sub(pattern, replace_pota, escaped_value)
     return Markup(result)
 
 
@@ -354,6 +363,23 @@ class OlympiadCreate(BaseModel):
     end_date: str
     qualifying_qsos: int = 0
 
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_date_format(cls, v):
+        from datetime import datetime
+        try:
+            datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError('Invalid date format. Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
+        return v
+
+    @field_validator('qualifying_qsos')
+    @classmethod
+    def validate_qualifying_qsos(cls, v):
+        if v < 0:
+            raise ValueError('qualifying_qsos must be non-negative')
+        return v
+
 
 class SportCreate(BaseModel):
     name: str
@@ -364,12 +390,30 @@ class SportCreate(BaseModel):
     separate_pools: bool = False
     allowed_modes: Optional[str] = None
 
+    @field_validator('target_type')
+    @classmethod
+    def validate_target_type(cls, v):
+        valid_types = {'continent', 'country', 'park', 'call', 'grid'}
+        if v not in valid_types:
+            raise ValueError(f'target_type must be one of: {", ".join(valid_types)}')
+        return v
+
 
 class MatchCreate(BaseModel):
     start_date: str
     end_date: str
     target_value: str
     allowed_modes: Optional[str] = None
+
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_date_format(cls, v):
+        from datetime import datetime
+        try:
+            datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError('Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)')
+        return v
 
 
 # Admin authentication dependency
@@ -668,10 +712,14 @@ async def get_match(request: Request, sport_id: int, match_id: int):
 async def enter_sport(sport_id: int, user: User = Depends(require_user)):
     """Opt into a sport."""
     with get_db() as conn:
-        # Verify sport exists
-        cursor = conn.execute("SELECT id FROM sports WHERE id = ?", (sport_id,))
+        # Verify sport exists and belongs to an active Olympiad
+        cursor = conn.execute("""
+            SELECT s.id FROM sports s
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE s.id = ? AND o.is_active = 1
+        """, (sport_id,))
         if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Sport not found")
+            raise HTTPException(status_code=404, detail="Sport not found or Olympiad not active")
 
         # Check if already entered
         cursor = conn.execute(
@@ -698,6 +746,15 @@ async def enter_sport(sport_id: int, user: User = Depends(require_user)):
 async def leave_sport(sport_id: int, user: User = Depends(require_user)):
     """Opt out of a sport."""
     with get_db() as conn:
+        # Verify sport belongs to an active Olympiad
+        cursor = conn.execute("""
+            SELECT s.id FROM sports s
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE s.id = ? AND o.is_active = 1
+        """, (sport_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Sport not found or Olympiad not active")
+
         conn.execute(
             "DELETE FROM sport_entries WHERE callsign = ? AND sport_id = ?",
             (user.callsign, sport_id)
@@ -1206,6 +1263,7 @@ class ForgotPasswordForm(BaseModel):
 
 
 @app.post("/forgot-password")
+@limiter.limit("3/minute")
 async def forgot_password(request: Request, form_data: ForgotPasswordForm):
     """Handle forgot password request."""
     callsign = form_data.callsign.upper().strip()
@@ -1262,6 +1320,7 @@ async def reset_password_page(request: Request, token: str):
 
 
 @app.post("/reset-password/{token}")
+@limiter.limit("5/minute")
 async def reset_password(
     request: Request,
     token: str,
@@ -1325,6 +1384,7 @@ async def verify_email(request: Request, token: str):
 
 
 @app.post("/settings/resend-verification")
+@limiter.limit("3/minute")
 async def resend_verification(request: Request, user: User = Depends(require_user)):
     """Resend email verification."""
     from email_service import create_email_verification_token, send_email_verification
@@ -1554,6 +1614,7 @@ async def update_email(request: Request, email: str = Form(...), user: User = De
 
 
 @app.post("/settings/password")
+@limiter.limit("5/minute")
 async def change_password(
     request: Request,
     current_password: str = Form(...),

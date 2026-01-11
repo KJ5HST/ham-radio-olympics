@@ -194,7 +194,10 @@ document.getElementById('sport-form').addEventListener('submit', async (e) => {
 
 async function deleteSport(id) {
     if (!confirm('Delete this Sport and all its Matches?')) return;
-    await fetch('/admin/sport/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/sport/' + id + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 </script>

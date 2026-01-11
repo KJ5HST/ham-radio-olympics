@@ -41,6 +41,9 @@ class Config:
     # Security - these are required in production
     ADMIN_KEY: str = _require_env("ADMIN_KEY", "test-admin-key")
     ENCRYPTION_KEY: str = _require_env("ENCRYPTION_KEY", "test-encryption-key")
+    # Salt for key derivation - should be unique per deployment
+    # Default provided for backwards compatibility; set ENCRYPTION_SALT in production
+    ENCRYPTION_SALT: str = os.getenv("ENCRYPTION_SALT", "ham-radio-olympics-salt")
     BCRYPT_ROUNDS: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
     # Account lockout

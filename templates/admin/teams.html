@@ -227,7 +227,10 @@ async function deleteTeam(teamId, teamName) {
     if (!confirm('Are you SURE you want to delete "' + teamName + '"?')) return;
 
     try {
-        const resp = await fetch('/admin/team/' + teamId, {method: 'DELETE'});
+        const resp = await fetch('/admin/team/' + teamId, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'}
+        });
         if (resp.ok) {
             window.location.reload();
         } else {

@@ -36,6 +36,25 @@ def get_db():
         conn.close()
 
 
+@contextmanager
+def get_db_exclusive():
+    """Context manager with IMMEDIATE transaction for exclusive write access.
+
+    Use this for operations that read-then-write where concurrent modifications
+    could cause race conditions (e.g., medal recomputation).
+    """
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def init_db():
     """Initialize the database schema."""
     with get_db() as conn:

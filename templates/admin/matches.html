@@ -194,7 +194,10 @@ document.getElementById('match-form').addEventListener('submit', async (e) => {
 
 async function deleteMatch(id) {
     if (!confirm('Delete this Match?')) return;
-    await fetch('/admin/match/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/match/' + id + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 </script>

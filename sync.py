@@ -2,15 +2,18 @@
 Sync logic for fetching QSOs from QRZ and updating scores.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
 from database import get_db
+
+logger = logging.getLogger(__name__)
 from crypto import decrypt_api_key
 from qrz_client import fetch_qsos, QSOData, QRZAPIError
 from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
-from scoring import recompute_match_medals, update_records, compute_team_standings
+from scoring import recompute_match_medals, compute_team_standings
 
 
 async def populate_competitor_name(callsign: str) -> bool:
@@ -80,7 +83,8 @@ async def sync_competitor(callsign: str) -> dict:
         try:
             api_key = decrypt_api_key(competitor["qrz_api_key_encrypted"])
         except Exception as e:
-            return {"error": f"Failed to decrypt API key: {e}"}
+            logger.error(f"Failed to decrypt API key for {callsign}: {e}")
+            return {"error": "Failed to decrypt API key. Please re-enter your QRZ API key in Settings."}
 
     # Use the shared sync function with the decrypted key
     return await sync_competitor_with_key(callsign, api_key)
@@ -100,8 +104,8 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     # Try to populate name if not set
     try:
         await populate_competitor_name(callsign)
-    except Exception:
-        pass  # Non-critical, continue with sync
+    except Exception as e:
+        logger.warning(f"Failed to populate name for {callsign}: {e}")
 
     # Fetch QSOs from QRZ
     try:
@@ -168,7 +172,8 @@ async def sync_competitor_lotw_stored(callsign: str) -> dict:
             lotw_username = decrypt_api_key(competitor["lotw_username_encrypted"])
             lotw_password = decrypt_api_key(competitor["lotw_password_encrypted"])
         except Exception as e:
-            return {"error": f"Failed to decrypt LoTW credentials: {e}"}
+            logger.error(f"Failed to decrypt LoTW credentials for {callsign}: {e}")
+            return {"error": "Failed to decrypt LoTW credentials. Please re-enter your credentials in Settings."}
 
     return await sync_competitor_lotw(callsign, lotw_username, lotw_password)
 
@@ -188,8 +193,8 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     # Try to populate name if not set
     try:
         await populate_competitor_name(callsign)
-    except Exception:
-        pass  # Non-critical, continue with sync
+    except Exception as e:
+        logger.warning(f"Failed to populate name for {callsign}: {e}")
 
     with get_db() as conn:
         # Verify competitor exists
@@ -342,9 +347,8 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             qso.qrz_logid,
         ))
 
-        # Update records for new confirmed QSOs
-        if qso.is_confirmed and distance_km:
-            update_records(cursor.lastrowid, competitor_callsign)
+        # Note: Records are updated via recompute_all_records() which only
+        # considers QSOs that qualified for matches (correct target, time period, mode)
 
         return "new"
 

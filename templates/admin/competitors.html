@@ -175,65 +175,98 @@ document.addEventListener('click', function(e) {
 
 async function setAdmin(callsign) {
     if (!confirm('Make ' + callsign + ' an admin?')) return;
-    await fetch('/admin/competitor/' + callsign + '/set-admin?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/set-admin?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function removeAdmin(callsign) {
     if (!confirm('Remove admin role from ' + callsign + '?')) return;
-    await fetch('/admin/competitor/' + callsign + '/remove-admin?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/remove-admin?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function setReferee(callsign) {
     if (!confirm('Make ' + callsign + ' a referee?')) return;
-    await fetch('/admin/competitor/' + callsign + '/set-referee?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/set-referee?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function removeReferee(callsign) {
     if (!confirm('Remove referee role from ' + callsign + '? This will also remove all sport assignments.')) return;
-    await fetch('/admin/competitor/' + callsign + '/remove-referee?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/remove-referee?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function assignSport(callsign, sportId) {
-    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function unassignSport(callsign, sportId) {
-    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function disableCompetitor(callsign) {
     if (!confirm('Disable ' + callsign + '? They will be logged out and unable to log in.')) return;
-    await fetch('/admin/competitor/' + callsign + '/disable?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/disable?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function enableCompetitor(callsign) {
     if (!confirm('Enable ' + callsign + '?')) return;
-    await fetch('/admin/competitor/' + callsign + '/enable?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/enable?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function disqualifyCompetitor(callsign) {
     if (!confirm('Disqualify ' + callsign + ' from the competition? They will be removed from all sports and lose their medals.')) return;
-    await fetch('/admin/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function deleteCompetitor(callsign) {
     if (!confirm('Delete competitor ' + callsign + '? This cannot be undone.')) return;
-    await fetch('/admin/competitor/' + callsign + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/competitor/' + callsign + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function resetPassword(callsign) {
     if (!confirm('Reset password for ' + callsign + '? They will be logged out.')) return;
-    const response = await fetch('/admin/competitor/' + callsign + '/reset-password?admin_key=' + adminKey, {method: 'POST'});
+    const response = await fetch('/admin/competitor/' + callsign + '/reset-password?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     const data = await response.json();
     if (response.ok) {
         // Use prompt to allow copying the password

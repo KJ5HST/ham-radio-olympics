@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from database import get_db
+from database import get_db, get_db_exclusive
 from dxcc import get_continent
 from grid_distance import grid_distance
 
@@ -411,8 +411,9 @@ def recompute_match_medals(match_id: int):
     Recompute all medals for a Match.
 
     This should be called after a sync to update standings.
+    Uses exclusive transaction to prevent race conditions during concurrent syncs.
     """
-    with get_db() as conn:
+    with get_db_exclusive() as conn:
         # Get match and sport config
         cursor = conn.execute("""
             SELECT m.*, s.target_type, s.work_enabled, s.activate_enabled,
@@ -540,11 +541,19 @@ def _update_record_if_better(
 ):
     """Helper to update a record if the new value is better."""
 
+    # Build sport_id condition - use IS NULL for NULL, = for values
+    if sport_id is None:
+        sport_condition = "sport_id IS NULL"
+        sport_params = ()
+    else:
+        sport_condition = "sport_id = ?"
+        sport_params = (sport_id,)
+
     # Check world record (callsign=NULL, sport_id for sport-specific or NULL for global)
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT id, value FROM records
-        WHERE record_type = ? AND callsign IS NULL AND sport_id IS ?
-    """, (record_type, sport_id))
+        WHERE record_type = ? AND callsign IS NULL AND {sport_condition}
+    """, (record_type,) + sport_params)
     world_record = cursor.fetchone()
 
     if world_record is None:
@@ -562,10 +571,10 @@ def _update_record_if_better(
             """, (value, qso_id, match_id, achieved_at, world_record["id"]))
 
     # Check personal best (per callsign)
-    cursor = conn.execute("""
+    cursor = conn.execute(f"""
         SELECT id, value FROM records
-        WHERE record_type = ? AND callsign = ? AND sport_id IS ?
-    """, (record_type, callsign, sport_id))
+        WHERE record_type = ? AND callsign = ? AND {sport_condition}
+    """, (record_type, callsign) + sport_params)
     pb_record = cursor.fetchone()
 
     if pb_record is None:
@@ -613,8 +622,10 @@ def compute_team_standings(
         sport_id: Sport ID to compute standings for
         match_id: Optional match ID (None for sport-level standings)
         top_n: Number of top members for top_n method (default 3)
+
+    Uses exclusive transaction to prevent race conditions during concurrent updates.
     """
-    with get_db() as conn:
+    with get_db_exclusive() as conn:
         # Get all active teams with members
         cursor = conn.execute("""
             SELECT t.id, t.name, tm.callsign

@@ -169,26 +169,38 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
 
 async function activateOlympiad(id) {
     if (!confirm('Activate this Olympiad? This will deactivate others.')) return;
-    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function deactivateOlympiad(id) {
     if (!confirm('Pause this Olympiad?')) return;
-    await fetch('/admin/olympiad/' + id + '/deactivate?admin_key=' + adminKey, {method: 'POST'});
+    await fetch('/admin/olympiad/' + id + '/deactivate?admin_key=' + adminKey, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function deleteOlympiad(id) {
     if (!confirm('Delete this Olympiad? This cannot be undone.')) return;
-    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {method: 'DELETE'});
+    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'}
+    });
     location.reload();
 }
 
 async function recomputeRecords() {
     if (!confirm('Recompute all world records? This will recalculate records from match-qualifying QSOs.')) return;
     try {
-        const resp = await fetch('/admin/recompute-records?admin_key=' + adminKey, {method: 'POST'});
+        const resp = await fetch('/admin/recompute-records?admin_key=' + adminKey, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
         const data = await resp.json();
         if (resp.ok) {
             showToast(data.message, 'success');
