@@ -15,6 +15,7 @@ Amateur radio competition server with LoTW and QRZ Logbook integration. Designed
 - **Separate or Combined Pools** - Medals awarded are configurable per Sport
 - **World Records & Personal Bests** - Tracked automatically
 - **Mode Restrictions** - Allow only certain modes to qualify for points and awards
+- **Power Limits** - Per-match maximum power settings for QRP competitions
 - **Teams** - Create teams, invite members, track team standings across sports
 - **Roles** - Admin, Referee (sport-specific), and Competitor roles
 
@@ -93,8 +94,8 @@ pytest tests/ -v
 | GET | `/admin/teams` | List teams |
 | POST | `/admin/team` | Create team |
 | DELETE | `/admin/team/{id}` | Delete team |
-| POST | `/admin/competitor/{call}/make-referee` | Grant referee role |
-| POST | `/admin/competitor/{call}/remove-referee` | Revoke referee role |
+| POST | `/admin/competitor/{callsign}/set-referee` | Grant referee role |
+| POST | `/admin/competitor/{callsign}/remove-referee` | Revoke referee role |
 
 ## Example Usage
 
@@ -195,11 +196,21 @@ fly deploy
 
 | Setting | Options |
 |---------|---------|
-| target_type | continent, country, park, call, grid |
+| target_type | continent, country, park, call, grid, any |
 | interval | daily, weekly, bi-weekly, monthly, quarterly, annually |
 | work_enabled | true/false (hunters) |
 | activate_enabled | true/false (activators) |
 | separate_pools | true/false (per-role medals) |
+
+## Match Configuration
+
+| Setting | Description |
+|---------|-------------|
+| start_date | Match start date/time (UTC) |
+| end_date | Match end date/time (UTC) |
+| target_value | Specific target (e.g., "EU", "K-1234", or "Any" for any target type) |
+| allowed_modes | Optional mode override (e.g., "CW,SSB") |
+| max_power_w | Optional maximum TX power in watts for QRP competitions |
 
 ## Scoring
 
