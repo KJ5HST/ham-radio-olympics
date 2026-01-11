@@ -14,7 +14,9 @@ Amateur radio competition server with LoTW and QRZ Logbook integration. Designed
 - **Work/Activate Modes** - Hunter and activator competitions
 - **Separate or Combined Pools** - Medals awarded are configurable per Sport
 - **World Records & Personal Bests** - Tracked automatically
-- **Mode Restrictions** - Allow only certain modes to qualify for points and awards.
+- **Mode Restrictions** - Allow only certain modes to qualify for points and awards
+- **Teams** - Create teams, invite members, track team standings across sports
+- **Roles** - Admin, Referee (sport-specific), and Competitor roles
 
 ## Quick Start
 
@@ -55,8 +57,21 @@ pytest tests/ -v
 | GET | `/olympiad/sport/{id}/matches` | List Matches |
 | GET | `/olympiad/sport/{id}/match/{id}` | Match leaderboard |
 | GET | `/records` | World records |
-| GET | `/contestant/{call}` | Contestant profile |
+| GET | `/competitor/{call}` | Competitor profile |
 | POST | `/sync` | Trigger QRZ sync |
+| GET | `/teams` | Team listings |
+| GET | `/team/{id}` | Team profile |
+| POST | `/team` | Create team |
+| POST | `/team/{id}/request` | Request to join team |
+| POST | `/team/{id}/leave` | Leave team |
+
+### Referee Endpoints (require referee role)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/referee` | Referee dashboard |
+| GET | `/admin/sport/{id}/matches` | Manage sport matches |
+| GET | `/admin/sport/{id}/competitors` | View sport competitors |
 
 ### Admin Endpoints (require X-Admin-Key header)
 
@@ -75,6 +90,11 @@ pytest tests/ -v
 | DELETE | `/admin/match/{id}` | Delete Match |
 | GET | `/admin/contestants` | List contestants |
 | DELETE | `/admin/contestant/{call}` | Remove contestant |
+| GET | `/admin/teams` | List teams |
+| POST | `/admin/team` | Create team |
+| DELETE | `/admin/team/{id}` | Delete team |
+| POST | `/admin/competitor/{call}/make-referee` | Grant referee role |
+| POST | `/admin/competitor/{call}/remove-referee` | Revoke referee role |
 
 ## Example Usage
 
