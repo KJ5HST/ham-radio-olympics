@@ -661,8 +661,10 @@
         </button>
         <div class="nav-links" id="nav-links">
             <a href="/">Home</a>
-            {% if user %}<a href="/teams">Teams</a>{% endif %}
-            {% if user %}<a href="/records">Records</a>{% endif %}
+            {% if user %}
+            <a href="/teams">Teams</a>
+            <a href="/records">Records</a>
+            {% endif %}
             {% block nav_extra %}{% endblock %}
             <span style="float: right;">
                 {% if user %}
