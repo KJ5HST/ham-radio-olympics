@@ -28,9 +28,9 @@
             <td><a href="/competitor/{{ p.callsign }}"><strong>{{ p.callsign }}</strong></a></td>
             <td>{{ p.first_name or '' }} {{ p.last_name or '' }}</td>
             <td>
-                {% if p.gold_count %}<span class="medal-count"><span class="gold">{{ p.gold_count }}G</span></span> {% endif %}
-                {% if p.silver_count %}<span class="medal-count"><span class="silver">{{ p.silver_count }}S</span></span> {% endif %}
-                {% if p.bronze_count %}<span class="medal-count"><span class="bronze">{{ p.bronze_count }}B</span></span> {% endif %}
+                {% if p.gold_count %}<span class="medal-count">🥇{{ p.gold_count }}</span> {% endif %}
+                {% if p.silver_count %}<span class="medal-count">🥈{{ p.silver_count }}</span> {% endif %}
+                {% if p.bronze_count %}<span class="medal-count">🥉{{ p.bronze_count }}</span> {% endif %}
                 {% if not p.gold_count and not p.silver_count and not p.bronze_count %}-{% endif %}
             </td>
             <td>{{ p.total_points | int }}</td>
