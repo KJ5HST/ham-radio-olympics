@@ -528,6 +528,225 @@ def _update_record_if_better(
             """, (value, qso_id, match_id, achieved_at, pb_record["id"]))
 
 
+@dataclass
+class TeamStanding:
+    """Team standing result for a sport or match."""
+    team_id: int
+    team_name: str
+    total_points: float
+    member_count: int
+    gold_count: int
+    silver_count: int
+    bronze_count: int
+    medal: Optional[str]  # Team medal for this calculation
+
+
+def compute_team_standings(
+    sport_id: int,
+    match_id: Optional[int] = None,
+    top_n: int = 3
+):
+    """
+    Compute team standings for a sport or specific match.
+
+    Uses four calculation methods:
+    - normalized: Sum of top N members' points, where N = smallest team size
+    - top_n: Sum of top 3 members' points
+    - average: Total points / member count
+    - sum: Raw sum of all members' points
+
+    Args:
+        sport_id: Sport ID to compute standings for
+        match_id: Optional match ID (None for sport-level standings)
+        top_n: Number of top members for top_n method (default 3)
+    """
+    with get_db() as conn:
+        # Get all active teams with members
+        cursor = conn.execute("""
+            SELECT t.id, t.name, tm.callsign
+            FROM teams t
+            JOIN team_members tm ON t.id = tm.team_id
+            WHERE t.is_active = 1
+            ORDER BY t.id, tm.callsign
+        """)
+
+        # Build team membership map
+        teams: Dict[int, dict] = {}
+        for row in cursor.fetchall():
+            team_id = row["id"]
+            if team_id not in teams:
+                teams[team_id] = {
+                    "id": team_id,
+                    "name": row["name"],
+                    "members": []
+                }
+            teams[team_id]["members"].append(row["callsign"])
+
+        if not teams:
+            return  # No teams to compute
+
+        # Build medal query based on match_id
+        if match_id:
+            # Specific match
+            medal_query = """
+                SELECT callsign,
+                       COALESCE(SUM(total_points), 0) as points,
+                       COUNT(CASE WHEN qso_race_medal = 'gold' OR cool_factor_medal = 'gold' THEN 1 END) as gold,
+                       COUNT(CASE WHEN qso_race_medal = 'silver' OR cool_factor_medal = 'silver' THEN 1 END) as silver,
+                       COUNT(CASE WHEN qso_race_medal = 'bronze' OR cool_factor_medal = 'bronze' THEN 1 END) as bronze
+                FROM medals
+                WHERE match_id = ?
+                GROUP BY callsign
+            """
+            cursor = conn.execute(medal_query, (match_id,))
+        else:
+            # All matches in sport
+            medal_query = """
+                SELECT m.callsign,
+                       COALESCE(SUM(m.total_points), 0) as points,
+                       COUNT(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 END) as gold,
+                       COUNT(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 END) as silver,
+                       COUNT(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 END) as bronze
+                FROM medals m
+                JOIN matches ma ON m.match_id = ma.id
+                WHERE ma.sport_id = ?
+                GROUP BY m.callsign
+            """
+            cursor = conn.execute(medal_query, (sport_id,))
+
+        # Build member points map
+        member_points: Dict[str, dict] = {}
+        for row in cursor.fetchall():
+            member_points[row["callsign"]] = {
+                "points": row["points"],
+                "gold": row["gold"],
+                "silver": row["silver"],
+                "bronze": row["bronze"]
+            }
+
+        # Compute team stats for each method
+        # Find smallest team size (for normalized calculation)
+        min_team_size = min(len(t["members"]) for t in teams.values())
+
+        # Clear existing team medals for this sport/match
+        if match_id:
+            conn.execute(
+                "DELETE FROM team_medals WHERE sport_id = ? AND match_id = ?",
+                (sport_id, match_id)
+            )
+        else:
+            conn.execute(
+                "DELETE FROM team_medals WHERE sport_id = ? AND match_id IS NULL",
+                (sport_id,)
+            )
+
+        methods = ["normalized", "top_n", "average", "sum"]
+
+        for method in methods:
+            standings: List[TeamStanding] = []
+
+            for team_id, team_data in teams.items():
+                members = team_data["members"]
+                # Get points for each member, sorted descending
+                member_scores = []
+                total_gold = 0
+                total_silver = 0
+                total_bronze = 0
+
+                for callsign in members:
+                    stats = member_points.get(callsign, {"points": 0, "gold": 0, "silver": 0, "bronze": 0})
+                    member_scores.append(stats["points"])
+                    total_gold += stats["gold"]
+                    total_silver += stats["silver"]
+                    total_bronze += stats["bronze"]
+
+                member_scores.sort(reverse=True)
+
+                # Calculate team score based on method
+                if method == "normalized":
+                    # Sum top N where N = smallest team size
+                    total = sum(member_scores[:min_team_size])
+                elif method == "top_n":
+                    # Sum top 3 (or fewer if team is smaller)
+                    total = sum(member_scores[:top_n])
+                elif method == "average":
+                    # Average of all members
+                    total = sum(member_scores) / len(member_scores) if member_scores else 0
+                else:  # sum
+                    # Raw sum of all
+                    total = sum(member_scores)
+
+                standings.append(TeamStanding(
+                    team_id=team_id,
+                    team_name=team_data["name"],
+                    total_points=total,
+                    member_count=len(members),
+                    gold_count=total_gold,
+                    silver_count=total_silver,
+                    bronze_count=total_bronze,
+                    medal=None
+                ))
+
+            # Sort by total points descending
+            standings.sort(key=lambda s: (-s.total_points, s.team_name))
+
+            # Award team medals (top 3)
+            medals = ["gold", "silver", "bronze"]
+            for i, standing in enumerate(standings[:3]):
+                if standing.total_points > 0:  # Only award if they have points
+                    standing.medal = medals[i]
+
+            # Store results
+            now = datetime.utcnow().isoformat()
+            for standing in standings:
+                conn.execute("""
+                    INSERT INTO team_medals (
+                        team_id, match_id, sport_id, calculation_method,
+                        total_points, member_count, gold_count, silver_count, bronze_count,
+                        medal, computed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    standing.team_id,
+                    match_id,
+                    sport_id,
+                    method,
+                    standing.total_points,
+                    standing.member_count,
+                    standing.gold_count,
+                    standing.silver_count,
+                    standing.bronze_count,
+                    standing.medal,
+                    now
+                ))
+
+
+def recompute_all_team_standings():
+    """
+    Recompute team standings for all sports and matches.
+
+    Call this after medal recomputation to update team rankings.
+    """
+    with get_db() as conn:
+        # Get all sports
+        cursor = conn.execute("SELECT id FROM sports")
+        sport_ids = [row["id"] for row in cursor.fetchall()]
+
+    for sport_id in sport_ids:
+        # Compute sport-level standings
+        compute_team_standings(sport_id)
+
+        # Compute match-level standings
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT id FROM matches WHERE sport_id = ?",
+                (sport_id,)
+            )
+            match_ids = [row["id"] for row in cursor.fetchall()]
+
+        for match_id in match_ids:
+            compute_team_standings(sport_id, match_id)
+
+
 def recompute_all_records():
     """
     Recompute all records from scratch using only QSOs that qualified for matches.

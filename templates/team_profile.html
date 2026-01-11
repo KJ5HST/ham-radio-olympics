@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>{{ team.name }}</h2>
+
+<div class="card" style="margin-bottom: 20px;">
+    <p>
+        <strong>Captain:</strong> <a href="/competitor/{{ captain.callsign }}">{{ captain.callsign }}</a>
+        {% if captain.first_name or captain.last_name %}
+        ({{ captain.first_name or '' }} {{ captain.last_name or '' }})
+        {% endif %}
+    </p>
+    <p><strong>Members:</strong> {{ members | length }}</p>
+    <p><strong>Created:</strong> {{ team.created_at | format_date }}</p>
+    {% if team.description %}
+    <p style="margin-top: 15px;">{{ team.description }}</p>
+    {% endif %}
+
+    {% if user %}
+    <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+        {% if is_captain %}
+        <button type="button" class="btn" onclick="showEditTeamModal()">Edit Team</button>
+        <button type="button" class="btn" style="background: #c53030;" onclick="deleteTeam()">Delete Team</button>
+        {% elif is_member %}
+        <button type="button" class="btn" style="background: #c53030;" onclick="leaveTeam()">Leave Team</button>
+        {% elif has_pending_request %}
+        <span style="color: #718096; padding: 8px 0;">Request pending - waiting for captain approval</span>
+        {% elif not user_team %}
+        <button type="button" class="btn btn-success" onclick="requestToJoin()">Request to Join</button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if is_captain and (pending_requests or pending_invites) %}
+<h3>Pending</h3>
+<div class="card" style="margin-bottom: 20px;">
+    {% if pending_requests %}
+    <h4>Join Requests</h4>
+    <table style="margin-bottom: 15px;">
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>Name</th>
+                <th>Requested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in pending_requests %}
+            <tr>
+                <td><a href="/competitor/{{ req.callsign }}">{{ req.callsign }}</a></td>
+                <td>{{ req.first_name or '' }} {{ req.last_name or '' }}</td>
+                <td>{{ req.created_at | format_date }}</td>
+                <td>
+                    <button type="button" class="btn btn-success" style="font-size: 0.8em; padding: 3px 8px;" onclick="approveRequest('{{ req.callsign }}')">Approve</button>
+                    <button type="button" class="btn" style="font-size: 0.8em; padding: 3px 8px; background: #c53030;" onclick="declineRequest('{{ req.callsign }}')">Decline</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if pending_invites %}
+    <h4>Sent Invites</h4>
+    <table>
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>Name</th>
+                <th>Invited</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in pending_invites %}
+            <tr>
+                <td><a href="/competitor/{{ inv.callsign }}">{{ inv.callsign }}</a></td>
+                <td>{{ inv.first_name or '' }} {{ inv.last_name or '' }}</td>
+                <td>{{ inv.created_at | format_date }}</td>
+                <td>
+                    <button type="button" class="btn" style="font-size: 0.8em; padding: 3px 8px; background: #718096;" onclick="cancelInvite('{{ inv.callsign }}')">Cancel</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if is_captain and available_competitors %}
+<h3>Invite Members</h3>
+<div class="card" style="margin-bottom: 20px;">
+    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <select id="invite-callsign" style="flex: 1; min-width: 200px;">
+            <option value="">Select competitor to invite...</option>
+            {% for c in available_competitors %}
+            <option value="{{ c.callsign }}">{{ c.callsign }}{% if c.first_name %} - {{ c.first_name }} {{ c.last_name or '' }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-success" onclick="inviteMember()">Send Invite</button>
+    </div>
+</div>
+{% endif %}
+
+<h3>Members</h3>
+<div class="card" style="margin-bottom: 20px;">
+    {% if members %}
+    <table>
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>Name</th>
+                <th>Points</th>
+                <th>Medals</th>
+                <th>Joined</th>
+                {% if is_captain %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for member in members %}
+            <tr>
+                <td>
+                    <a href="/competitor/{{ member.callsign }}">{{ member.callsign }}</a>
+                    {% if member.callsign == team.captain_callsign %}
+                    <span style="color: #718096; font-size: 0.9em;">(Captain)</span>
+                    {% endif %}
+                </td>
+                <td>{{ member.first_name or '' }} {{ member.last_name or '' }}</td>
+                <td>{{ member.total_points | int }}</td>
+                <td>
+                    {% if member.gold > 0 %}<span class="medal gold">{{ member.gold }}G</span>{% endif %}
+                    {% if member.silver > 0 %}<span class="medal silver">{{ member.silver }}S</span>{% endif %}
+                    {% if member.bronze > 0 %}<span class="medal bronze">{{ member.bronze }}B</span>{% endif %}
+                    {% if member.gold == 0 and member.silver == 0 and member.bronze == 0 %}-{% endif %}
+                </td>
+                <td>{{ member.joined_at | format_date }}</td>
+                {% if is_captain %}
+                <td>
+                    {% if member.callsign != team.captain_callsign %}
+                    <button type="button" class="btn" style="font-size: 0.8em; padding: 3px 8px;" onclick="transferCaptaincy('{{ member.callsign }}')">Make Captain</button>
+                    <button type="button" class="btn" style="font-size: 0.8em; padding: 3px 8px; background: #c53030;" onclick="removeMember('{{ member.callsign }}')">Remove</button>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No members yet.</p>
+    {% endif %}
+</div>
+
+{% if sport_standings %}
+<h3>Team Sport Standings</h3>
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Sport</th>
+                <th>Points</th>
+                <th>G</th>
+                <th>S</th>
+                <th>B</th>
+                <th>Team Medal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for standing in sport_standings %}
+            <tr>
+                <td>{{ standing.sport_name }}</td>
+                <td>{{ standing.total_points | round(1) }}</td>
+                <td>{{ standing.gold_count }}</td>
+                <td>{{ standing.silver_count }}</td>
+                <td>{{ standing.bronze_count }}</td>
+                <td>
+                    {% if standing.medal == 'gold' %}<span class="medal gold">Gold</span>
+                    {% elif standing.medal == 'silver' %}<span class="medal silver">Silver</span>
+                    {% elif standing.medal == 'bronze' %}<span class="medal bronze">Bronze</span>
+                    {% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<!-- Edit Team Modal -->
+<div id="edit-team-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Edit Team</h3>
+        <form id="edit-team-form">
+            <div class="form-group">
+                <label for="edit-team-name">Team Name</label>
+                <input type="text" id="edit-team-name" name="name" value="{{ team.name }}" required minlength="2" maxlength="100">
+            </div>
+            <div class="form-group">
+                <label for="edit-team-description">Description</label>
+                <textarea id="edit-team-description" name="description" rows="3">{{ team.description or '' }}</textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn" style="background: #718096;" onclick="hideEditTeamModal()">Cancel</button>
+                <button type="submit" class="btn btn-success">Save Changes</button>
+            </div>
+        </form>
+        <div id="edit-team-result"></div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+}
+</style>
+
+<script>
+const teamId = {{ team.id }};
+
+function showEditTeamModal() {
+    document.getElementById('edit-team-modal').style.display = 'flex';
+}
+
+function hideEditTeamModal() {
+    document.getElementById('edit-team-modal').style.display = 'none';
+    document.getElementById('edit-team-result').innerHTML = '';
+}
+
+document.getElementById('edit-team-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const name = document.getElementById('edit-team-name').value.trim();
+    const description = document.getElementById('edit-team-description').value.trim();
+
+    try {
+        const resp = await fetch('/team/' + teamId, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, description: description || null})
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            document.getElementById('edit-team-result').innerHTML =
+                '<div class="alert alert-error">' + (data.detail || 'Failed to update team') + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('edit-team-result').innerHTML =
+            '<div class="alert alert-error">Network error. Please try again.</div>';
+    }
+});
+
+async function deleteTeam() {
+    if (!confirm('Are you sure you want to delete this team? This cannot be undone.')) return;
+    if (!confirm('This will remove all members from the team. Are you absolutely sure?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId, {method: 'DELETE'});
+        if (resp.ok) {
+            window.location.href = '/teams';
+        } else {
+            const data = await resp.json();
+            showToast(data.detail || 'Failed to delete team', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function requestToJoin() {
+    try {
+        const resp = await fetch('/team/' + teamId + '/request', {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to send request', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function leaveTeam() {
+    if (!confirm('Are you sure you want to leave this team?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/leave', {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            window.location.href = '/teams';
+        } else {
+            showToast(data.detail || 'Failed to leave team', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function removeMember(callsign) {
+    if (!confirm('Remove ' + callsign + ' from the team?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/remove/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to remove member', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function transferCaptaincy(callsign) {
+    if (!confirm('Transfer team captaincy to ' + callsign + '? You will no longer be captain.')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/transfer/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to transfer captaincy', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function inviteMember() {
+    const callsign = document.getElementById('invite-callsign').value;
+    if (!callsign) {
+        showToast('Please select a competitor to invite', 'error');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/invite/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to send invite', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function approveRequest(callsign) {
+    try {
+        const resp = await fetch('/team/' + teamId + '/approve/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to approve request', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function declineRequest(callsign) {
+    if (!confirm('Decline request from ' + callsign + '?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast('Request declined', 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to decline request', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function cancelInvite(callsign) {
+    if (!confirm('Cancel invite to ' + callsign + '?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/decline/' + callsign, {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast('Invite cancelled', 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to cancel invite', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+// Close modal on backdrop click
+document.getElementById('edit-team-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) hideEditTeamModal();
+});
+</script>
+{% endblock %}

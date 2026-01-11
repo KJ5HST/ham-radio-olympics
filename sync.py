@@ -10,7 +10,7 @@ from crypto import decrypt_api_key
 from qrz_client import fetch_qsos, QSOData, QRZAPIError
 from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
-from scoring import recompute_match_medals, update_records
+from scoring import recompute_match_medals, update_records, compute_team_standings
 
 
 async def populate_competitor_name(callsign: str) -> bool:
@@ -384,17 +384,29 @@ async def sync_all_competitors() -> dict:
 def recompute_all_active_matches():
     """Recompute medals for all matches in the active Olympiad."""
     with get_db() as conn:
-        # Get all matches in active Olympiad
+        # Get all matches and sports in active Olympiad
         cursor = conn.execute("""
-            SELECT m.id FROM matches m
+            SELECT m.id as match_id, s.id as sport_id FROM matches m
             JOIN sports s ON m.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
             WHERE o.is_active = 1
         """)
-        match_ids = [row["id"] for row in cursor.fetchall()]
+        match_sport_pairs = [(row["match_id"], row["sport_id"]) for row in cursor.fetchall()]
 
-    for match_id in match_ids:
+        # Get unique sport IDs
+        sport_ids = list(set(sp[1] for sp in match_sport_pairs))
+
+    # Recompute individual medals
+    for match_id, _ in match_sport_pairs:
         recompute_match_medals(match_id)
+
+    # Recompute team standings for each sport
+    for sport_id in sport_ids:
+        compute_team_standings(sport_id)
+        # Sport-level done, now do match-level for matches in this sport
+        sport_matches = [m for m, s in match_sport_pairs if s == sport_id]
+        for match_id in sport_matches:
+            compute_team_standings(sport_id, match_id)
 
 
 def recompute_sport_matches(sport_id: int):
@@ -408,3 +420,8 @@ def recompute_sport_matches(sport_id: int):
 
     for match_id in match_ids:
         recompute_match_medals(match_id)
+
+    # Recompute team standings for this sport
+    compute_team_standings(sport_id)
+    for match_id in match_ids:
+        compute_team_standings(sport_id, match_id)

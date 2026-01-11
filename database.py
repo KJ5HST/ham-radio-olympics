@@ -437,6 +437,59 @@ def init_db():
                 cached_at TEXT NOT NULL
             );
 
+            -- Teams table
+            CREATE TABLE IF NOT EXISTS teams (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                description TEXT,
+                captain_callsign TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (captain_callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Team members table
+            CREATE TABLE IF NOT EXISTS team_members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER NOT NULL,
+                callsign TEXT NOT NULL UNIQUE,
+                joined_at TEXT NOT NULL,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Team invites/requests table
+            CREATE TABLE IF NOT EXISTS team_invites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER NOT NULL,
+                callsign TEXT NOT NULL,
+                invite_type TEXT NOT NULL CHECK (invite_type IN ('invite', 'request')),
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                UNIQUE(team_id, callsign)
+            );
+
+            -- Team medals table
+            CREATE TABLE IF NOT EXISTS team_medals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                team_id INTEGER NOT NULL,
+                match_id INTEGER,
+                sport_id INTEGER NOT NULL,
+                calculation_method TEXT NOT NULL CHECK (calculation_method IN ('normalized', 'top_n', 'average', 'sum')),
+                total_points REAL NOT NULL,
+                member_count INTEGER NOT NULL,
+                gold_count INTEGER NOT NULL DEFAULT 0,
+                silver_count INTEGER NOT NULL DEFAULT 0,
+                bronze_count INTEGER NOT NULL DEFAULT 0,
+                medal TEXT CHECK (medal IN ('gold', 'silver', 'bronze', NULL)),
+                computed_at TEXT NOT NULL,
+                FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                UNIQUE(team_id, match_id, sport_id, calculation_method)
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
@@ -454,6 +507,14 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_sport_entries_sport ON sport_entries(sport_id);
             CREATE INDEX IF NOT EXISTS idx_referee_assignments_callsign ON referee_assignments(callsign);
             CREATE INDEX IF NOT EXISTS idx_referee_assignments_sport ON referee_assignments(sport_id);
+            CREATE INDEX IF NOT EXISTS idx_teams_captain ON teams(captain_callsign);
+            CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+            CREATE INDEX IF NOT EXISTS idx_team_members_callsign ON team_members(callsign);
+            CREATE INDEX IF NOT EXISTS idx_team_medals_team ON team_medals(team_id);
+            CREATE INDEX IF NOT EXISTS idx_team_medals_sport ON team_medals(sport_id);
+            CREATE INDEX IF NOT EXISTS idx_team_medals_match ON team_medals(match_id);
+            CREATE INDEX IF NOT EXISTS idx_team_invites_team ON team_invites(team_id);
+            CREATE INDEX IF NOT EXISTS idx_team_invites_callsign ON team_invites(callsign);
         """)
 
 

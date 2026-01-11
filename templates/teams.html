@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Teams - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>Teams</h2>
+
+{% if user %}
+<div class="card" style="margin-bottom: 20px;">
+    {% if user_team %}
+    <p>You are a member of <a href="/team/{{ user_team.id }}"><strong>{{ user_team.name }}</strong></a>
+        {% if user_team.captain_callsign == user.callsign %}(Captain){% endif %}
+    </p>
+    <a href="/team/{{ user_team.id }}" class="btn">View My Team</a>
+    {% else %}
+    <p>You are not on a team yet.</p>
+    <button type="button" class="btn btn-success" onclick="showCreateTeamModal()">Create a Team</button>
+    {% endif %}
+</div>
+{% else %}
+<p style="margin-bottom: 20px;"><a href="/login">Log in</a> to create or join a team.</p>
+{% endif %}
+
+{% if teams %}
+<div class="card">
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Team</th>
+                <th>Captain</th>
+                <th>Members</th>
+                <th>Points</th>
+                <th>Medals</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in teams %}
+            <tr>
+                <td>{{ loop.index + (pagination.page - 1) * pagination.per_page }}</td>
+                <td><a href="/team/{{ team.id }}">{{ team.name }}</a></td>
+                <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_callsign }}</a></td>
+                <td>{{ team.member_count }}</td>
+                <td>{{ team.total_points | int }}</td>
+                <td>
+                    {% if team.gold > 0 %}<span class="medal gold">{{ team.gold }}G</span>{% endif %}
+                    {% if team.silver > 0 %}<span class="medal silver">{{ team.silver }}S</span>{% endif %}
+                    {% if team.bronze > 0 %}<span class="medal bronze">{{ team.bronze }}B</span>{% endif %}
+                    {% if team.gold == 0 and team.silver == 0 and team.bronze == 0 %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if pagination.total_pages > 1 %}
+<div class="pagination" style="margin-top: 20px;">
+    {% if pagination.page > 1 %}
+    <a href="/teams?page={{ pagination.page - 1 }}" class="btn" style="margin-right: 5px;">Previous</a>
+    {% endif %}
+    <span>Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+    {% if pagination.page < pagination.total_pages %}
+    <a href="/teams?page={{ pagination.page + 1 }}" class="btn" style="margin-left: 5px;">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="card">
+    <p>No teams have been created yet. Be the first to create one!</p>
+</div>
+{% endif %}
+
+<!-- Create Team Modal -->
+<div id="create-team-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <h3>Create a Team</h3>
+        <form id="create-team-form">
+            <div class="form-group">
+                <label for="team-name">Team Name</label>
+                <input type="text" id="team-name" name="name" required minlength="2" maxlength="100" placeholder="e.g., DX Hunters Club">
+            </div>
+            <div class="form-group">
+                <label for="team-description">Description (optional)</label>
+                <textarea id="team-description" name="description" rows="3" placeholder="Tell us about your team..."></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="btn" style="background: #718096;" onclick="hideCreateTeamModal()">Cancel</button>
+                <button type="submit" class="btn btn-success">Create Team</button>
+            </div>
+        </form>
+        <div id="create-team-result"></div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+}
+</style>
+
+<script>
+function showCreateTeamModal() {
+    document.getElementById('create-team-modal').style.display = 'flex';
+}
+
+function hideCreateTeamModal() {
+    document.getElementById('create-team-modal').style.display = 'none';
+    document.getElementById('create-team-form').reset();
+    document.getElementById('create-team-result').innerHTML = '';
+}
+
+document.getElementById('create-team-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const name = document.getElementById('team-name').value.trim();
+    const description = document.getElementById('team-description').value.trim();
+
+    try {
+        const resp = await fetch('/team', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name, description: description || null})
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok) {
+            window.location.href = '/team/' + data.team_id;
+        } else {
+            document.getElementById('create-team-result').innerHTML =
+                '<div class="alert alert-error">' + (data.detail || 'Failed to create team') + '</div>';
+        }
+    } catch (err) {
+        document.getElementById('create-team-result').innerHTML =
+            '<div class="alert alert-error">Network error. Please try again.</div>';
+    }
+});
+
+// Close modal on backdrop click
+document.getElementById('create-team-modal').addEventListener('click', function(e) {
+    if (e.target === this) hideCreateTeamModal();
+});
+</script>
+{% endblock %}

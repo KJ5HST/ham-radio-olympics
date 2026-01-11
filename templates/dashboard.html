@@ -251,6 +251,106 @@
     {% endif %}
 </div>
 
+{% if is_own_profile %}
+<h3>My Team</h3>
+<div class="card" style="margin-bottom: 20px;">
+    {% if user_team %}
+    <p>
+        <strong>Team:</strong> <a href="/team/{{ user_team.id }}">{{ user_team.name }}</a>
+        {% if is_team_captain %}<span style="color: #718096;">(Captain)</span>{% endif %}
+    </p>
+    <p><strong>Members:</strong> {{ team_member_count }}</p>
+    <div style="margin-top: 15px; display: flex; gap: 10px;">
+        <a href="/team/{{ user_team.id }}" class="btn">View Team</a>
+        {% if not is_team_captain %}
+        <button type="button" class="btn" style="background: #c53030;" onclick="leaveTeam({{ user_team.id }})">Leave Team</button>
+        {% endif %}
+    </div>
+    {% else %}
+    <p>You are not on a team.</p>
+
+    {% if pending_team_invites %}
+    <h4 style="margin-top: 15px;">Pending Invites</h4>
+    <table style="margin-bottom: 15px;">
+        <thead>
+            <tr>
+                <th>Team</th>
+                <th>Invited</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in pending_team_invites %}
+            <tr>
+                <td><a href="/team/{{ inv.team_id }}">{{ inv.team_name }}</a></td>
+                <td>{{ inv.created_at | format_date }}</td>
+                <td>
+                    <button type="button" class="btn btn-success" style="font-size: 0.8em; padding: 3px 8px;" onclick="acceptInvite({{ inv.team_id }})">Accept</button>
+                    <button type="button" class="btn" style="font-size: 0.8em; padding: 3px 8px; background: #718096;" onclick="rejectInvite({{ inv.team_id }})">Decline</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div style="margin-top: 15px;">
+        <a href="/teams" class="btn btn-success">Browse Teams</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+async function leaveTeam(teamId) {
+    if (!confirm('Are you sure you want to leave this team?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/leave', {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to leave team', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function acceptInvite(teamId) {
+    try {
+        const resp = await fetch('/team/' + teamId + '/accept', {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to accept invite', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function rejectInvite(teamId) {
+    if (!confirm('Decline this team invite?')) return;
+
+    try {
+        const resp = await fetch('/team/' + teamId + '/reject', {method: 'POST'});
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast('Invite declined', 'success');
+            window.location.reload();
+        } else {
+            showToast(data.detail || 'Failed to decline invite', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+</script>
+{% endif %}
+
 {% if sport_entries %}
 <h3>{% if is_own_profile %}My {% endif %}Sports</h3>
 <div class="table-responsive"><table>

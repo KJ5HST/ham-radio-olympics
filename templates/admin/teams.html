@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Teams - Admin{% endblock %}
+
+{% block content %}
+<h2>Teams Management</h2>
+<p><a href="/admin">&larr; Back to Admin Dashboard</a></p>
+
+<div class="card" style="margin-bottom: 20px;">
+    <h4>Create New Team</h4>
+    <form action="/admin/team" method="post" style="display: flex; gap: 15px; flex-wrap: wrap; align-items: end;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 150px;">
+            <label for="name">Team Name</label>
+            <input type="text" id="name" name="name" required placeholder="Team Name">
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 150px;">
+            <label for="captain_callsign">Captain</label>
+            <select id="captain_callsign" name="captain_callsign" required>
+                <option value="">Select captain...</option>
+                {% for c in competitors %}
+                <option value="{{ c.callsign }}">{{ c.callsign }}{% if c.first_name %} - {{ c.first_name }} {{ c.last_name or '' }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 2; min-width: 200px;">
+            <label for="description">Description (optional)</label>
+            <input type="text" id="description" name="description" placeholder="Team description...">
+        </div>
+        <button type="submit" class="btn btn-success">Create Team</button>
+    </form>
+</div>
+
+<div class="card" style="margin-bottom: 20px;">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+        <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
+            <label for="search">Search</label>
+            <input type="text" id="search" name="search" value="{{ search }}" placeholder="Team name or captain...">
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn">Search</button>
+            {% if search %}
+            <a href="/admin/teams" class="btn btn-secondary">Clear</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if search %}
+<p style="color: var(--text-secondary);">Showing {{ teams | length }} result(s) for "{{ search }}"</p>
+{% endif %}
+
+{% if teams %}
+<div class="table-responsive">
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Team</th>
+                <th scope="col">Captain</th>
+                <th scope="col">Members</th>
+                <th scope="col">Points</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for team in teams %}
+            <tr{% if not team.is_active %} style="opacity: 0.6;"{% endif %}>
+                <td>
+                    <a href="/team/{{ team.id }}"><strong>{{ team.name }}</strong></a>
+                    {% if team.description %}
+                    <br><small style="color: var(--text-secondary);">{{ team.description[:50] }}{% if team.description | length > 50 %}...{% endif %}</small>
+                    {% endif %}
+                </td>
+                <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_callsign }}</a></td>
+                <td>{{ team.member_count }}</td>
+                <td>{{ team.total_points | int }}</td>
+                <td>
+                    {% if team.is_active %}
+                    <span style="color: #38a169;">Active</span>
+                    {% else %}
+                    <span style="color: #c53030;">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>{{ team.created_at | format_date }}</td>
+                <td>
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm dropdown-toggle">Actions</button>
+                        <div class="dropdown-menu" role="menu">
+                            <a href="/team/{{ team.id }}" role="menuitem">View Team</a>
+                            <button type="button" role="menuitem" onclick="showManageModal({{ team.id }}, '{{ team.name }}', '{{ team.captain_callsign }}')">Manage Members</button>
+                            <button type="button" role="menuitem" onclick="deleteTeam({{ team.id }}, '{{ team.name }}')" style="color: #c53030;">Delete Team</button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if pagination.total_pages > 1 %}
+<div class="pagination" style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
+    {% if pagination.page > 1 %}
+    <a href="/admin/teams?page={{ pagination.page - 1 }}{% if search %}&search={{ search }}{% endif %}" class="btn">Previous</a>
+    {% endif %}
+    <span>Page {{ pagination.page }} of {{ pagination.total_pages }} ({{ pagination.total }} teams)</span>
+    {% if pagination.page < pagination.total_pages %}
+    <a href="/admin/teams?page={{ pagination.page + 1 }}{% if search %}&search={{ search }}{% endif %}" class="btn">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card">
+    <p>No teams found.</p>
+</div>
+{% endif %}
+
+<!-- Manage Team Members Modal -->
+<div id="manage-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 600px;">
+        <h3 id="manage-modal-title">Manage Team</h3>
+
+        <div style="margin-bottom: 20px;">
+            <h4>Add Member</h4>
+            <div style="display: flex; gap: 10px;">
+                <select id="add-member-select" style="flex: 1;">
+                    <option value="">Select competitor...</option>
+                    {% for c in competitors %}
+                    <option value="{{ c.callsign }}">{{ c.callsign }}{% if c.first_name %} - {{ c.first_name }} {{ c.last_name or '' }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-success" onclick="addMember()">Add</button>
+            </div>
+        </div>
+
+        <div id="team-members-list">
+            <!-- Populated by JS -->
+        </div>
+
+        <div style="margin-top: 20px; text-align: right;">
+            <button type="button" class="btn" onclick="hideManageModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: var(--bg-secondary);
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+</style>
+
+<script>
+let currentTeamId = null;
+let currentTeamCaptain = null;
+
+function showManageModal(teamId, teamName, captainCallsign) {
+    currentTeamId = teamId;
+    currentTeamCaptain = captainCallsign;
+    document.getElementById('manage-modal-title').textContent = 'Manage: ' + teamName;
+    document.getElementById('manage-modal').style.display = 'flex';
+    loadTeamMembers();
+}
+
+function hideManageModal() {
+    document.getElementById('manage-modal').style.display = 'none';
+    currentTeamId = null;
+    currentTeamCaptain = null;
+}
+
+async function loadTeamMembers() {
+    try {
+        const resp = await fetch('/team/' + currentTeamId);
+        const html = await resp.text();
+        // Parse members from the team page - we'll just reload the page after changes
+        // For now, show a simple message
+        document.getElementById('team-members-list').innerHTML = '<p>View the <a href="/team/' + currentTeamId + '" target="_blank">team page</a> for current members.</p>';
+    } catch (err) {
+        document.getElementById('team-members-list').innerHTML = '<p>Error loading members.</p>';
+    }
+}
+
+async function addMember() {
+    const callsign = document.getElementById('add-member-select').value;
+    if (!callsign) {
+        showToast('Please select a competitor', 'error');
+        return;
+    }
+
+    try {
+        const resp = await fetch('/admin/team/' + currentTeamId + '/add/' + callsign, {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            document.getElementById('add-member-select').value = '';
+        } else {
+            showToast(data.detail || 'Failed to add member', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+async function deleteTeam(teamId, teamName) {
+    if (!confirm('Delete team "' + teamName + '"? This cannot be undone.')) return;
+    if (!confirm('Are you SURE you want to delete "' + teamName + '"?')) return;
+
+    try {
+        const resp = await fetch('/admin/team/' + teamId, {method: 'DELETE'});
+        if (resp.ok) {
+            window.location.reload();
+        } else {
+            const data = await resp.json();
+            showToast(data.detail || 'Failed to delete team', 'error');
+        }
+    } catch (err) {
+        showToast('Network error', 'error');
+    }
+}
+
+// Close modal on backdrop click
+document.getElementById('manage-modal').addEventListener('click', function(e) {
+    if (e.target === this) hideManageModal();
+});
+
+// Dropdown handling
+document.addEventListener('click', function(e) {
+    const toggle = e.target.closest('.dropdown-toggle');
+    if (toggle) {
+        e.preventDefault();
+        const dropdown = toggle.closest('.dropdown');
+        const menu = dropdown.querySelector('.dropdown-menu');
+        const wasOpen = menu.style.display === 'block';
+
+        // Close all dropdowns
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+
+        // Toggle this one
+        if (!wasOpen) {
+            menu.style.display = 'block';
+        }
+    } else if (!e.target.closest('.dropdown-menu')) {
+        document.querySelectorAll('.dropdown-menu').forEach(m => m.style.display = 'none');
+    }
+});
+</script>
+{% endblock %}

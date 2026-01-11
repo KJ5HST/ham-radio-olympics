@@ -907,6 +907,40 @@ class LoTWSyncRequest(BaseModel):
     password: str
 
 
+class CreateTeamRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Team name is required')
+        if len(v.strip()) < 2:
+            raise ValueError('Team name must be at least 2 characters')
+        if len(v.strip()) > 100:
+            raise ValueError('Team name must be 100 characters or less')
+        return v.strip()
+
+
+class UpdateTeamRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        if v is not None:
+            if not v.strip():
+                raise ValueError('Team name cannot be empty')
+            if len(v.strip()) < 2:
+                raise ValueError('Team name must be at least 2 characters')
+            if len(v.strip()) > 100:
+                raise ValueError('Team name must be 100 characters or less')
+            return v.strip()
+        return v
+
+
 @app.post("/sync/qrz")
 async def trigger_qrz_sync_with_key(request: Request, sync_data: QRZSyncRequest):
     """Trigger QRZ sync for the current user using provided API key."""
@@ -1427,6 +1461,26 @@ async def user_dashboard(
         """, (user.callsign, user.callsign))
         sport_entries = [dict(row) for row in cursor.fetchall()]
 
+        # Get user's team if any
+        user_team = get_user_team(conn, user.callsign)
+        team_member_count = 0
+        is_team_captain = False
+        pending_team_invites = []
+        if user_team:
+            cursor = conn.execute("SELECT COUNT(*) FROM team_members WHERE team_id = ?", (user_team["id"],))
+            team_member_count = cursor.fetchone()[0]
+            is_team_captain = user_team["captain_callsign"] == user.callsign
+        else:
+            # Get pending team invites for user
+            cursor = conn.execute("""
+                SELECT ti.*, t.name as team_name
+                FROM team_invites ti
+                JOIN teams t ON ti.team_id = t.id
+                WHERE ti.callsign = ? AND ti.invite_type = 'invite'
+                ORDER BY ti.created_at DESC
+            """, (user.callsign,))
+            pending_team_invites = cursor.fetchall()
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
@@ -1449,6 +1503,10 @@ async def user_dashboard(
             "total_items": total_qsos,
             "per_page": per_page,
         },
+        "user_team": user_team,
+        "team_member_count": team_member_count,
+        "is_team_captain": is_team_captain,
+        "pending_team_invites": pending_team_invites,
     })
 
 
@@ -2709,6 +2767,921 @@ async def admin_recompute_records(_: bool = Depends(verify_admin)):
     recompute_all_records()
 
     return {"message": "World records recomputed successfully"}
+
+
+@app.get("/admin/teams", response_class=HTMLResponse)
+async def admin_teams_page(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    page: int = 1,
+    search: str = ""
+):
+    """Admin teams management page."""
+    per_page = 20
+    offset = (max(1, page) - 1) * per_page
+
+    with get_db() as conn:
+        # Build query
+        base_where = "WHERE 1=1"
+        params = []
+
+        if search:
+            base_where += " AND (t.name LIKE ? OR t.captain_callsign LIKE ?)"
+            params.extend([f"%{search}%", f"%{search}%"])
+
+        # Get total count
+        cursor = conn.execute(f"SELECT COUNT(*) FROM teams t {base_where}", params)
+        total = cursor.fetchone()[0]
+        total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+        # Get teams with member counts
+        cursor = conn.execute(f"""
+            SELECT t.*,
+                   COUNT(tm.callsign) as member_count,
+                   COALESCE(SUM(m.total_points), 0) as total_points
+            FROM teams t
+            LEFT JOIN team_members tm ON t.id = tm.team_id
+            LEFT JOIN medals m ON tm.callsign = m.callsign
+            {base_where}
+            GROUP BY t.id
+            ORDER BY t.created_at DESC
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset])
+        teams = cursor.fetchall()
+
+        # Get all competitors for adding to teams
+        cursor = conn.execute("""
+            SELECT c.callsign, c.first_name, c.last_name
+            FROM competitors c
+            WHERE c.is_disabled = 0
+            ORDER BY c.callsign
+        """)
+        competitors = cursor.fetchall()
+
+    return templates.TemplateResponse("admin/teams.html", {
+        "request": request,
+        "user": get_current_user(request),
+        "teams": teams,
+        "competitors": competitors,
+        "search": search,
+        "csrf_token": request.state.csrf_token,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages
+        }
+    })
+
+
+@app.post("/admin/team")
+async def admin_create_team(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    name: str = Form(...),
+    description: str = Form(""),
+    captain_callsign: str = Form(...)
+):
+    """Admin create team with specified captain."""
+    captain_callsign = captain_callsign.upper().strip()
+
+    with get_db() as conn:
+        # Validate captain exists
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (captain_callsign,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Captain callsign not found")
+
+        # Check if team name is taken
+        cursor = conn.execute("SELECT 1 FROM teams WHERE name = ?", (name,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Team name already exists")
+
+        # Check if captain is already on a team
+        cursor = conn.execute("SELECT t.name FROM teams t JOIN team_members tm ON t.id = tm.team_id WHERE tm.callsign = ?", (captain_callsign,))
+        existing = cursor.fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"{captain_callsign} is already on team '{existing['name']}'")
+
+        # Create team
+        now = datetime.utcnow().isoformat()
+        cursor = conn.execute("""
+            INSERT INTO teams (name, description, captain_callsign, created_at, is_active)
+            VALUES (?, ?, ?, ?, 1)
+        """, (name.strip(), description.strip() or None, captain_callsign, now))
+        team_id = cursor.lastrowid
+
+        # Add captain as member
+        conn.execute("""
+            INSERT INTO team_members (team_id, callsign, joined_at)
+            VALUES (?, ?, ?)
+        """, (team_id, captain_callsign, now))
+
+        # Audit log
+        user = get_current_user(request)
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'admin_create_team', 'team', ?, ?)
+        """, (now, user.callsign if user else None, str(team_id), f"Created team: {name}"))
+
+    return RedirectResponse(url="/admin/teams", status_code=303)
+
+
+@app.delete("/admin/team/{team_id}")
+async def admin_delete_team(request: Request, team_id: int, _: bool = Depends(verify_admin)):
+    """Admin delete team."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT name FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+
+        # Audit log
+        user = get_current_user(request)
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'admin_delete_team', 'team', ?, ?)
+        """, (now, user.callsign if user else None, str(team_id), f"Deleted team: {team['name']}"))
+
+    return {"message": "Team deleted"}
+
+
+@app.post("/admin/team/{team_id}/add/{callsign}")
+async def admin_add_team_member(request: Request, team_id: int, callsign: str, _: bool = Depends(verify_admin)):
+    """Admin add member to team."""
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        # Check team exists
+        cursor = conn.execute("SELECT name FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check user exists
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Competitor not found")
+
+        # Check if already on a team
+        cursor = conn.execute("""
+            SELECT t.name FROM teams t
+            JOIN team_members tm ON t.id = tm.team_id
+            WHERE tm.callsign = ?
+        """, (callsign,))
+        existing = cursor.fetchone()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"{callsign} is already on team '{existing['name']}'")
+
+        # Add member
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO team_members (team_id, callsign, joined_at)
+            VALUES (?, ?, ?)
+        """, (team_id, callsign, now))
+
+        # Audit log
+        user = get_current_user(request)
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'admin_add_team_member', 'team', ?, ?)
+        """, (now, user.callsign if user else None, str(team_id), f"Added {callsign} to team"))
+
+    return {"message": f"{callsign} added to team"}
+
+
+@app.post("/admin/team/{team_id}/remove/{callsign}")
+async def admin_remove_team_member(request: Request, team_id: int, callsign: str, _: bool = Depends(verify_admin)):
+    """Admin remove member from team."""
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT name, captain_callsign FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check member exists on team
+        cursor = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Member not on this team")
+
+        # If removing captain, need to reassign or fail
+        if team["captain_callsign"] == callsign:
+            raise HTTPException(status_code=400, detail="Cannot remove captain. Transfer captaincy first.")
+
+        # Remove member
+        conn.execute("DELETE FROM team_members WHERE team_id = ? AND callsign = ?", (team_id, callsign))
+
+        # Audit log
+        user = get_current_user(request)
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'admin_remove_team_member', 'team', ?, ?)
+        """, (now, user.callsign if user else None, str(team_id), f"Removed {callsign} from team"))
+
+    return {"message": f"{callsign} removed from team"}
+
+
+@app.post("/admin/team/{team_id}/transfer/{callsign}")
+async def admin_transfer_captaincy(request: Request, team_id: int, callsign: str, _: bool = Depends(verify_admin)):
+    """Admin transfer team captaincy."""
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT name, captain_callsign FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check new captain is on team
+        cursor = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Member not on this team")
+
+        conn.execute("UPDATE teams SET captain_callsign = ? WHERE id = ?", (callsign, team_id))
+
+        # Audit log
+        user = get_current_user(request)
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'admin_transfer_captaincy', 'team', ?, ?)
+        """, (now, user.callsign if user else None, str(team_id), f"Transferred captaincy from {team['captain_callsign']} to {callsign}"))
+
+    return {"message": f"Captaincy transferred to {callsign}"}
+
+
+# ============================================================
+# TEAM ENDPOINTS
+# ============================================================
+
+def get_user_team(conn, callsign: str):
+    """Get the team a user belongs to, if any."""
+    cursor = conn.execute("""
+        SELECT t.*, tm.joined_at as member_joined_at
+        FROM teams t
+        JOIN team_members tm ON t.id = tm.team_id
+        WHERE tm.callsign = ?
+    """, (callsign,))
+    return cursor.fetchone()
+
+
+def get_team_members(conn, team_id: int):
+    """Get all members of a team with their stats."""
+    cursor = conn.execute("""
+        SELECT c.callsign, c.first_name, c.last_name, tm.joined_at,
+               t.captain_callsign,
+               COALESCE(SUM(m.total_points), 0) as total_points,
+               COUNT(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 END) as gold,
+               COUNT(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 END) as silver,
+               COUNT(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 END) as bronze
+        FROM team_members tm
+        JOIN competitors c ON tm.callsign = c.callsign
+        JOIN teams t ON tm.team_id = t.id
+        LEFT JOIN medals m ON c.callsign = m.callsign
+        WHERE tm.team_id = ?
+        GROUP BY c.callsign
+        ORDER BY total_points DESC, c.callsign
+    """, (team_id,))
+    return cursor.fetchall()
+
+
+@app.get("/teams", response_class=HTMLResponse)
+async def teams_list_page(request: Request, page: int = 1, per_page: int = 20):
+    """List all active teams."""
+    user = get_current_user(request)
+    offset = (max(1, page) - 1) * per_page
+
+    with get_db() as conn:
+        # Get total count
+        cursor = conn.execute("SELECT COUNT(*) FROM teams WHERE is_active = 1")
+        total = cursor.fetchone()[0]
+        total_pages = (total + per_page - 1) // per_page if total > 0 else 1
+
+        # Get teams with member counts and total points
+        cursor = conn.execute("""
+            SELECT t.*,
+                   COUNT(DISTINCT tm.callsign) as member_count,
+                   COALESCE(SUM(m.total_points), 0) as total_points,
+                   COUNT(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 END) as gold,
+                   COUNT(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 END) as silver,
+                   COUNT(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 END) as bronze
+            FROM teams t
+            LEFT JOIN team_members tm ON t.id = tm.team_id
+            LEFT JOIN medals m ON tm.callsign = m.callsign
+            WHERE t.is_active = 1
+            GROUP BY t.id
+            ORDER BY total_points DESC, t.name
+            LIMIT ? OFFSET ?
+        """, (per_page, offset))
+        teams = cursor.fetchall()
+
+        # Get user's current team if any
+        user_team = None
+        if user:
+            user_team = get_user_team(conn, user.callsign)
+
+        return templates.TemplateResponse("teams.html", {
+            "request": request,
+            "teams": teams,
+            "user_team": user_team,
+            "user": user,
+            "csrf_token": request.state.csrf_token,
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total,
+                "total_pages": total_pages
+            }
+        })
+
+
+@app.get("/team/{team_id}", response_class=HTMLResponse)
+async def team_profile_page(request: Request, team_id: int):
+    """Team profile page."""
+    user = get_current_user(request)
+
+    with get_db() as conn:
+        # Get team
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Get members with stats
+        members = get_team_members(conn, team_id)
+
+        # Get captain info
+        cursor = conn.execute(
+            "SELECT callsign, first_name, last_name FROM competitors WHERE callsign = ?",
+            (team["captain_callsign"],)
+        )
+        captain = cursor.fetchone()
+
+        # Get team standings per sport (using normalized calculation)
+        cursor = conn.execute("""
+            SELECT tm.*, s.name as sport_name
+            FROM team_medals tm
+            JOIN sports s ON tm.sport_id = s.id
+            WHERE tm.team_id = ? AND tm.match_id IS NULL AND tm.calculation_method = 'normalized'
+            ORDER BY tm.total_points DESC
+        """, (team_id,))
+        sport_standings = cursor.fetchall()
+
+        # Check if current user is a member or captain
+        is_member = False
+        is_captain = False
+        has_pending_request = False
+        if user:
+            cursor = conn.execute(
+                "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+                (team_id, user.callsign)
+            )
+            is_member = cursor.fetchone() is not None
+            is_captain = team["captain_callsign"] == user.callsign
+
+            # Check if user has pending request
+            cursor = conn.execute(
+                "SELECT 1 FROM team_invites WHERE team_id = ? AND callsign = ? AND invite_type = 'request'",
+                (team_id, user.callsign)
+            )
+            has_pending_request = cursor.fetchone() is not None
+
+        # Get pending requests (for captain)
+        pending_requests = []
+        pending_invites = []
+        if is_captain:
+            cursor = conn.execute("""
+                SELECT ti.*, c.first_name, c.last_name
+                FROM team_invites ti
+                JOIN competitors c ON ti.callsign = c.callsign
+                WHERE ti.team_id = ? AND ti.invite_type = 'request'
+                ORDER BY ti.created_at DESC
+            """, (team_id,))
+            pending_requests = cursor.fetchall()
+
+            cursor = conn.execute("""
+                SELECT ti.*, c.first_name, c.last_name
+                FROM team_invites ti
+                JOIN competitors c ON ti.callsign = c.callsign
+                WHERE ti.team_id = ? AND ti.invite_type = 'invite'
+                ORDER BY ti.created_at DESC
+            """, (team_id,))
+            pending_invites = cursor.fetchall()
+
+        # Get all competitors for invite dropdown (captain only)
+        available_competitors = []
+        if is_captain:
+            cursor = conn.execute("""
+                SELECT c.callsign, c.first_name, c.last_name
+                FROM competitors c
+                WHERE c.is_disabled = 0
+                AND c.callsign NOT IN (SELECT callsign FROM team_members)
+                AND c.callsign NOT IN (SELECT callsign FROM team_invites WHERE team_id = ?)
+                ORDER BY c.callsign
+            """, (team_id,))
+            available_competitors = cursor.fetchall()
+
+        return templates.TemplateResponse("team_profile.html", {
+            "request": request,
+            "team": team,
+            "captain": captain,
+            "members": members,
+            "sport_standings": sport_standings,
+            "is_member": is_member,
+            "is_captain": is_captain,
+            "has_pending_request": has_pending_request,
+            "pending_requests": pending_requests,
+            "pending_invites": pending_invites,
+            "available_competitors": available_competitors,
+            "user": user,
+            "csrf_token": request.state.csrf_token
+        })
+
+
+@app.post("/team")
+async def create_team(request: Request, data: CreateTeamRequest):
+    """Create a new team. Creator becomes captain."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        # Check if user is already on a team
+        existing_team = get_user_team(conn, user.callsign)
+        if existing_team:
+            raise HTTPException(status_code=400, detail="You are already on a team. Leave your current team first.")
+
+        # Check if team name is taken
+        cursor = conn.execute("SELECT 1 FROM teams WHERE name = ?", (data.name,))
+        if cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Team name already exists")
+
+        # Create team
+        now = datetime.utcnow().isoformat()
+        cursor = conn.execute("""
+            INSERT INTO teams (name, description, captain_callsign, created_at, is_active)
+            VALUES (?, ?, ?, ?, 1)
+        """, (data.name, data.description, user.callsign, now))
+        team_id = cursor.lastrowid
+
+        # Add creator as member
+        conn.execute("""
+            INSERT INTO team_members (team_id, callsign, joined_at)
+            VALUES (?, ?, ?)
+        """, (team_id, user.callsign, now))
+
+        # Log action
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'create_team', 'team', ?, ?)
+        """, (now, user.callsign, str(team_id), f"Created team: {data.name}"))
+
+        return {"message": "Team created successfully", "team_id": team_id}
+
+
+@app.put("/team/{team_id}")
+async def update_team(request: Request, team_id: int, data: UpdateTeamRequest):
+    """Update team info. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        # Check team exists and user is captain
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can update team info")
+
+        # Check for name collision
+        if data.name and data.name != team["name"]:
+            cursor = conn.execute("SELECT 1 FROM teams WHERE name = ? AND id != ?", (data.name, team_id))
+            if cursor.fetchone():
+                raise HTTPException(status_code=400, detail="Team name already exists")
+
+        # Update
+        updates = []
+        params = []
+        if data.name:
+            updates.append("name = ?")
+            params.append(data.name)
+        if data.description is not None:
+            updates.append("description = ?")
+            params.append(data.description)
+
+        if updates:
+            params.append(team_id)
+            conn.execute(f"UPDATE teams SET {', '.join(updates)} WHERE id = ?", params)
+
+        return {"message": "Team updated successfully"}
+
+
+@app.delete("/team/{team_id}")
+async def delete_team(request: Request, team_id: int):
+    """Delete team. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can delete the team")
+
+        # Delete team (cascade will remove members and medals)
+        conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
+
+        # Log action
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'delete_team', 'team', ?, ?)
+        """, (now, user.callsign, str(team_id), f"Deleted team: {team['name']}"))
+
+        return {"message": "Team deleted successfully"}
+
+
+@app.post("/team/{team_id}/request")
+async def request_to_join_team(request: Request, team_id: int):
+    """Request to join a team. Captain must approve."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        # Check team exists and is active
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ? AND is_active = 1", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check user isn't already on a team
+        existing_team = get_user_team(conn, user.callsign)
+        if existing_team:
+            if existing_team["id"] == team_id:
+                raise HTTPException(status_code=400, detail="You are already on this team")
+            raise HTTPException(status_code=400, detail="You are already on a team. Leave your current team first.")
+
+        # Check for existing invite (auto-accept) or request
+        cursor = conn.execute(
+            "SELECT invite_type FROM team_invites WHERE team_id = ? AND callsign = ?",
+            (team_id, user.callsign)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            if existing["invite_type"] == "invite":
+                # Auto-accept the invite
+                now = datetime.utcnow().isoformat()
+                conn.execute("DELETE FROM team_invites WHERE team_id = ? AND callsign = ?", (team_id, user.callsign))
+                conn.execute("""
+                    INSERT INTO team_members (team_id, callsign, joined_at)
+                    VALUES (?, ?, ?)
+                """, (team_id, user.callsign, now))
+                return {"message": f"You have joined {team['name']}"}
+            else:
+                raise HTTPException(status_code=400, detail="You already have a pending request to join this team")
+
+        # Create join request
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO team_invites (team_id, callsign, invite_type, created_at)
+            VALUES (?, ?, 'request', ?)
+        """, (team_id, user.callsign, now))
+
+        return {"message": f"Request sent to join {team['name']}. The captain must approve."}
+
+
+@app.post("/team/{team_id}/invite/{callsign}")
+async def invite_to_team(request: Request, team_id: int, callsign: str):
+    """Invite a user to join the team. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can invite members")
+
+        # Check invitee exists
+        cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Competitor not found")
+
+        # Check invitee isn't already on a team
+        existing_team = get_user_team(conn, callsign)
+        if existing_team:
+            raise HTTPException(status_code=400, detail=f"{callsign} is already on a team")
+
+        # Check for existing request (auto-approve) or invite
+        cursor = conn.execute(
+            "SELECT invite_type FROM team_invites WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        existing = cursor.fetchone()
+        if existing:
+            if existing["invite_type"] == "request":
+                # Auto-approve the request
+                now = datetime.utcnow().isoformat()
+                conn.execute("DELETE FROM team_invites WHERE team_id = ? AND callsign = ?", (team_id, callsign))
+                conn.execute("""
+                    INSERT INTO team_members (team_id, callsign, joined_at)
+                    VALUES (?, ?, ?)
+                """, (team_id, callsign, now))
+                return {"message": f"{callsign} has been added to the team"}
+            else:
+                raise HTTPException(status_code=400, detail=f"{callsign} already has a pending invite")
+
+        # Create invite
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO team_invites (team_id, callsign, invite_type, created_at)
+            VALUES (?, ?, 'invite', ?)
+        """, (team_id, callsign, now))
+
+        return {"message": f"Invite sent to {callsign}"}
+
+
+@app.post("/team/{team_id}/approve/{callsign}")
+async def approve_join_request(request: Request, team_id: int, callsign: str):
+    """Approve a join request. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can approve requests")
+
+        # Check request exists
+        cursor = conn.execute(
+            "SELECT 1 FROM team_invites WHERE team_id = ? AND callsign = ? AND invite_type = 'request'",
+            (team_id, callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="No pending request from this user")
+
+        # Check they're still not on a team
+        existing_team = get_user_team(conn, callsign)
+        if existing_team:
+            conn.execute("DELETE FROM team_invites WHERE team_id = ? AND callsign = ?", (team_id, callsign))
+            raise HTTPException(status_code=400, detail=f"{callsign} has already joined another team")
+
+        # Approve - add to team
+        now = datetime.utcnow().isoformat()
+        conn.execute("DELETE FROM team_invites WHERE team_id = ? AND callsign = ?", (team_id, callsign))
+        conn.execute("""
+            INSERT INTO team_members (team_id, callsign, joined_at)
+            VALUES (?, ?, ?)
+        """, (team_id, callsign, now))
+
+        return {"message": f"{callsign} has been added to the team"}
+
+
+@app.post("/team/{team_id}/decline/{callsign}")
+async def decline_join_request(request: Request, team_id: int, callsign: str):
+    """Decline a join request or cancel an invite. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    callsign = callsign.upper().strip()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can decline requests")
+
+        # Delete the invite/request
+        cursor = conn.execute(
+            "DELETE FROM team_invites WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="No pending request or invite found")
+
+        return {"message": "Request declined"}
+
+
+@app.post("/team/{team_id}/accept")
+async def accept_team_invite(request: Request, team_id: int):
+    """Accept an invite to join a team."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check invite exists
+        cursor = conn.execute(
+            "SELECT 1 FROM team_invites WHERE team_id = ? AND callsign = ? AND invite_type = 'invite'",
+            (team_id, user.callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="No pending invite for this team")
+
+        # Check user isn't already on a team
+        existing_team = get_user_team(conn, user.callsign)
+        if existing_team:
+            conn.execute("DELETE FROM team_invites WHERE callsign = ?", (user.callsign,))
+            raise HTTPException(status_code=400, detail="You are already on a team")
+
+        # Accept - add to team
+        now = datetime.utcnow().isoformat()
+        conn.execute("DELETE FROM team_invites WHERE team_id = ? AND callsign = ?", (team_id, user.callsign))
+        conn.execute("""
+            INSERT INTO team_members (team_id, callsign, joined_at)
+            VALUES (?, ?, ?)
+        """, (team_id, user.callsign, now))
+
+        return {"message": f"You have joined {team['name']}"}
+
+
+@app.post("/team/{team_id}/reject")
+async def reject_team_invite(request: Request, team_id: int):
+    """Reject an invite to join a team."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            "DELETE FROM team_invites WHERE team_id = ? AND callsign = ? AND invite_type = 'invite'",
+            (team_id, user.callsign)
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="No pending invite for this team")
+
+        return {"message": "Invite declined"}
+
+
+@app.post("/team/{team_id}/leave")
+async def leave_team(request: Request, team_id: int):
+    """Leave a team."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        # Check user is on this team
+        cursor = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, user.callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=400, detail="You are not on this team")
+
+        # Captain cannot leave - must transfer or delete team
+        if team["captain_callsign"] == user.callsign:
+            raise HTTPException(
+                status_code=400,
+                detail="Captain cannot leave the team. Transfer captaincy or delete the team."
+            )
+
+        # Leave team
+        conn.execute(
+            "DELETE FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, user.callsign)
+        )
+
+        # Log action
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'leave_team', 'team', ?, ?)
+        """, (now, user.callsign, str(team_id), f"Left team: {team['name']}"))
+
+        return {"message": f"You have left {team['name']}"}
+
+
+@app.post("/team/{team_id}/remove/{callsign}")
+async def remove_team_member(request: Request, team_id: int, callsign: str):
+    """Remove a member from the team. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    callsign = callsign.upper()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can remove members")
+
+        # Cannot remove captain
+        if callsign == team["captain_callsign"]:
+            raise HTTPException(status_code=400, detail="Cannot remove the captain")
+
+        # Check member exists
+        cursor = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Member not found on this team")
+
+        # Remove member
+        conn.execute(
+            "DELETE FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+
+        # Log action
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'remove_team_member', 'team', ?, ?)
+        """, (now, user.callsign, str(team_id), f"Removed {callsign} from team"))
+
+        return {"message": f"{callsign} has been removed from the team"}
+
+
+@app.post("/team/{team_id}/transfer/{callsign}")
+async def transfer_captaincy(request: Request, team_id: int, callsign: str):
+    """Transfer team captaincy to another member. Captain only."""
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    callsign = callsign.upper()
+
+    with get_db() as conn:
+        cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
+        team = cursor.fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="Team not found")
+
+        if team["captain_callsign"] != user.callsign and not user.is_admin:
+            raise HTTPException(status_code=403, detail="Only the captain can transfer captaincy")
+
+        # Check new captain is a member
+        cursor = conn.execute(
+            "SELECT 1 FROM team_members WHERE team_id = ? AND callsign = ?",
+            (team_id, callsign)
+        )
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Member not found on this team")
+
+        # Transfer captaincy
+        conn.execute("UPDATE teams SET captain_callsign = ? WHERE id = ?", (callsign, team_id))
+
+        # Log action
+        now = datetime.utcnow().isoformat()
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
+            VALUES (?, ?, 'transfer_captaincy', 'team', ?, ?)
+        """, (now, user.callsign, str(team_id), f"Transferred captaincy to {callsign}"))
+
+        return {"message": f"Captaincy transferred to {callsign}"}
 
 
 # ============================================================
