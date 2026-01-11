@@ -362,12 +362,14 @@ class SportCreate(BaseModel):
     work_enabled: bool = True
     activate_enabled: bool = False
     separate_pools: bool = False
+    allowed_modes: Optional[str] = None
 
 
 class MatchCreate(BaseModel):
     start_date: str
     end_date: str
     target_value: str
+    allowed_modes: Optional[str] = None
 
 
 # Admin authentication dependency
@@ -2041,13 +2043,14 @@ async def create_sport(olympiad_id: int, sport: SportCreate, _: bool = Depends(v
     with get_db() as conn:
         cursor = conn.execute("""
             INSERT INTO sports (olympiad_id, name, description, target_type,
-                              work_enabled, activate_enabled, separate_pools)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                              work_enabled, activate_enabled, separate_pools, allowed_modes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             olympiad_id, sport.name, sport.description, sport.target_type,
             1 if sport.work_enabled else 0,
             1 if sport.activate_enabled else 0,
             1 if sport.separate_pools else 0,
+            sport.allowed_modes,
         ))
 
         return {"id": cursor.lastrowid, "message": "Sport created"}
@@ -2074,13 +2077,14 @@ async def update_sport(request: Request, sport_id: int, sport: SportCreate):
         conn.execute("""
             UPDATE sports
             SET name = ?, description = ?, target_type = ?,
-                work_enabled = ?, activate_enabled = ?, separate_pools = ?
+                work_enabled = ?, activate_enabled = ?, separate_pools = ?, allowed_modes = ?
             WHERE id = ?
         """, (
             sport.name, sport.description, sport.target_type,
             1 if sport.work_enabled else 0,
             1 if sport.activate_enabled else 0,
             1 if sport.separate_pools else 0,
+            sport.allowed_modes,
             sport_id,
         ))
 
@@ -2213,9 +2217,9 @@ async def create_match(request: Request, sport_id: int, match: MatchCreate):
     verify_admin_or_sport_referee(request, sport_id)
     with get_db() as conn:
         cursor = conn.execute("""
-            INSERT INTO matches (sport_id, start_date, end_date, target_value)
-            VALUES (?, ?, ?, ?)
-        """, (sport_id, match.start_date, match.end_date, match.target_value))
+            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes)
+            VALUES (?, ?, ?, ?, ?)
+        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes))
 
         return {"id": cursor.lastrowid, "message": "Match created"}
 
@@ -2250,9 +2254,9 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
 
         conn.execute("""
             UPDATE matches
-            SET start_date = ?, end_date = ?, target_value = ?
+            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?
             WHERE id = ?
-        """, (match.start_date, match.end_date, match.target_value, match_id))
+        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match_id))
 
     # Recompute medals for this match (outside connection to avoid lock)
     recompute_match_medals(match_id)

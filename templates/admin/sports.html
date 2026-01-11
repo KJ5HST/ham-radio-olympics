@@ -13,7 +13,8 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Target Type</th>
-            <th scope="col">Modes</th>
+            <th scope="col">Work/Activate</th>
+            <th scope="col">Allowed Modes</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -28,11 +29,12 @@
                 {% if sport.activate_enabled %}Activate{% endif %}
                 {% if sport.separate_pools %} (separate){% endif %}
             </td>
+            <td>{{ sport.allowed_modes or 'All' }}</td>
             <td>
                 <div class="btn-group">
                     <a href="/admin/sport/{{ sport.id }}/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Competitors"><span class="icon">👥</span></a>
                     <a href="/admin/sport/{{ sport.id }}/matches?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon btn-info" title="Matches"><span class="icon">📅</span></a>
-                    <button type="button" onclick="editSport({{ sport.id }}, '{{ sport.name | e }}', '{{ (sport.description or '') | e }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="editSport({{ sport.id }}, '{{ sport.name | e }}', '{{ (sport.description or '') | e }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }}, '{{ sport.allowed_modes or '' }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     <button type="button" onclick="deleteSport({{ sport.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -75,6 +77,21 @@
         <div class="form-group">
             <label><input type="checkbox" id="separate_pools"> Separate Pools (per-role medals)</label>
         </div>
+        <div class="form-group">
+            <label>Allowed Modes (leave unchecked for all modes)</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;">
+                <label><input type="checkbox" class="mode-checkbox" value="CW"> CW</label>
+                <label><input type="checkbox" class="mode-checkbox" value="SSB"> SSB</label>
+                <label><input type="checkbox" class="mode-checkbox" value="FM"> FM</label>
+                <label><input type="checkbox" class="mode-checkbox" value="AM"> AM</label>
+                <label><input type="checkbox" class="mode-checkbox" value="FT8"> FT8</label>
+                <label><input type="checkbox" class="mode-checkbox" value="FT4"> FT4</label>
+                <label><input type="checkbox" class="mode-checkbox" value="RTTY"> RTTY</label>
+                <label><input type="checkbox" class="mode-checkbox" value="PSK31"> PSK31</label>
+                <label><input type="checkbox" class="mode-checkbox" value="JS8"> JS8</label>
+            </div>
+            <small style="color: #718096;">USB/LSB QSOs will match SSB. Select modes to restrict this sport.</small>
+        </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Sport</button>
             <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn btn-secondary" style="display: none;"><span class="icon">✕</span> Cancel</button>
@@ -88,7 +105,25 @@ const adminKey = new URLSearchParams(window.location.search).get('admin_key');
 const olympiadId = {{ olympiad.id }};
 let editingId = null;
 
-function editSport(id, name, description, targetType, workEnabled, activateEnabled, separatePools) {
+function getSelectedModes() {
+    const checkboxes = document.querySelectorAll('.mode-checkbox:checked');
+    const modes = Array.from(checkboxes).map(cb => cb.value);
+    return modes.length > 0 ? modes.join(',') : null;
+}
+
+function setSelectedModes(modesStr) {
+    // Clear all checkboxes first
+    document.querySelectorAll('.mode-checkbox').forEach(cb => cb.checked = false);
+    if (modesStr) {
+        const modes = modesStr.split(',').map(m => m.trim().toUpperCase());
+        modes.forEach(mode => {
+            const cb = document.querySelector(`.mode-checkbox[value="${mode}"]`);
+            if (cb) cb.checked = true;
+        });
+    }
+}
+
+function editSport(id, name, description, targetType, workEnabled, activateEnabled, separatePools, allowedModes) {
     editingId = id;
     document.getElementById('sport_id').value = id;
     document.getElementById('name').value = name;
@@ -97,6 +132,7 @@ function editSport(id, name, description, targetType, workEnabled, activateEnabl
     document.getElementById('work_enabled').checked = workEnabled;
     document.getElementById('activate_enabled').checked = activateEnabled;
     document.getElementById('separate_pools').checked = separatePools;
+    setSelectedModes(allowedModes);
     document.getElementById('form-title').textContent = 'Edit Sport';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
     document.getElementById('cancel-btn').style.display = 'inline-flex';
@@ -111,6 +147,7 @@ function cancelEdit() {
     document.getElementById('work_enabled').checked = true;
     document.getElementById('activate_enabled').checked = false;
     document.getElementById('separate_pools').checked = false;
+    setSelectedModes(null);
     document.getElementById('form-title').textContent = 'Create Sport';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Sport';
     document.getElementById('cancel-btn').style.display = 'none';
@@ -125,7 +162,8 @@ document.getElementById('sport-form').addEventListener('submit', async (e) => {
         target_type: document.getElementById('target_type').value,
         work_enabled: document.getElementById('work_enabled').checked,
         activate_enabled: document.getElementById('activate_enabled').checked,
-        separate_pools: document.getElementById('separate_pools').checked
+        separate_pools: document.getElementById('separate_pools').checked,
+        allowed_modes: getSelectedModes()
     };
     try {
         let resp;

@@ -235,6 +235,22 @@ def init_db():
                 conn.execute("ALTER TABLE records ADD COLUMN match_id INTEGER REFERENCES matches(id) ON DELETE CASCADE")
                 conn.commit()
 
+        # Migration: add allowed_modes column to sports table
+        if 'sports' in tables:
+            cursor = conn.execute("PRAGMA table_info(sports)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'allowed_modes' not in columns:
+                conn.execute("ALTER TABLE sports ADD COLUMN allowed_modes TEXT")
+                conn.commit()
+
+        # Migration: add allowed_modes column to matches table
+        if 'matches' in tables:
+            cursor = conn.execute("PRAGMA table_info(matches)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'allowed_modes' not in columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN allowed_modes TEXT")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -305,6 +321,7 @@ def init_db():
                 work_enabled INTEGER NOT NULL DEFAULT 1,
                 activate_enabled INTEGER NOT NULL DEFAULT 0,
                 separate_pools INTEGER NOT NULL DEFAULT 0,
+                allowed_modes TEXT,
                 FOREIGN KEY (olympiad_id) REFERENCES olympiads(id) ON DELETE CASCADE
             );
 
@@ -315,6 +332,7 @@ def init_db():
                 start_date TEXT NOT NULL,
                 end_date TEXT NOT NULL,
                 target_value TEXT NOT NULL,
+                allowed_modes TEXT,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
             );
 

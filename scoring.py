@@ -46,6 +46,49 @@ class MedalResult:
     total_points: int
 
 
+def normalize_mode(mode: str) -> str:
+    """
+    Normalize QSO mode for comparison.
+
+    Groups similar modes together:
+    - USB, LSB -> SSB
+    - Various digital modes stay as-is
+    """
+    if not mode:
+        return ""
+    mode = mode.upper().strip()
+    # Normalize sideband modes to SSB
+    if mode in ("USB", "LSB"):
+        return "SSB"
+    return mode
+
+
+def is_mode_allowed(qso_mode: str, allowed_modes: str) -> bool:
+    """
+    Check if a QSO's mode is in the allowed list.
+
+    Args:
+        qso_mode: The mode from the QSO record
+        allowed_modes: Comma-separated list of allowed modes, or None/empty for all allowed
+
+    Returns:
+        True if mode is allowed
+    """
+    if not allowed_modes:
+        return True  # No restriction, all modes allowed
+
+    if not qso_mode:
+        return False  # QSO has no mode, can't match restriction
+
+    normalized_qso = normalize_mode(qso_mode)
+    allowed_list = [normalize_mode(m.strip()) for m in allowed_modes.split(",") if m.strip()]
+
+    if not allowed_list:
+        return True  # Empty list means no restriction
+
+    return normalized_qso in allowed_list
+
+
 def matches_target(
     qso: dict,
     target_type: str,
@@ -154,6 +197,7 @@ def get_matching_qsos(
     start_date: datetime,
     end_date: datetime,
     sport_id: int = None,
+    match_allowed_modes: str = None,
 ) -> List[MatchingQSO]:
     """
     Find all QSOs that match a specific Match.
@@ -165,6 +209,7 @@ def get_matching_qsos(
         start_date: Match start datetime
         end_date: Match end datetime
         sport_id: Sport ID (only competitors who opted in are included)
+        match_allowed_modes: Match-level mode restriction (overrides sport if set)
 
     Returns:
         List of MatchingQSO objects
@@ -175,6 +220,8 @@ def get_matching_qsos(
     work_enabled = sport_config["work_enabled"]
     activate_enabled = sport_config["activate_enabled"]
     separate_pools = sport_config["separate_pools"]
+    # Match-level modes override sport-level if specified
+    allowed_modes = match_allowed_modes if match_allowed_modes else sport_config.get("allowed_modes")
 
     with get_db() as conn:
         # Get all confirmed QSOs in the time window from competitors who opted in
@@ -190,6 +237,10 @@ def get_matching_qsos(
 
         for row in cursor.fetchall():
             qso = dict(row)
+
+            # Check if QSO mode is allowed (applies to both work and activate)
+            if not is_mode_allowed(qso.get("mode"), allowed_modes):
+                continue
 
             # Check work mode
             if work_enabled:
@@ -365,7 +416,7 @@ def recompute_match_medals(match_id: int):
         # Get match and sport config
         cursor = conn.execute("""
             SELECT m.*, s.target_type, s.work_enabled, s.activate_enabled,
-                   s.separate_pools, o.qualifying_qsos
+                   s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
             FROM matches m
             JOIN sports s ON m.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
@@ -384,9 +435,11 @@ def recompute_match_medals(match_id: int):
             "work_enabled": bool(match_data["work_enabled"]),
             "activate_enabled": bool(match_data["activate_enabled"]),
             "separate_pools": bool(match_data["separate_pools"]),
+            "allowed_modes": match_data.get("sport_allowed_modes"),
         }
 
         # Get matching QSOs (only from competitors who opted into this sport)
+        # Match-level allowed_modes overrides sport-level if set
         matching = get_matching_qsos(
             match_id,
             sport_config,
@@ -394,6 +447,7 @@ def recompute_match_medals(match_id: int):
             start_date,
             end_date,
             sport_id=match_data["sport_id"],
+            match_allowed_modes=match_data.get("allowed_modes"),
         )
 
         # Compute medals
@@ -761,8 +815,9 @@ def recompute_all_records():
         # Get all matches with their sport config
         cursor = conn.execute("""
             SELECT m.id as match_id, m.start_date, m.end_date, m.target_value,
+                   m.allowed_modes as match_allowed_modes,
                    s.id as sport_id, s.target_type, s.work_enabled, s.activate_enabled,
-                   s.separate_pools, o.qualifying_qsos
+                   s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
             FROM matches m
             JOIN sports s ON m.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
@@ -781,6 +836,7 @@ def recompute_all_records():
             "work_enabled": bool(match_data["work_enabled"]),
             "activate_enabled": bool(match_data["activate_enabled"]),
             "separate_pools": bool(match_data["separate_pools"]),
+            "allowed_modes": match_data.get("sport_allowed_modes"),
         }
 
         # Get matching QSOs for this match
@@ -791,6 +847,7 @@ def recompute_all_records():
             start_date,
             end_date,
             sport_id=match_data["sport_id"],
+            match_allowed_modes=match_data.get("match_allowed_modes"),
         )
 
         # Update records for each matching QSO (only once per QSO)
