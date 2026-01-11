@@ -5,7 +5,7 @@
 {% block content %}
 <h2>Matches for {{ sport.name }}</h2>
 <p>
-    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Sports</a>
+    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports">&larr; Back to Sports</a>
 </p>
 
 <div class="card">
@@ -101,7 +101,6 @@
 </div>
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
 const sportId = {{ sport.id }};
 let editingId = null;
 
@@ -168,15 +167,17 @@ document.getElementById('match-form').addEventListener('submit', async (e) => {
     try {
         let resp;
         if (editingId) {
-            resp = await fetch('/admin/match/' + editingId + '?admin_key=' + adminKey, {
+            resp = await fetch('/admin/match/' + editingId, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
                 body: JSON.stringify(data)
             });
         } else {
-            resp = await fetch('/admin/sport/' + sportId + '/match?admin_key=' + adminKey, {
+            resp = await fetch('/admin/sport/' + sportId + '/match', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
                 body: JSON.stringify(data)
             });
         }
@@ -194,9 +195,10 @@ document.getElementById('match-form').addEventListener('submit', async (e) => {
 
 async function deleteMatch(id) {
     if (!confirm('Delete this Match?')) return;
-    await fetch('/admin/match/' + id + '?admin_key=' + adminKey, {
+    await fetch('/admin/match/' + id, {
         method: 'DELETE',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }

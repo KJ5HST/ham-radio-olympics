@@ -105,15 +105,15 @@
             <td><a href="/competitor/{{ medal.callsign }}">{{ medal.first_name | competitor_display(medal.callsign) }}</a></td>
             <td>
                 {% if medal.qso_race_medal %}
-                    <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
+                    <span class="medal-emoji {{ medal.qso_race_medal }}"></span>
                 {% else %}
                     -
                 {% endif %}
             </td>
             <td>
                 {% if medal.cool_factor_medal %}
-                    <span class="medal-{{ medal.cool_factor_medal }}">{{ medal.cool_factor_medal | upper }}</span>
-                    ({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})
+                    <span class="medal-emoji {{ medal.cool_factor_medal }}"></span>
+                    <span style="color: var(--text-secondary);">({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})</span>
                 {% else %}
                     -
                 {% endif %}

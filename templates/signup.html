@@ -131,6 +131,8 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
         body.lotw_password = lotw_password;
     }
 
+    const btn = e.target.querySelector('button[type="submit"]');
+    setButtonLoading(btn, true);
     result.innerHTML = '<div class="alert alert-info">Verifying credentials...</div>';
 
     try {
@@ -145,9 +147,11 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
         } else {
             const data = await resp.json();
             result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+            setButtonLoading(btn, false);
         }
     } catch (err) {
         result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        setButtonLoading(btn, false);
     }
 });
 </script>

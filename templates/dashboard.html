@@ -13,20 +13,20 @@
 
 <div class="stats">
     <div class="stat-box">
-        <div class="value medal-gold">{{ medal_summary.gold }}</div>
-        <div class="label">Gold Medals</div>
+        <div class="value">🥇 <span class="medal-gold">{{ medal_summary.gold }}</span></div>
+        <div class="label">Gold</div>
     </div>
     <div class="stat-box">
-        <div class="value medal-silver">{{ medal_summary.silver }}</div>
-        <div class="label">Silver Medals</div>
+        <div class="value">🥈 <span class="medal-silver">{{ medal_summary.silver }}</span></div>
+        <div class="label">Silver</div>
     </div>
     <div class="stat-box">
-        <div class="value medal-bronze">{{ medal_summary.bronze }}</div>
-        <div class="label">Bronze Medals</div>
+        <div class="value">🥉 <span class="medal-bronze">{{ medal_summary.bronze }}</span></div>
+        <div class="label">Bronze</div>
     </div>
     <div class="stat-box">
         <div class="value">{{ medal_summary.total_points }}</div>
-        <div class="label">Total Points</div>
+        <div class="label">Points</div>
     </div>
 </div>
 
@@ -97,25 +97,32 @@
     </div>
 
     <script>
+    // Format sync result message
+    function formatSyncResult(data) {
+        if (data.message) return data.message;
+        const parts = [];
+        if (data.new_qsos > 0) parts.push(data.new_qsos + ' new');
+        if (data.updated_qsos > 0) parts.push(data.updated_qsos + ' updated');
+        if (parts.length === 0) return 'QSOs synced successfully';
+        return 'Synced ' + data.total_fetched + ' QSOs (' + parts.join(', ') + ')';
+    }
+
     // QRZ sync with stored credentials
     async function syncQrzStored() {
         const btn = document.getElementById('sync-qrz-btn');
-        const originalText = btn.textContent;
-        btn.textContent = 'Syncing...';
-        btn.disabled = true;
+        setButtonLoading(btn, true);
         try {
             const resp = await fetch('/sync?callsign={{ competitor.callsign }}', {method: 'POST'});
+            const data = await resp.json();
             if (!resp.ok) {
-                const data = await resp.json();
                 showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
-                btn.textContent = originalText;
-                btn.disabled = false;
+                setButtonLoading(btn, false);
             } else {
-                location.reload();
+                showToast(formatSyncResult(data), 'success');
+                setTimeout(() => location.reload(), 1500);
             }
         } catch (e) {
-            btn.textContent = originalText;
-            btn.disabled = false;
+            setButtonLoading(btn, false);
             showToast('Sync failed. Please try again.', 'error');
         }
     }
@@ -123,22 +130,19 @@
     // LoTW sync with stored credentials
     async function syncLotwStored() {
         const btn = document.getElementById('sync-lotw-btn');
-        const originalText = btn.textContent;
-        btn.textContent = 'Syncing...';
-        btn.disabled = true;
+        setButtonLoading(btn, true);
         try {
             const resp = await fetch('/sync/lotw/stored', {method: 'POST'});
+            const data = await resp.json();
             if (!resp.ok) {
-                const data = await resp.json();
                 showToast('Sync failed: ' + (data.detail || 'Unknown error'), 'error');
-                btn.textContent = originalText;
-                btn.disabled = false;
+                setButtonLoading(btn, false);
             } else {
-                location.reload();
+                showToast(formatSyncResult(data), 'success');
+                setTimeout(() => location.reload(), 1500);
             }
         } catch (e) {
-            btn.textContent = originalText;
-            btn.disabled = false;
+            setButtonLoading(btn, false);
             showToast('Sync failed. Please try again.', 'error');
         }
     }
@@ -165,8 +169,7 @@
             return;
         }
 
-        btn.textContent = 'Syncing...';
-        btn.disabled = true;
+        setButtonLoading(btn, true);
         result.innerHTML = '';
 
         try {
@@ -178,16 +181,15 @@
             const data = await resp.json();
             if (resp.ok) {
                 hideQrzModal();
-                location.reload();
+                showToast(formatSyncResult(data), 'success');
+                setTimeout(() => location.reload(), 1500);
             } else {
                 result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Sync failed') + '</div>';
-                btn.textContent = 'Sync';
-                btn.disabled = false;
+                setButtonLoading(btn, false);
             }
         } catch (e) {
             result.innerHTML = '<div class="alert alert-error">Sync failed: ' + e.message + '</div>';
-            btn.textContent = 'Sync';
-            btn.disabled = false;
+            setButtonLoading(btn, false);
         }
     }
 
@@ -214,8 +216,7 @@
             return;
         }
 
-        btn.textContent = 'Syncing...';
-        btn.disabled = true;
+        setButtonLoading(btn, true);
         result.innerHTML = '';
 
         try {
@@ -227,16 +228,15 @@
             const data = await resp.json();
             if (resp.ok) {
                 hideLotwModal();
-                location.reload();
+                showToast(formatSyncResult(data), 'success');
+                setTimeout(() => location.reload(), 1500);
             } else {
                 result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Sync failed') + '</div>';
-                btn.textContent = 'Sync';
-                btn.disabled = false;
+                setButtonLoading(btn, false);
             }
         } catch (e) {
             result.innerHTML = '<div class="alert alert-error">Sync failed: ' + e.message + '</div>';
-            btn.textContent = 'Sync';
-            btn.disabled = false;
+            setButtonLoading(btn, false);
         }
     }
 
@@ -368,9 +368,9 @@ async function rejectInvite(teamId) {
             <td><a href="/olympiad/sport/{{ sport.id }}"><strong>{{ sport.name }}</strong></a></td>
             <td>{{ sport.olympiad_name }}</td>
             <td>
-                {% if sport.gold_count %}<span class="medal-gold">{{ sport.gold_count }}G</span> {% endif %}
-                {% if sport.silver_count %}<span class="medal-silver">{{ sport.silver_count }}S</span> {% endif %}
-                {% if sport.bronze_count %}<span class="medal-bronze">{{ sport.bronze_count }}B</span> {% endif %}
+                {% if sport.gold_count %}<span class="medal-count"><span class="gold">🥇{{ sport.gold_count }}</span></span> {% endif %}
+                {% if sport.silver_count %}<span class="medal-count"><span class="silver">🥈{{ sport.silver_count }}</span></span> {% endif %}
+                {% if sport.bronze_count %}<span class="medal-count"><span class="bronze">🥉{{ sport.bronze_count }}</span></span> {% endif %}
                 {% if not sport.gold_count and not sport.silver_count and not sport.bronze_count %}-{% endif %}
             </td>
             <td><strong>{{ sport.sport_points }}</strong></td>
@@ -432,6 +432,9 @@ async function rejectInvite(teamId) {
             <td>
                 {% if medal.qso_race_medal %}
                     <span class="medal-{{ medal.qso_race_medal }}">{{ medal.qso_race_medal | upper }}</span>
+                    {% if medal.qso_race_dx %}
+                    <small style="color: var(--text-secondary);" title="QSO with {{ medal.qso_race_dx }} at {{ medal.qso_race_claim_time }}">{{ medal.qso_race_dx }}</small>
+                    {% endif %}
                 {% else %}
                     -
                 {% endif %}
@@ -439,7 +442,9 @@ async function rejectInvite(teamId) {
             <td>
                 {% if medal.cool_factor_medal %}
                     <span class="medal-{{ medal.cool_factor_medal }}">{{ medal.cool_factor_medal | upper }}</span>
-                    ({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})
+                    {% if medal.cool_factor_dx %}
+                    <small style="color: var(--text-secondary);" title="QSO with {{ medal.cool_factor_dx }} (CF: {{ '%.1f' | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})">{{ medal.cool_factor_dx }}</small>
+                    {% endif %}
                 {% else %}
                     -
                 {% endif %}

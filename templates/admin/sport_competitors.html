@@ -5,7 +5,7 @@
 {% block content %}
 <h2>Competitors in {{ sport.name }}</h2>
 <p>
-    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Sports</a>
+    <a href="/admin/olympiad/{{ sport.olympiad_id }}/sports">&larr; Back to Sports</a>
 </p>
 
 <div class="card">
@@ -57,15 +57,15 @@
 {% endif %}
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
 const sportId = {{ sport.id }};
 
 async function disqualifyCompetitor(callsign) {
     if (!confirm('Disqualify ' + callsign + ' from {{ sport.name }}? This will remove them from the sport and delete their medals.')) return;
 
     try {
-        const resp = await fetch('/admin/sport/' + sportId + '/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {
-            method: 'POST'
+        const resp = await fetch('/admin/sport/' + sportId + '/competitor/' + callsign + '/disqualify', {
+            method: 'POST',
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (resp.ok) {

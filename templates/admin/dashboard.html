@@ -10,7 +10,7 @@
         <div class="value">{{ olympiads|length }}</div>
         <div class="label">Olympiads</div>
     </div>
-    <a href="/admin/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
+    <a href="/admin/competitors" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">{{ competitor_count }}</div>
         <div class="label">Competitors</div>
     </a>
@@ -22,7 +22,7 @@
         <div class="value">📋</div>
         <div class="label">Audit Log</div>
     </a>
-    <a href="/admin/settings?admin_key={{ request.query_params.get('admin_key', '') }}" class="stat-box" style="text-decoration: none; color: inherit;">
+    <a href="/admin/settings" class="stat-box" style="text-decoration: none; color: inherit;">
         <div class="value">⚙️</div>
         <div class="label">Settings</div>
     </a>
@@ -57,7 +57,7 @@
             <td>{% if olympiad.is_active %}<span style="color: green;">Active</span>{% else %}Inactive{% endif %}</td>
             <td>
                 <div class="btn-group">
-                    <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-sm btn-icon" title="Sports"><span class="icon">🏅</span></a>
+                    <a href="/admin/olympiad/{{ olympiad.id }}/sports" class="btn btn-sm btn-icon" title="Sports"><span class="icon">🏅</span></a>
                     <button type="button" onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name | e }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     {% if olympiad.is_active %}
                     <button type="button" onclick="deactivateOlympiad({{ olympiad.id }})" class="btn btn-sm btn-icon btn-warning" title="Pause"><span class="icon">⏸️</span></button>
@@ -104,7 +104,6 @@
 </div>
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
 let editingId = null;
 
 function editOlympiad(id, name, startDate, endDate, qualifyingQsos) {
@@ -143,15 +142,17 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
     try {
         let resp;
         if (editingId) {
-            resp = await fetch('/admin/olympiad/' + editingId + '?admin_key=' + adminKey, {
+            resp = await fetch('/admin/olympiad/' + editingId, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
                 body: JSON.stringify(data)
             });
         } else {
-            resp = await fetch('/admin/olympiad?admin_key=' + adminKey, {
+            resp = await fetch('/admin/olympiad', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
                 body: JSON.stringify(data)
             });
         }
@@ -169,27 +170,30 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
 
 async function activateOlympiad(id) {
     if (!confirm('Activate this Olympiad? This will deactivate others.')) return;
-    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {
+    await fetch('/admin/olympiad/' + id + '/activate', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function deactivateOlympiad(id) {
     if (!confirm('Pause this Olympiad?')) return;
-    await fetch('/admin/olympiad/' + id + '/deactivate?admin_key=' + adminKey, {
+    await fetch('/admin/olympiad/' + id + '/deactivate', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function deleteOlympiad(id) {
     if (!confirm('Delete this Olympiad? This cannot be undone.')) return;
-    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {
+    await fetch('/admin/olympiad/' + id, {
         method: 'DELETE',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
@@ -197,9 +201,10 @@ async function deleteOlympiad(id) {
 async function recomputeRecords() {
     if (!confirm('Recompute all world records? This will recalculate records from match-qualifying QSOs.')) return;
     try {
-        const resp = await fetch('/admin/recompute-records?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/recompute-records', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'}
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (resp.ok) {

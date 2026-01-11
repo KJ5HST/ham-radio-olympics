@@ -27,7 +27,7 @@
             <td>{{ olympiad.qualifying_qsos }}</td>
             <td>{% if olympiad.is_active %}<span style="color: green;">Active</span>{% else %}Inactive{% endif %}</td>
             <td>
-                <a href="/admin/olympiad/{{ olympiad.id }}/sports?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn">Sports</a>
+                <a href="/admin/olympiad/{{ olympiad.id }}/sports" class="btn">Sports</a>
                 <button onclick="editOlympiad({{ olympiad.id }}, '{{ olympiad.name }}', '{{ olympiad.start_date }}', '{{ olympiad.end_date }}', {{ olympiad.qualifying_qsos }})" class="btn">Edit</button>
                 {% if not olympiad.is_active %}
                 <button onclick="activateOlympiad({{ olympiad.id }})" class="btn" style="background: #38a169;">Activate</button>
@@ -65,10 +65,9 @@
     <div id="form-result"></div>
 </div>
 
-<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+<p><a href="/admin">&larr; Back to Dashboard</a></p>
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
 let editingId = null;
 
 function editOlympiad(id, name, startDate, endDate, qualifyingQsos) {
@@ -98,9 +97,10 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
         qualifying_qsos: parseInt(document.getElementById('qualifying_qsos').value) || 0
     };
     try {
-        const resp = await fetch('/admin/olympiad/' + editingId + '?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/olympiad/' + editingId, {
             method: 'PUT',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify(data)
         });
         if (resp.ok) {
@@ -116,18 +116,20 @@ document.getElementById('olympiad-form').addEventListener('submit', async (e) =>
 });
 
 async function activateOlympiad(id) {
-    await fetch('/admin/olympiad/' + id + '/activate?admin_key=' + adminKey, {
+    await fetch('/admin/olympiad/' + id + '/activate', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function deleteOlympiad(id) {
     if (!confirm('Delete this Olympiad and all its Sports/Matches?')) return;
-    await fetch('/admin/olympiad/' + id + '?admin_key=' + adminKey, {
+    await fetch('/admin/olympiad/' + id, {
         method: 'DELETE',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }

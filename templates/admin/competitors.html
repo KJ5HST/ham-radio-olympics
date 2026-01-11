@@ -4,11 +4,10 @@
 
 {% block content %}
 <h2>Competitors</h2>
-<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+<p><a href="/admin">&larr; Back to Dashboard</a></p>
 
 <div class="card" style="margin-bottom: 20px;">
     <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-        <input type="hidden" name="admin_key" value="{{ request.query_params.get('admin_key', '') }}">
         <div class="form-group" style="margin-bottom: 0; flex: 1; min-width: 200px;">
             <label for="search">Search Callsign</label>
             <input type="text" id="search" name="search" value="{{ request.query_params.get('search', '') }}" placeholder="W1ABC...">
@@ -16,10 +15,10 @@
         <div class="btn-group">
             <button type="submit" class="btn"><span class="icon">🔍</span> Search</button>
             {% if request.query_params.get('search') %}
-            <a href="/admin/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+            <a href="/admin/competitors" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
             {% endif %}
         </div>
-        <a href="/admin/export/competitors?admin_key={{ request.query_params.get('admin_key', '') }}" class="btn btn-info"><span class="icon">📥</span> Export CSV</a>
+        <a href="/admin/export/competitors" class="btn btn-info"><span class="icon">📥</span> Export CSV</a>
     </form>
 </div>
 
@@ -140,11 +139,11 @@
     </span>
     <div class="btn-group">
         {% if pagination.page > 1 %}
-        <a href="?admin_key={{ request.query_params.get('admin_key', '') }}{% if request.query_params.get('search') %}&search={{ request.query_params.get('search') }}{% endif %}&page={{ pagination.page - 1 }}" class="btn btn-sm btn-secondary">&larr; Prev</a>
+        <a href="?{% if request.query_params.get('search') %}search={{ request.query_params.get('search') }}&{% endif %}page={{ pagination.page - 1 }}" class="btn btn-sm btn-secondary">&larr; Prev</a>
         {% endif %}
         <span class="btn btn-sm" style="cursor: default;">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
         {% if pagination.page < pagination.total_pages %}
-        <a href="?admin_key={{ request.query_params.get('admin_key', '') }}{% if request.query_params.get('search') %}&search={{ request.query_params.get('search') }}{% endif %}&page={{ pagination.page + 1 }}" class="btn btn-sm btn-secondary">Next &rarr;</a>
+        <a href="?{% if request.query_params.get('search') %}search={{ request.query_params.get('search') }}&{% endif %}page={{ pagination.page + 1 }}" class="btn btn-sm btn-secondary">Next &rarr;</a>
         {% endif %}
     </div>
 </div>
@@ -155,8 +154,6 @@
 {% endif %}
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
-
 function toggleDropdown(id) {
     const dropdown = document.getElementById(id);
     const allDropdowns = document.querySelectorAll('.dropdown-menu');
@@ -175,97 +172,108 @@ document.addEventListener('click', function(e) {
 
 async function setAdmin(callsign) {
     if (!confirm('Make ' + callsign + ' an admin?')) return;
-    await fetch('/admin/competitor/' + callsign + '/set-admin?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/set-admin', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function removeAdmin(callsign) {
     if (!confirm('Remove admin role from ' + callsign + '?')) return;
-    await fetch('/admin/competitor/' + callsign + '/remove-admin?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/remove-admin', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function setReferee(callsign) {
     if (!confirm('Make ' + callsign + ' a referee?')) return;
-    await fetch('/admin/competitor/' + callsign + '/set-referee?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/set-referee', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function removeReferee(callsign) {
     if (!confirm('Remove referee role from ' + callsign + '? This will also remove all sport assignments.')) return;
-    await fetch('/admin/competitor/' + callsign + '/remove-referee?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/remove-referee', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function assignSport(callsign, sportId) {
-    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function unassignSport(callsign, sportId) {
-    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId + '?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/assign-sport/' + sportId, {
         method: 'DELETE',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function disableCompetitor(callsign) {
     if (!confirm('Disable ' + callsign + '? They will be logged out and unable to log in.')) return;
-    await fetch('/admin/competitor/' + callsign + '/disable?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/disable', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function enableCompetitor(callsign) {
     if (!confirm('Enable ' + callsign + '?')) return;
-    await fetch('/admin/competitor/' + callsign + '/enable?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/enable', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function disqualifyCompetitor(callsign) {
     if (!confirm('Disqualify ' + callsign + ' from the competition? They will be removed from all sports and lose their medals.')) return;
-    await fetch('/admin/competitor/' + callsign + '/disqualify?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign + '/disqualify', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function deleteCompetitor(callsign) {
     if (!confirm('Delete competitor ' + callsign + '? This cannot be undone.')) return;
-    await fetch('/admin/competitor/' + callsign + '?admin_key=' + adminKey, {
+    await fetch('/admin/competitor/' + callsign, {
         method: 'DELETE',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     location.reload();
 }
 
 async function resetPassword(callsign) {
     if (!confirm('Reset password for ' + callsign + '? They will be logged out.')) return;
-    const response = await fetch('/admin/competitor/' + callsign + '/reset-password?admin_key=' + adminKey, {
+    const response = await fetch('/admin/competitor/' + callsign + '/reset-password', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'}
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'same-origin'
     });
     const data = await response.json();
     if (response.ok) {
@@ -318,9 +326,10 @@ async function bulkEnable() {
     if (!confirm('Enable ' + callsigns.length + ' competitor(s)?')) return;
 
     try {
-        const resp = await fetch('/admin/competitors/bulk-enable?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/competitors/bulk-enable', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({callsigns: callsigns})
         });
         const data = await resp.json();
@@ -341,9 +350,10 @@ async function bulkDisable() {
     if (!confirm('Disable ' + callsigns.length + ' competitor(s)? They will be logged out.')) return;
 
     try {
-        const resp = await fetch('/admin/competitors/bulk-disable?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/competitors/bulk-disable', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({callsigns: callsigns})
         });
         const data = await resp.json();
@@ -365,9 +375,10 @@ async function bulkDelete() {
     if (!confirm('Are you SURE? All QSOs, medals, and data for these competitors will be permanently deleted.')) return;
 
     try {
-        const resp = await fetch('/admin/competitors/bulk-delete?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/competitors/bulk-delete', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify({callsigns: callsigns})
         });
         const data = await resp.json();

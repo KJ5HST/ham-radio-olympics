@@ -417,6 +417,157 @@ class TestDXCCContinent:
         assert get_continent(99999) is None
 
 
+class TestTieBreakers:
+    """Test tie-breaking logic for medal awards."""
+
+    def test_qso_race_identical_times_stable_sort(self):
+        """Test QSO race with identical timestamps - uses Python's stable sort."""
+        # Two competitors with exact same QSO time
+        qsos = [
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 0, 0), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 0, 0), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        # Both should have medals (one gold, one silver)
+        medals = {r.callsign: r.qso_race_medal for r in results}
+        assert set(medals.values()) == {"gold", "silver"}
+
+    def test_qso_race_millisecond_difference_wins(self):
+        """Test QSO race with very small time difference."""
+        # K1ABC is 1 second earlier
+        qsos = [
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 0, 0), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 0, 1), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        k1 = next(r for r in results if r.callsign == "K1ABC")
+        w2 = next(r for r in results if r.callsign == "W2XYZ")
+
+        assert k1.qso_race_medal == "gold"
+        assert w2.qso_race_medal == "silver"
+
+    def test_competitor_multiple_qsos_earliest_counts_for_race(self):
+        """Test that a competitor's earliest QSO is used for QSO Race."""
+        qsos = [
+            # K1ABC has QSOs at 12:10 and 12:05 - 12:05 should count
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 10), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "K1ABC", "DL2", datetime(2026, 1, 1, 12, 5), 8000, 5, 1600, "combined", False),
+            # W2XYZ has single QSO at 12:07
+            MatchingQSO(3, "W2XYZ", "DL3", datetime(2026, 1, 1, 12, 7), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        k1 = next(r for r in results if r.callsign == "K1ABC")
+        w2 = next(r for r in results if r.callsign == "W2XYZ")
+
+        # K1ABC's earliest QSO is 12:05 < W2XYZ's 12:07
+        assert k1.qso_race_medal == "gold"
+        assert w2.qso_race_medal == "silver"
+
+    def test_competitor_multiple_qsos_best_cf_counts(self):
+        """Test that a competitor's highest cool factor QSO is used for CF medal."""
+        qsos = [
+            # K1ABC has CFs of 800 and 1600 - 1600 should count
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 5), 8000, 10, 800, "combined", False),
+            MatchingQSO(2, "K1ABC", "DL2", datetime(2026, 1, 1, 12, 10), 8000, 5, 1600, "combined", False),
+            # W2XYZ has single QSO with CF 1200
+            MatchingQSO(3, "W2XYZ", "DL3", datetime(2026, 1, 1, 12, 7), 6000, 5, 1200, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        k1 = next(r for r in results if r.callsign == "K1ABC")
+        w2 = next(r for r in results if r.callsign == "W2XYZ")
+
+        # K1ABC's best CF is 1600 > W2XYZ's 1200
+        assert k1.cool_factor_medal == "gold"
+        assert k1.cool_factor_value == 1600
+        assert w2.cool_factor_medal == "silver"
+
+    def test_cool_factor_identical_values_and_times(self):
+        """Test cool factor tie with identical values and times."""
+        qsos = [
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 0, 0), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 0, 0), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        # Both should have medals (one gold, one silver)
+        cf_medals = {r.callsign: r.cool_factor_medal for r in results}
+        assert set(cf_medals.values()) == {"gold", "silver"}
+
+    def test_cool_factor_same_value_earlier_time_wins(self):
+        """Test cool factor tie broken by earlier QSO time."""
+        qsos = [
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 10), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 5), 8000, 5, 1600, "combined", False),
+            MatchingQSO(3, "N3DEF", "DL3", datetime(2026, 1, 1, 12, 7), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        w2 = next(r for r in results if r.callsign == "W2XYZ")
+        n3 = next(r for r in results if r.callsign == "N3DEF")
+        k1 = next(r for r in results if r.callsign == "K1ABC")
+
+        # Same CF, so earlier time wins
+        assert w2.cool_factor_medal == "gold"   # 12:05
+        assert n3.cool_factor_medal == "silver"  # 12:07
+        assert k1.cool_factor_medal == "bronze"  # 12:10
+
+    def test_four_competitors_only_three_medals(self):
+        """Test that only top 3 competitors get medals."""
+        qsos = [
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 1), 8000, 5, 1600, "combined", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 2), 8000, 5, 1600, "combined", False),
+            MatchingQSO(3, "N3DEF", "DL3", datetime(2026, 1, 1, 12, 3), 8000, 5, 1600, "combined", False),
+            MatchingQSO(4, "K4GHI", "DL4", datetime(2026, 1, 1, 12, 4), 8000, 5, 1600, "combined", False),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="continent")
+
+        k1 = next(r for r in results if r.callsign == "K1ABC")
+        w2 = next(r for r in results if r.callsign == "W2XYZ")
+        n3 = next(r for r in results if r.callsign == "N3DEF")
+        k4 = next(r for r in results if r.callsign == "K4GHI")
+
+        assert k1.qso_race_medal == "gold"
+        assert w2.qso_race_medal == "silver"
+        assert n3.qso_race_medal == "bronze"
+        assert k4.qso_race_medal is None  # 4th place gets nothing
+
+    def test_separate_pools_independent_tiebreaks(self):
+        """Test that work and activate pools have independent tie-breaking."""
+        qsos = [
+            # Work pool
+            MatchingQSO(1, "K1ABC", "DL1", datetime(2026, 1, 1, 12, 5), 8000, 5, 1600, "work", False),
+            MatchingQSO(2, "W2XYZ", "DL2", datetime(2026, 1, 1, 12, 1), 8000, 5, 1600, "work", False),
+            # Activate pool - different times, but same tie-breaking rules
+            MatchingQSO(3, "N3DEF", "W1", datetime(2026, 1, 1, 12, 10), 5000, 5, 1000, "activate", True),
+            MatchingQSO(4, "K4GHI", "W2", datetime(2026, 1, 1, 12, 3), 5000, 5, 1000, "activate", True),
+        ]
+
+        results = compute_medals(qsos, qualifying_qsos=0, target_type="park")
+
+        # Work pool medals
+        w2 = next(r for r in results if r.callsign == "W2XYZ" and r.role == "work")
+        k1 = next(r for r in results if r.callsign == "K1ABC" and r.role == "work")
+        assert w2.qso_race_medal == "gold"  # Earlier (12:01)
+        assert k1.qso_race_medal == "silver"
+
+        # Activate pool medals (independent of work)
+        k4 = next(r for r in results if r.callsign == "K4GHI" and r.role == "activate")
+        n3 = next(r for r in results if r.callsign == "N3DEF" and r.role == "activate")
+        assert k4.qso_race_medal == "gold"  # Earlier (12:03)
+        assert n3.qso_race_medal == "silver"
+
+
 class TestMedalReshuffle:
     """Test that new confirmations reshuffle medals."""
 

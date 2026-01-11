@@ -552,6 +552,13 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_team_medals_match ON team_medals(match_id);
             CREATE INDEX IF NOT EXISTS idx_team_invites_team ON team_invites(team_id);
             CREATE INDEX IF NOT EXISTS idx_team_invites_callsign ON team_invites(callsign);
+
+            -- Unique constraint to prevent duplicate QSOs
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_qsos_unique
+            ON qsos(competitor_callsign, dx_callsign, qso_datetime_utc);
+
+            -- Performance index for records lookups
+            CREATE INDEX IF NOT EXISTS idx_records_callsign ON records(callsign);
         """)
 
 

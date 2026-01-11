@@ -37,13 +37,18 @@ class Config:
     SESSION_DURATION_DAYS: int = int(os.getenv("SESSION_DURATION_DAYS", "30"))
     SESSION_COOKIE_NAME: str = "hro_session"
     CSRF_COOKIE_NAME: str = "hro_csrf"
+    # Set to False for local development (HTTP), True in production (HTTPS)
+    # Defaults to False in testing mode (TestClient uses HTTP)
+    SECURE_COOKIES: bool = os.getenv(
+        "SECURE_COOKIES",
+        "false" if os.getenv("TESTING") else "true"
+    ).lower() in ("true", "1", "yes")
 
     # Security - these are required in production
     ADMIN_KEY: str = _require_env("ADMIN_KEY", "test-admin-key")
     ENCRYPTION_KEY: str = _require_env("ENCRYPTION_KEY", "test-encryption-key")
-    # Salt for key derivation - should be unique per deployment
-    # Default provided for backwards compatibility; set ENCRYPTION_SALT in production
-    ENCRYPTION_SALT: str = os.getenv("ENCRYPTION_SALT", "ham-radio-olympics-salt")
+    # Salt for key derivation - required in production, unique per deployment
+    ENCRYPTION_SALT: str = _require_env("ENCRYPTION_SALT", "test-encryption-salt")
     BCRYPT_ROUNDS: int = int(os.getenv("BCRYPT_ROUNDS", "12"))
 
     # Account lockout

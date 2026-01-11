@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, 
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -91,9 +91,37 @@ async def lifespan(app: FastAPI):
 # Initialize app
 app = FastAPI(
     title="Ham Radio Olympics",
-    description="Olympic-style amateur radio competition",
+    description="""
+Olympic-style amateur radio competition platform.
+
+## Features
+- **Sports & Matches**: Organize competitions with configurable targets (continents, parks, grids, etc.)
+- **Medal System**: Gold, Silver, Bronze medals for QSO Race and Cool Factor competitions
+- **QSO Sync**: Automatic sync from QRZ Logbook and LoTW
+- **Teams**: Team competitions with multiple scoring methods
+- **Records**: Track personal bests and world records
+
+## Authentication
+- Web UI uses session cookies
+- API endpoints use session cookies or require login
+- Admin endpoints require `X-Admin-Key` header
+
+## Rate Limits
+- Most API endpoints: 60 requests/minute
+- Auth endpoints: 3-5 requests/minute
+    """,
     version="1.0.0",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "public", "description": "Public endpoints (no auth required)"},
+        {"name": "auth", "description": "Authentication endpoints"},
+        {"name": "user", "description": "User dashboard and profile"},
+        {"name": "sports", "description": "Sports and matches"},
+        {"name": "api", "description": "JSON API endpoints"},
+        {"name": "admin", "description": "Admin management endpoints"},
+    ],
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 # Add rate limiter to app
@@ -173,6 +201,7 @@ async def csrf_middleware(request: Request, call_next):
             value=csrf_token,
             httponly=True,
             samesite="lax",
+            secure=config.SECURE_COOKIES,
             max_age=30 * 24 * 60 * 60  # 30 days
         )
 
@@ -334,7 +363,7 @@ class UserSignup(BaseModel):
     lotw_username: Optional[str] = None
     lotw_password: Optional[str] = None
     store_credentials: bool = True  # Whether to store credentials for auto-sync
-    email: Optional[str] = None
+    email: Optional[EmailStr] = None
 
     @field_validator("callsign")
     @classmethod
@@ -419,9 +448,9 @@ class MatchCreate(BaseModel):
 # Admin authentication dependency
 def verify_admin(request: Request):
     """Verify admin access via key or logged-in admin user."""
-    # Check admin key first
-    admin_key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
-    if admin_key == ADMIN_KEY:
+    # Check admin key from header only (not query params for security)
+    admin_key = request.headers.get("X-Admin-Key")
+    if admin_key and admin_key == ADMIN_KEY:
         return True
     # Check if logged-in user is admin
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
@@ -443,9 +472,9 @@ def is_referee_for_sport(callsign: str, sport_id: int) -> bool:
 
 def verify_admin_or_sport_referee(request: Request, sport_id: int):
     """Verify admin access or referee assignment for the sport."""
-    # Check admin key first
-    admin_key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
-    if admin_key == ADMIN_KEY:
+    # Check admin key from header only (not query params for security)
+    admin_key = request.headers.get("X-Admin-Key")
+    if admin_key and admin_key == ADMIN_KEY:
         return True
     # Check if logged-in user is admin or referee for this sport
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
@@ -460,9 +489,9 @@ def verify_admin_or_sport_referee(request: Request, sport_id: int):
 
 def verify_admin_or_referee(request: Request):
     """Verify admin access or referee role."""
-    # Check admin key first
-    admin_key = request.headers.get("X-Admin-Key") or request.query_params.get("admin_key")
-    if admin_key == ADMIN_KEY:
+    # Check admin key from header only (not query params for security)
+    admin_key = request.headers.get("X-Admin-Key")
+    if admin_key and admin_key == ADMIN_KEY:
         return True
     # Check if logged-in user is admin or referee
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
@@ -711,6 +740,7 @@ async def get_match(request: Request, sport_id: int, match_id: int):
 @app.post("/sport/{sport_id}/enter")
 async def enter_sport(sport_id: int, user: User = Depends(require_user)):
     """Opt into a sport."""
+    import sqlite3
     with get_db() as conn:
         # Verify sport exists and belongs to an active Olympiad
         cursor = conn.execute("""
@@ -731,10 +761,14 @@ async def enter_sport(sport_id: int, user: User = Depends(require_user)):
 
         # Enter the sport
         now = datetime.utcnow().isoformat()
-        conn.execute(
-            "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
-            (user.callsign, sport_id, now)
-        )
+        try:
+            conn.execute(
+                "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, ?, ?)",
+                (user.callsign, sport_id, now)
+            )
+        except sqlite3.IntegrityError as e:
+            logger.error(f"Failed to enter sport {sport_id} for {user.callsign}: {e}")
+            raise HTTPException(status_code=500, detail="Database error - please contact support")
 
     # Recompute medals for this sport
     recompute_sport_matches(sport_id)
@@ -857,12 +891,18 @@ async def get_competitor(
             if qso.get("dx_dxcc"):
                 qso["dx_country"] = get_country_name(qso["dx_dxcc"])
 
-        # Get medals
+        # Get medals with qualifying QSO info
         cursor = conn.execute("""
-            SELECT m.*, ma.target_value, s.name as sport_name, s.target_type
+            SELECT m.*, ma.target_value, s.name as sport_name, s.target_type,
+                   qr.dx_callsign as qso_race_dx,
+                   qc.dx_callsign as cool_factor_dx
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
             JOIN sports s ON ma.sport_id = s.id
+            LEFT JOIN qsos qr ON qr.competitor_callsign = m.callsign
+                AND qr.qso_datetime_utc = m.qso_race_claim_time
+            LEFT JOIN qsos qc ON qc.competitor_callsign = m.callsign
+                AND qc.qso_datetime_utc = m.cool_factor_claim_time
             WHERE m.callsign = ?
             ORDER BY ma.start_date DESC
         """, (callsign,))
@@ -1144,7 +1184,8 @@ async def signup(request: Request, signup_data: UserSignup):
         value=session_id,
         httponly=True,
         max_age=30 * 24 * 60 * 60,  # 30 days
-        samesite="lax"
+        samesite="lax",
+        secure=config.SECURE_COOKIES
     )
     return response
 
@@ -1194,7 +1235,8 @@ async def login(request: Request, login_data: UserLogin, background_tasks: Backg
         value=result,
         httponly=True,
         max_age=30 * 24 * 60 * 60,  # 30 days
-        samesite="lax"
+        samesite="lax",
+        secure=config.SECURE_COOKIES
     )
     # Rotate CSRF token on login to prevent session fixation
     new_csrf = generate_csrf_token()
@@ -1203,6 +1245,7 @@ async def login(request: Request, login_data: UserLogin, background_tasks: Backg
         value=new_csrf,
         httponly=True,
         samesite="lax",
+        secure=config.SECURE_COOKIES,
         max_age=30 * 24 * 60 * 60
     )
     return response
@@ -1237,6 +1280,7 @@ async def logout(request: Request):
         value=new_csrf,
         httponly=True,
         samesite="lax",
+        secure=config.SECURE_COOKIES,
         max_age=30 * 24 * 60 * 60
     )
     return response
@@ -1606,10 +1650,22 @@ async def update_name(
     return RedirectResponse(url="/settings?updated=name", status_code=303)
 
 
+class EmailUpdate(BaseModel):
+    email: EmailStr
+
+
 @app.post("/settings/email")
 async def update_email(request: Request, email: str = Form(...), user: User = Depends(require_user)):
     """Update user email."""
-    update_user_email(user.callsign, email)
+    # Validate email format
+    try:
+        validated = EmailUpdate(email=email)
+    except Exception:
+        return templates.TemplateResponse(
+            "settings.html",
+            {"request": request, "user": user, "error": "Invalid email format"}
+        )
+    update_user_email(user.callsign, validated.email)
     return RedirectResponse(url="/settings?updated=email", status_code=303)
 
 
@@ -2276,7 +2332,36 @@ async def disqualify_from_sport(request: Request, sport_id: int, callsign: str):
 async def create_match(request: Request, sport_id: int, match: MatchCreate):
     """Create a new Match. Admins or assigned referees can create."""
     verify_admin_or_sport_referee(request, sport_id)
+
+    # Validate start_date < end_date
+    if match.start_date > match.end_date:
+        raise HTTPException(status_code=400, detail="Start date must be before end date")
+
     with get_db() as conn:
+        # Get Olympiad date bounds for this sport
+        cursor = conn.execute("""
+            SELECT o.start_date, o.end_date, o.name
+            FROM olympiads o
+            JOIN sports s ON s.olympiad_id = o.id
+            WHERE s.id = ?
+        """, (sport_id,))
+        olympiad = cursor.fetchone()
+
+        if not olympiad:
+            raise HTTPException(status_code=404, detail="Sport not found")
+
+        # Validate match dates fall within Olympiad bounds
+        if match.start_date < olympiad["start_date"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Match start date cannot be before Olympiad start ({olympiad['start_date']})"
+            )
+        if match.end_date > olympiad["end_date"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Match end date cannot be after Olympiad end ({olympiad['end_date']})"
+            )
+
         cursor = conn.execute("""
             INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes)
             VALUES (?, ?, ?, ?, ?)
@@ -2304,14 +2389,36 @@ async def get_match_admin(request: Request, match_id: int):
 @app.put("/admin/match/{match_id}")
 async def update_match(request: Request, match_id: int, match: MatchCreate):
     """Update a Match. Admins or assigned referees can update."""
+    # Validate start_date < end_date
+    if match.start_date > match.end_date:
+        raise HTTPException(status_code=400, detail="Start date must be before end date")
+
     with get_db() as conn:
-        # Get sport_id for permission check
-        cursor = conn.execute("SELECT sport_id FROM matches WHERE id = ?", (match_id,))
+        # Get sport_id and Olympiad bounds for permission check and validation
+        cursor = conn.execute("""
+            SELECT m.sport_id, o.start_date as olympiad_start, o.end_date as olympiad_end
+            FROM matches m
+            JOIN sports s ON m.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE m.id = ?
+        """, (match_id,))
         existing = cursor.fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Match not found")
 
         verify_admin_or_sport_referee(request, existing["sport_id"])
+
+        # Validate match dates fall within Olympiad bounds
+        if match.start_date < existing["olympiad_start"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Match start date cannot be before Olympiad start ({existing['olympiad_start']})"
+            )
+        if match.end_date > existing["olympiad_end"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Match end date cannot be after Olympiad end ({existing['olympiad_end']})"
+            )
 
         conn.execute("""
             UPDATE matches
@@ -2376,17 +2483,25 @@ async def admin_competitors(
         cursor = conn.execute(query, params + [per_page, offset])
         competitors = [dict(row) for row in cursor.fetchall()]
 
-        # Get referee assignments for each referee
+        # Get referee assignments in a single query to avoid N+1
+        referee_callsigns = [c["callsign"] for c in competitors if c["is_referee"]]
+        referee_assignments = {}
+        if referee_callsigns:
+            placeholders = ",".join("?" * len(referee_callsigns))
+            cursor = conn.execute(f"""
+                SELECT ra.callsign, s.id, s.name FROM referee_assignments ra
+                JOIN sports s ON ra.sport_id = s.id
+                WHERE ra.callsign IN ({placeholders})
+            """, referee_callsigns)
+            for row in cursor.fetchall():
+                callsign = row["callsign"]
+                if callsign not in referee_assignments:
+                    referee_assignments[callsign] = []
+                referee_assignments[callsign].append({"id": row["id"], "name": row["name"]})
+
+        # Attach assignments to competitors
         for c in competitors:
-            if c["is_referee"]:
-                cursor = conn.execute("""
-                    SELECT s.id, s.name FROM referee_assignments ra
-                    JOIN sports s ON ra.sport_id = s.id
-                    WHERE ra.callsign = ?
-                """, (c["callsign"],))
-                c["assigned_sports"] = [dict(row) for row in cursor.fetchall()]
-            else:
-                c["assigned_sports"] = []
+            c["assigned_sports"] = referee_assignments.get(c["callsign"], [])
 
         # Get all sports for assignment dropdown
         cursor = conn.execute("""
@@ -3762,13 +3877,15 @@ def require_api_auth(request: Request) -> User:
 
 
 @app.get("/api/v1/health")
-async def api_health():
+@limiter.limit("60/minute")
+async def api_health(request: Request):
     """Health check endpoint."""
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
 @app.get("/api/v1/park/{reference}")
-async def api_park_lookup(reference: str):
+@limiter.limit("100/minute")
+async def api_park_lookup(request: Request, reference: str):
     """Look up POTA park info with caching."""
     import httpx
     from datetime import timedelta
@@ -3831,7 +3948,8 @@ async def api_park_lookup(reference: str):
 
 
 @app.get("/api/v1/spots")
-async def api_all_spots():
+@limiter.limit("30/minute")
+async def api_all_spots(request: Request):
     """Get all current POTA spots (returns list of park references with spots)."""
     import httpx
 
@@ -3861,7 +3979,8 @@ async def api_all_spots():
 
 
 @app.get("/api/v1/park/{reference}/spots")
-async def api_park_spots(reference: str):
+@limiter.limit("60/minute")
+async def api_park_spots(request: Request, reference: str):
     """Get current POTA spots for a specific park."""
     import httpx
 
@@ -3902,7 +4021,8 @@ async def api_park_spots(reference: str):
 
 
 @app.get("/api/v1/me")
-async def api_me(user: User = Depends(require_api_auth)):
+@limiter.limit("60/minute")
+async def api_me(request: Request, user: User = Depends(require_api_auth)):
     """Get current user information."""
     with get_db() as conn:
         cursor = conn.execute(
@@ -3922,7 +4042,8 @@ async def api_me(user: User = Depends(require_api_auth)):
 
 
 @app.get("/api/v1/standings")
-async def api_standings(olympiad_id: Optional[int] = None):
+@limiter.limit("60/minute")
+async def api_standings(request: Request, olympiad_id: Optional[int] = None):
     """Get standings for the current or specified olympiad."""
     with get_db() as conn:
         # Get olympiad
@@ -3966,7 +4087,9 @@ async def api_standings(olympiad_id: Optional[int] = None):
 
 
 @app.get("/api/v1/qsos")
+@limiter.limit("60/minute")
 async def api_qsos(
+    request: Request,
     user: User = Depends(require_api_auth),
     page: int = 1,
     per_page: int = 50,
@@ -4015,7 +4138,8 @@ async def api_qsos(
 
 
 @app.get("/api/v1/medals")
-async def api_medals(user: User = Depends(require_api_auth), olympiad_id: Optional[int] = None):
+@limiter.limit("60/minute")
+async def api_medals(request: Request, user: User = Depends(require_api_auth), olympiad_id: Optional[int] = None):
     """Get medals for the current user."""
     with get_db() as conn:
         # Get medals with match and sport info
@@ -4041,7 +4165,8 @@ async def api_medals(user: User = Depends(require_api_auth), olympiad_id: Option
 
 
 @app.get("/api/v1/sports")
-async def api_sports(olympiad_id: Optional[int] = None):
+@limiter.limit("60/minute")
+async def api_sports(request: Request, olympiad_id: Optional[int] = None):
     """Get sports for the current or specified olympiad."""
     with get_db() as conn:
         if olympiad_id:

@@ -4,7 +4,7 @@
 
 {% block content %}
 <h2>Admin Settings</h2>
-<p><a href="/admin?admin_key={{ request.query_params.get('admin_key', '') }}">&larr; Back to Dashboard</a></p>
+<p><a href="/admin">&larr; Back to Dashboard</a></p>
 
 <div class="card">
     <h3>QRZ XML API Credentials</h3>
@@ -36,8 +36,6 @@
 </div>
 
 <script>
-const adminKey = new URLSearchParams(window.location.search).get('admin_key');
-
 document.getElementById('qrz-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const result = document.getElementById('qrz-result');
@@ -56,9 +54,10 @@ document.getElementById('qrz-form').addEventListener('submit', async (e) => {
     }
 
     try {
-        const resp = await fetch('/admin/settings/qrz?admin_key=' + adminKey, {
+        const resp = await fetch('/admin/settings/qrz', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
             body: JSON.stringify(data)
         });
         const respData = await resp.json();
@@ -78,8 +77,9 @@ async function testQrz() {
     result.innerHTML = '<div class="alert">Testing connection...</div>';
 
     try {
-        const resp = await fetch('/admin/settings/qrz/test?admin_key=' + adminKey, {
-            method: 'POST'
+        const resp = await fetch('/admin/settings/qrz/test', {
+            method: 'POST',
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (resp.ok) {
@@ -97,8 +97,9 @@ async function clearQrz() {
 
     const result = document.getElementById('qrz-result');
     try {
-        const resp = await fetch('/admin/settings/qrz?admin_key=' + adminKey, {
-            method: 'DELETE'
+        const resp = await fetch('/admin/settings/qrz', {
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
         const data = await resp.json();
         if (resp.ok) {

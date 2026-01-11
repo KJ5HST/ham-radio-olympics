@@ -43,9 +43,9 @@
                 <td>{{ team.member_count }}</td>
                 <td>{{ team.total_points | int }}</td>
                 <td>
-                    {% if team.gold > 0 %}<span class="medal gold">{{ team.gold }}G</span>{% endif %}
-                    {% if team.silver > 0 %}<span class="medal silver">{{ team.silver }}S</span>{% endif %}
-                    {% if team.bronze > 0 %}<span class="medal bronze">{{ team.bronze }}B</span>{% endif %}
+                    {% if team.gold > 0 %}<span class="medal-count"><span class="gold">🥇{{ team.gold }}</span></span> {% endif %}
+                    {% if team.silver > 0 %}<span class="medal-count"><span class="silver">🥈{{ team.silver }}</span></span> {% endif %}
+                    {% if team.bronze > 0 %}<span class="medal-count"><span class="bronze">🥉{{ team.bronze }}</span></span> {% endif %}
                     {% if team.gold == 0 and team.silver == 0 and team.bronze == 0 %}-{% endif %}
                 </td>
             </tr>

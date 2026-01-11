@@ -127,6 +127,47 @@
         .medal-gold { color: #d69e2e; font-weight: bold; }
         .medal-silver { color: #718096; font-weight: bold; }
         .medal-bronze { color: #c05621; font-weight: bold; }
+        .medal-emoji { font-size: 1.2em; }
+        .medal-emoji.gold::before { content: '🥇'; }
+        .medal-emoji.silver::before { content: '🥈'; }
+        .medal-emoji.bronze::before { content: '🥉'; }
+        .medal-count { display: inline-flex; align-items: center; gap: 2px; }
+        .medal-count .gold { color: #d69e2e; }
+        .medal-count .silver { color: #718096; }
+        .medal-count .bronze { color: #c05621; }
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        .status-ended {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+        .status-upcoming {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+        [data-theme="dark"] .status-active {
+            background: #276749;
+            color: #c6f6d5;
+        }
+        [data-theme="dark"] .status-ended {
+            background: #4a5568;
+            color: #e2e8f0;
+        }
+        [data-theme="dark"] .status-upcoming {
+            background: #2c5282;
+            color: #bee3f8;
+        }
         .pota-badge {
             display: inline-block;
             margin-left: 5px;
@@ -392,6 +433,26 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        /* Button loading state */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        .btn-loading::after {
+            content: '';
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 14px;
+            height: 14px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .btn-loading .btn-text { opacity: 0.6; }
 
         /* Theme toggle button */
         .theme-toggle {
@@ -753,11 +814,29 @@
         if (overlay) overlay.remove();
     };
 
+    // Button loading state helpers
+    window.setButtonLoading = function(btn, loading) {
+        if (loading) {
+            btn.classList.add('btn-loading');
+            btn.disabled = true;
+            btn.dataset.originalText = btn.textContent;
+            btn.innerHTML = '<span class="btn-text">' + btn.textContent + '</span>';
+        } else {
+            btn.classList.remove('btn-loading');
+            btn.disabled = false;
+            if (btn.dataset.originalText) {
+                btn.textContent = btn.dataset.originalText;
+            }
+        }
+    };
+
     // Auto-add loading state to forms with data-loading attribute
     document.addEventListener('submit', function(e) {
         var form = e.target;
         if (form.hasAttribute('data-loading')) {
-            showLoading();
+            var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            if (submitBtn) setButtonLoading(submitBtn, true);
+            else showLoading();
         }
     });
 

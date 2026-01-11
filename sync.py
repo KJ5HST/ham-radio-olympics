@@ -2,11 +2,13 @@
 Sync logic for fetching QSOs from QRZ and updating scores.
 """
 
+import binascii
 import logging
 from datetime import datetime
 from typing import Optional
 
-from database import get_db
+from cryptography.fernet import InvalidToken
+from database import get_db, get_db_exclusive
 
 logger = logging.getLogger(__name__)
 from crypto import decrypt_api_key
@@ -82,7 +84,7 @@ async def sync_competitor(callsign: str) -> dict:
         # Decrypt API key
         try:
             api_key = decrypt_api_key(competitor["qrz_api_key_encrypted"])
-        except Exception as e:
+        except (InvalidToken, binascii.Error, ValueError) as e:
             logger.error(f"Failed to decrypt API key for {callsign}: {e}")
             return {"error": "Failed to decrypt API key. Please re-enter your QRZ API key in Settings."}
 
@@ -120,7 +122,8 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     new_count = 0
     updated_count = 0
 
-    with get_db() as conn:
+    # Use exclusive transaction to prevent race conditions in upsert
+    with get_db_exclusive() as conn:
         for qso in qsos:
             result = _upsert_qso(conn, callsign.upper(), qso)
             if result == "new":
@@ -171,7 +174,7 @@ async def sync_competitor_lotw_stored(callsign: str) -> dict:
         try:
             lotw_username = decrypt_api_key(competitor["lotw_username_encrypted"])
             lotw_password = decrypt_api_key(competitor["lotw_password_encrypted"])
-        except Exception as e:
+        except (InvalidToken, binascii.Error, ValueError) as e:
             logger.error(f"Failed to decrypt LoTW credentials for {callsign}: {e}")
             return {"error": "Failed to decrypt LoTW credentials. Please re-enter your credentials in Settings."}
 
@@ -196,7 +199,8 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     except Exception as e:
         logger.warning(f"Failed to populate name for {callsign}: {e}")
 
-    with get_db() as conn:
+    # Use exclusive transaction to prevent race conditions in upsert
+    with get_db_exclusive() as conn:
         # Verify competitor exists
         cursor = conn.execute(
             "SELECT * FROM competitors WHERE callsign = ?",
@@ -320,32 +324,39 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
         return "updated"
     else:
         # Insert new QSO
-        cursor = conn.execute("""
-            INSERT INTO qsos (
-                competitor_callsign, dx_callsign, qso_datetime_utc,
-                band, mode, tx_power_w,
-                my_dxcc, my_grid, my_sig_info,
-                dx_dxcc, dx_grid, dx_sig_info,
-                distance_km, cool_factor, is_confirmed, qrz_logid
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            competitor_callsign,
-            qso.dx_callsign,
-            qso.qso_datetime.isoformat(),
-            qso.band,
-            qso.mode,
-            qso.tx_power,
-            qso.my_dxcc,
-            qso.my_grid,
-            qso.my_sig_info,
-            qso.dx_dxcc,
-            qso.dx_grid,
-            qso.dx_sig_info,
-            distance_km,
-            cool_factor,
-            1 if qso.is_confirmed else 0,
-            qso.qrz_logid,
-        ))
+        import sqlite3
+        try:
+            cursor = conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    band, mode, tx_power_w,
+                    my_dxcc, my_grid, my_sig_info,
+                    dx_dxcc, dx_grid, dx_sig_info,
+                    distance_km, cool_factor, is_confirmed, qrz_logid
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                competitor_callsign,
+                qso.dx_callsign,
+                qso.qso_datetime.isoformat(),
+                qso.band,
+                qso.mode,
+                qso.tx_power,
+                qso.my_dxcc,
+                qso.my_grid,
+                qso.my_sig_info,
+                qso.dx_dxcc,
+                qso.dx_grid,
+                qso.dx_sig_info,
+                distance_km,
+                cool_factor,
+                1 if qso.is_confirmed else 0,
+                qso.qrz_logid,
+            ))
+        except sqlite3.IntegrityError:
+            # Duplicate QSO - this can happen in race conditions between
+            # the SELECT check and INSERT. Just skip it.
+            logger.warning(f"Duplicate QSO skipped: {competitor_callsign} -> {qso.dx_callsign} at {qso.qso_datetime}")
+            return None
 
         # Note: Records are updated via recompute_all_records() which only
         # considers QSOs that qualified for matches (correct target, time period, mode)

@@ -34,21 +34,29 @@
 
 <script>
 async function enterSport() {
-    const resp = await fetch('/sport/{{ sport.id }}/enter', {method: 'POST'});
+    const resp = await fetch('/sport/{{ sport.id }}/enter', {
+        method: 'POST',
+        credentials: 'same-origin'
+    });
     if (resp.ok) {
         location.reload();
     } else {
-        showToast('Failed to enter sport', 'error');
+        const data = await resp.json().catch(() => ({}));
+        showToast(data.detail || 'Failed to enter sport', 'error');
     }
 }
 
 async function leaveSport() {
     if (!confirm('Leave this sport? You can re-enter later.')) return;
-    const resp = await fetch('/sport/{{ sport.id }}/leave', {method: 'POST'});
+    const resp = await fetch('/sport/{{ sport.id }}/leave', {
+        method: 'POST',
+        credentials: 'same-origin'
+    });
     if (resp.ok) {
         location.reload();
     } else {
-        showToast('Failed to leave sport', 'error');
+        const data = await resp.json().catch(() => ({}));
+        showToast(data.detail || 'Failed to leave sport', 'error');
     }
 }
 </script>
@@ -60,9 +68,9 @@ async function leaveSport() {
         <tr>
             <th scope="col">Rank</th>
             <th scope="col">Callsign</th>
-            <th scope="col">Gold</th>
-            <th scope="col">Silver</th>
-            <th scope="col">Bronze</th>
+            <th scope="col">🥇</th>
+            <th scope="col">🥈</th>
+            <th scope="col">🥉</th>
             <th scope="col">Points</th>
         </tr>
     </thead>
@@ -71,9 +79,9 @@ async function leaveSport() {
         <tr>
             <td>{{ loop.index }}</td>
             <td><a href="/competitor/{{ standing.callsign }}">{{ standing.first_name | competitor_display(standing.callsign) }}</a></td>
-            <td class="medal-gold">{{ standing.gold }}</td>
-            <td class="medal-silver">{{ standing.silver }}</td>
-            <td class="medal-bronze">{{ standing.bronze }}</td>
+            <td class="medal-gold">{{ standing.gold or '-' }}</td>
+            <td class="medal-silver">{{ standing.silver or '-' }}</td>
+            <td class="medal-bronze">{{ standing.bronze or '-' }}</td>
             <td><strong>{{ standing.total_points }}</strong></td>
         </tr>
         {% endfor %}
@@ -96,8 +104,9 @@ async function leaveSport() {
     <thead>
         <tr>
             <th scope="col">Target</th>
-            <th scope="col">Start Date</th>
-            <th scope="col">End Date</th>
+            <th scope="col">Status</th>
+            <th scope="col">Start</th>
+            <th scope="col">End</th>
             <th scope="col">Action</th>
         </tr>
     </thead>
@@ -110,6 +119,7 @@ async function leaveSport() {
                 <span class="live-indicator" data-park="{{ match.target_value }}" style="display: none;" title="Active on air now!">📡</span>
                 {% endif %}
             </td>
+            <td><span class="status-badge" data-start="{{ match.start_date }}" data-end="{{ match.end_date }}">...</span></td>
             <td>{{ match.start_date | format_date }}</td>
             <td>{{ match.end_date | format_date }}</td>
             <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn btn-sm"><span class="icon">👁️</span> View</a></td>
@@ -117,6 +127,26 @@ async function leaveSport() {
         {% endfor %}
     </tbody>
 </table></div>
+<script>
+(function() {
+    document.querySelectorAll('.status-badge[data-start]').forEach(function(badge) {
+        var start = new Date(badge.dataset.start + 'T00:00:00');
+        var end = new Date(badge.dataset.end + 'T23:59:59');
+        var now = new Date();
+
+        if (now < start) {
+            badge.textContent = 'Upcoming';
+            badge.classList.add('status-upcoming');
+        } else if (now > end) {
+            badge.textContent = 'Ended';
+            badge.classList.add('status-ended');
+        } else {
+            badge.textContent = '● Active';
+            badge.classList.add('status-active');
+        }
+    });
+})();
+</script>
 
 {% if sport.target_type == 'park' %}
 <script>

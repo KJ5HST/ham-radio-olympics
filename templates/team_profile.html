@@ -164,9 +164,9 @@
             <tr>
                 <th>Sport</th>
                 <th>Points</th>
-                <th>G</th>
-                <th>S</th>
-                <th>B</th>
+                <th>🥇</th>
+                <th>🥈</th>
+                <th>🥉</th>
                 <th>Team Medal</th>
             </tr>
         </thead>
@@ -175,13 +175,13 @@
             <tr>
                 <td>{{ standing.sport_name }}</td>
                 <td>{{ standing.total_points | round(1) }}</td>
-                <td>{{ standing.gold_count }}</td>
-                <td>{{ standing.silver_count }}</td>
-                <td>{{ standing.bronze_count }}</td>
+                <td class="medal-gold">{{ standing.gold_count or '-' }}</td>
+                <td class="medal-silver">{{ standing.silver_count or '-' }}</td>
+                <td class="medal-bronze">{{ standing.bronze_count or '-' }}</td>
                 <td>
-                    {% if standing.medal == 'gold' %}<span class="medal gold">Gold</span>
-                    {% elif standing.medal == 'silver' %}<span class="medal silver">Silver</span>
-                    {% elif standing.medal == 'bronze' %}<span class="medal bronze">Bronze</span>
+                    {% if standing.medal == 'gold' %}<span class="medal-emoji gold"></span>
+                    {% elif standing.medal == 'silver' %}<span class="medal-emoji silver"></span>
+                    {% elif standing.medal == 'bronze' %}<span class="medal-emoji bronze"></span>
                     {% else %}-{% endif %}
                 </td>
             </tr>

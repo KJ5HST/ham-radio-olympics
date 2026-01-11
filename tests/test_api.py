@@ -54,6 +54,15 @@ def admin_headers():
     return {"X-Admin-Key": "test-admin-key"}
 
 
+@pytest.fixture(autouse=True)
+def mock_qrz_verify():
+    """Mock QRZ API key verification to always succeed."""
+    from unittest.mock import patch, AsyncMock
+    with patch('main.verify_api_key', new_callable=AsyncMock) as mock:
+        mock.return_value = True
+        yield mock
+
+
 class TestHealthEndpoint:
     """Test health check endpoint."""
 
@@ -70,7 +79,7 @@ def signup_user(client, callsign, password="password123", qrz_api_key="test-api-
         "callsign": callsign,
         "password": password,
         "qrz_api_key": qrz_api_key
-    })
+    }, follow_redirects=False)
 
 
 class TestRegistration:
@@ -102,7 +111,7 @@ class TestRegistration:
             "callsign": "w1abc",
             "password": "password123",
             "qrz_api_key": "test-api-key"
-        })
+        }, follow_redirects=False)
         # Check user was created with uppercase callsign
         assert response.status_code in [200, 303]
 
@@ -116,7 +125,7 @@ class TestRegistration:
             "callsign": "A",  # Too short
             "password": "password123",
             "qrz_api_key": "test-api-key"
-        })
+        }, follow_redirects=False)
 
         assert response.status_code == 422  # Validation error
 
@@ -130,7 +139,7 @@ class TestRegistration:
                 "callsign": "W1SYN",
                 "password": "password123",
                 "qrz_api_key": "test-api-key"
-            })
+            }, follow_redirects=False)
             assert response.status_code in [200, 303]
             mock_sync.assert_called_once_with("W1SYN", "test-api-key")
 
@@ -140,7 +149,7 @@ class TestRegistration:
             "callsign": "W1NOS",
             "password": "password123"
             # No QRZ API key or LoTW credentials
-        })
+        }, follow_redirects=False)
         assert response.status_code == 400
         assert "QRZ API key and/or LoTW" in response.json()["detail"]
 
@@ -154,7 +163,7 @@ class TestRegistration:
                 "callsign": "W1ERR",
                 "password": "password123",
                 "qrz_api_key": "test-api-key"
-            })
+            }, follow_redirects=False)
             # Signup should still succeed
             assert response.status_code in [200, 303]
 
@@ -170,7 +179,7 @@ class TestRegistration:
             "callsign": "W1BAD",
             "password": "password123",
             "qrz_api_key": "invalid-api-key"
-        })
+        }, follow_redirects=False)
         assert response.status_code == 400
         assert "Invalid QRZ API key" in response.json()["detail"]
 
@@ -188,7 +197,7 @@ class TestRegistration:
                     "password": "password123",
                     "lotw_username": "W1LTW",
                     "lotw_password": "lotwpass123"
-                })
+                }, follow_redirects=False)
 
                 assert response.status_code in [200, 303]
                 mock_verify.assert_called_once_with("W1LTW", "lotwpass123", "W1LTW")
@@ -206,7 +215,7 @@ class TestRegistration:
                 "password": "password123",
                 "lotw_username": "W1LBAD",
                 "lotw_password": "wrongpass"
-            })
+            }, follow_redirects=False)
 
             assert response.status_code == 400
             assert "Invalid LoTW credentials" in response.json()["detail"]
@@ -225,7 +234,7 @@ class TestRegistration:
                     "password": "password123",
                     "lotw_username": "W1LERR",
                     "lotw_password": "lotwpass"
-                })
+                }, follow_redirects=False)
 
                 # Signup should still succeed
                 assert response.status_code in [200, 303]
@@ -250,7 +259,7 @@ class TestRegistration:
                     "lotw_username": "W1LST",
                     "lotw_password": "lotwpass123",
                     "store_credentials": True
-                })
+                }, follow_redirects=False)
 
                 assert response.status_code in [200, 303]
 
@@ -278,7 +287,7 @@ class TestRegistration:
                     "lotw_username": "W1LNS",
                     "lotw_password": "lotwpass123",
                     "store_credentials": False
-                })
+                }, follow_redirects=False)
 
                 assert response.status_code in [200, 303]
 
@@ -393,11 +402,10 @@ class TestAdminEndpoints:
         assert "Admin Dashboard" in response.text
         assert "Olympiads" in response.text
 
-    def test_admin_with_query_param(self, client):
-        """Test admin key via query parameter returns HTML page."""
+    def test_admin_with_query_param_rejected(self, client):
+        """Test admin key via query parameter is rejected for security."""
         response = client.get("/admin?admin_key=test-admin-key")
-        assert response.status_code == 200
-        assert "Admin Dashboard" in response.text
+        assert response.status_code == 403  # Query params no longer accepted
 
     def test_admin_with_logged_in_admin_user(self, client):
         """Test admin access via logged-in admin user."""
@@ -686,8 +694,8 @@ class TestCompetitorEndpoints:
         response = client.get("/competitor/K1ABC")
         assert response.status_code == 200
         assert "K1ABC" in response.text
-        assert "Gold Medals" in response.text
-        assert "Total Points" in response.text
+        assert "Gold" in response.text  # Medal label
+        assert "Points" in response.text
 
     def test_get_competitor_not_found(self, client):
         """Test getting non-existent competitor."""
@@ -1064,8 +1072,8 @@ class TestRefereeAccess:
         assert resp.status_code == 200, f"Create sport failed: {resp.text}"
 
         resp = client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "EU"
         }, headers=admin_headers)
         assert resp.status_code == 200, f"Create match failed: {resp.text}"
@@ -1109,8 +1117,8 @@ class TestRefereeAccess:
     def test_referee_can_create_match(self, referee_client):
         """Test referee can create match for assigned sport."""
         response = referee_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-02-01T00:00:00",
-            "end_date": "2026-02-28T23:59:59",
+            "start_date": "2026-02-01",
+            "end_date": "2026-02-28",
             "target_value": "AF"
         })
         assert response.status_code == 200
@@ -1118,8 +1126,8 @@ class TestRefereeAccess:
     def test_referee_can_update_match(self, referee_client):
         """Test referee can update match in assigned sport."""
         response = referee_client.put("/admin/match/1", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-06-30T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-06-30",
             "target_value": "EU"
         })
         assert response.status_code == 200
@@ -1133,8 +1141,8 @@ class TestRefereeAccess:
         """Test referee can delete match in assigned sport."""
         # Create another match to delete
         referee_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-03-01T00:00:00",
-            "end_date": "2026-03-31T23:59:59",
+            "start_date": "2026-03-01",
+            "end_date": "2026-03-31",
             "target_value": "SA"
         })
         response = referee_client.delete("/admin/match/2")
@@ -1276,8 +1284,8 @@ class TestRefereeAccess:
     def test_referee_update_nonexistent_match(self, referee_client):
         """Test referee trying to update non-existent match."""
         response = referee_client.put("/admin/match/999", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-06-30T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-06-30",
             "target_value": "EU"
         })
         assert response.status_code == 404
@@ -1605,8 +1613,8 @@ class TestSportEntry:
             "separate_pools": False
         }, headers=admin_headers)
         client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "EU"
         }, headers=admin_headers)
 
@@ -2304,7 +2312,7 @@ class TestUserDashboard:
         response = logged_in_client.get("/dashboard")
         assert response.status_code == 200
         assert "Welcome, W1DASH" in response.text
-        assert "Gold Medals" in response.text
+        assert "Gold" in response.text  # Medal label
 
     def test_dashboard_shows_country_name_for_medals(self, logged_in_client, admin_headers):
         """Test dashboard shows country name for country-target medals."""
@@ -2325,8 +2333,8 @@ class TestUserDashboard:
             "separate_pools": False
         }, headers=admin_headers)
         logged_in_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "291"
         }, headers=admin_headers)
 
@@ -2362,8 +2370,8 @@ class TestUserDashboard:
             "separate_pools": False
         }, headers=admin_headers)
         logged_in_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "EU"
         }, headers=admin_headers)
 
@@ -2398,8 +2406,8 @@ class TestUserDashboard:
             "separate_pools": False
         }, headers=admin_headers)
         logged_in_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "291"
         }, headers=admin_headers)
 
@@ -2435,8 +2443,8 @@ class TestUserDashboard:
             "separate_pools": False
         }, headers=admin_headers)
         logged_in_client.post("/admin/sport/1/match", json={
-            "start_date": "2026-01-01T00:00:00",
-            "end_date": "2026-12-31T23:59:59",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-30",
             "target_value": "EU"
         }, headers=admin_headers)
 

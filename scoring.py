@@ -489,13 +489,15 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
     """
     Check and update records based on a QSO.
 
+    Uses exclusive transaction to prevent race conditions during concurrent syncs.
+
     Args:
         qso_id: QSO ID
         callsign: Competitor callsign
         sport_id: Sport ID (None for global records)
         match_id: Match ID where the QSO qualified
     """
-    with get_db() as conn:
+    with get_db_exclusive() as conn:
         # Get QSO data
         cursor = conn.execute("SELECT * FROM qsos WHERE id = ?", (qso_id,))
         qso = cursor.fetchone()
