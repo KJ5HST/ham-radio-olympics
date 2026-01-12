@@ -57,6 +57,7 @@ pytest tests/ -v
 | GET | `/olympiad/sport/{id}` | Sport details |
 | GET | `/olympiad/sport/{id}/matches` | List Matches |
 | GET | `/olympiad/sport/{id}/match/{id}` | Match leaderboard |
+| GET | `/medals` | Medal standings |
 | GET | `/records` | World records |
 | GET | `/competitor/{call}` | Competitor profile |
 | POST | `/sync` | Trigger QRZ sync |
