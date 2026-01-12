@@ -80,12 +80,13 @@ class Config:
     QRZ_USERNAME: str = os.getenv("QRZ_USERNAME", "")
     QRZ_PASSWORD: str = os.getenv("QRZ_PASSWORD", "")
 
-    # Email settings (for future use)
-    EMAIL_BACKEND: str = os.getenv("EMAIL_BACKEND", "console")
+    # Email settings
+    EMAIL_BACKEND: str = os.getenv("EMAIL_BACKEND", "console")  # console, smtp, or resend
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
     SMTP_USER: str = os.getenv("SMTP_USER", "")
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@hamradio-olympics.com")
 
     # Testing mode

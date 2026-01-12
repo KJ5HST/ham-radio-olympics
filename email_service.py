@@ -51,6 +51,8 @@ def _get_backend():
         return _console_backend
     elif backend_name == "smtp":
         return _smtp_backend
+    elif backend_name == "resend":
+        return _resend_backend
     else:
         logger.warning(f"Unknown email backend '{backend_name}', using console")
         return _console_backend
@@ -111,6 +113,37 @@ async def _smtp_backend(
             password=config.SMTP_PASSWORD if config.SMTP_PASSWORD else None,
             start_tls=True
         )
+
+        logger.info(f"Email sent to {to}: {subject}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send email to {to}: {e}")
+        return False
+
+
+async def _resend_backend(
+    to: str,
+    subject: str,
+    body: str,
+    html_body: Optional[str] = None
+) -> bool:
+    """Resend backend - sends email via Resend API."""
+    try:
+        import resend
+
+        resend.api_key = config.RESEND_API_KEY
+
+        params = {
+            "from": config.EMAIL_FROM,
+            "to": [to],
+            "subject": subject,
+            "text": body,
+        }
+        if html_body:
+            params["html"] = html_body
+
+        resend.Emails.send(params)
 
         logger.info(f"Email sent to {to}: {subject}")
         return True
