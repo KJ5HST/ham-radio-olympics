@@ -595,7 +595,7 @@ async def health_check():
 
 
 @app.get("/olympiad")
-async def get_olympiad():
+async def get_olympiad(user: User = Depends(require_user)):
     """Get current active Olympiad details."""
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM olympiads WHERE is_active = 1")
@@ -608,7 +608,7 @@ async def get_olympiad():
 
 
 @app.get("/olympiad/sports")
-async def get_olympiad_sports():
+async def get_olympiad_sports(user: User = Depends(require_user)):
     """List all Sports in the active Olympiad."""
     with get_db() as conn:
         cursor = conn.execute("SELECT id FROM olympiads WHERE is_active = 1")
@@ -728,7 +728,7 @@ async def get_sport_participants(request: Request, sport_id: int, user: User = D
 
 
 @app.get("/olympiad/sport/{sport_id}/matches")
-async def get_sport_matches(sport_id: int):
+async def get_sport_matches(sport_id: int, user: User = Depends(require_user)):
     """List all Matches in a Sport."""
     with get_db() as conn:
         cursor = conn.execute(

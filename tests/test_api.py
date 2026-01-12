@@ -349,15 +349,21 @@ class TestCallsignValidation:
 
 
 class TestOlympiadEndpoints:
-    """Test Olympiad-related endpoints."""
+    """Test Olympiad-related endpoints (require authentication)."""
+
+    def test_get_olympiad_requires_auth(self, client):
+        """Test getting Olympiad requires authentication."""
+        response = client.get("/olympiad", follow_redirects=False)
+        assert response.status_code in [302, 303] or "Log In" in response.text
 
     def test_get_olympiad_no_active(self, client):
-        """Test getting Olympiad when none active."""
+        """Test getting Olympiad when none active (authenticated)."""
+        signup_user(client, "W1TEST")
         response = client.get("/olympiad")
         assert response.status_code == 404
 
     def test_get_olympiad_with_active(self, client, admin_headers):
-        """Test getting active Olympiad."""
+        """Test getting active Olympiad (authenticated)."""
         # Create and activate an Olympiad
         client.post("/admin/olympiad", json={
             "name": "2026 Olympics",
@@ -368,12 +374,13 @@ class TestOlympiadEndpoints:
 
         client.post("/admin/olympiad/1/activate", headers=admin_headers)
 
+        signup_user(client, "W1TEST")
         response = client.get("/olympiad")
         assert response.status_code == 200
         assert response.json()["name"] == "2026 Olympics"
 
-    def test_get_olympiad_sports_empty(self, client, admin_headers):
-        """Test getting Sports when none exist."""
+    def test_get_olympiad_sports_requires_auth(self, client, admin_headers):
+        """Test getting Sports requires authentication."""
         client.post("/admin/olympiad", json={
             "name": "2026 Olympics",
             "start_date": "2026-01-01",
@@ -382,6 +389,21 @@ class TestOlympiadEndpoints:
         }, headers=admin_headers)
         client.post("/admin/olympiad/1/activate", headers=admin_headers)
 
+        response = client.get("/olympiad/sports", follow_redirects=False)
+        # JSON API returns 401, HTML pages redirect
+        assert response.status_code in [302, 303, 401] or "Log In" in response.text
+
+    def test_get_olympiad_sports_empty(self, client, admin_headers):
+        """Test getting Sports when none exist (authenticated)."""
+        client.post("/admin/olympiad", json={
+            "name": "2026 Olympics",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        client.post("/admin/olympiad/1/activate", headers=admin_headers)
+
+        signup_user(client, "W1TEST")
         response = client.get("/olympiad/sports")
         assert response.status_code == 200
         assert response.json() == []
@@ -1645,7 +1667,7 @@ class TestMultipleSports:
 
     @pytest.fixture
     def setup_multi_sport(self, client, admin_headers):
-        """Set up Olympiad with multiple Sports."""
+        """Set up Olympiad with multiple Sports and authenticated user."""
         # Create Olympiad
         client.post("/admin/olympiad", json={
             "name": "2026 Olympics",
@@ -1654,6 +1676,8 @@ class TestMultipleSports:
             "qualifying_qsos": 0
         }, headers=admin_headers)
         client.post("/admin/olympiad/1/activate", headers=admin_headers)
+        # Create authenticated user for viewing
+        signup_user(client, "W1MUL")
 
         # Sport 1: DX Challenge (continent)
         client.post("/admin/olympiad/1/sport", json={
@@ -1854,9 +1878,11 @@ class TestSportEndpointsAuthenticated:
         assert response.status_code in [302, 303] or "Log In" in response.text
 
     def test_get_olympiad_sports_no_active(self, client):
-        """Test getting sports when no active olympiad."""
-        response = client.get("/olympiad/sports", headers={"Accept": "application/json"})
-        assert response.status_code == 404
+        """Test getting sports when no active olympiad (authenticated)."""
+        resp = signup_user(client, "W1NOO")
+        assert resp.status_code in [200, 303], f"Signup failed: {resp.text}"
+        response = client.get("/olympiad/sports")
+        assert response.status_code == 404, f"Got {response.status_code}: {response.text}"
         assert "No active Olympiad" in response.json()["detail"]
 
 
