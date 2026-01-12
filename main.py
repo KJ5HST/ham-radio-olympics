@@ -872,6 +872,39 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         })
 
 
+@app.get("/medals", response_class=HTMLResponse)
+async def get_medals_page(request: Request, user: User = Depends(require_user)):
+    """Get medal standings page showing all competitors sorted by medal count."""
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT
+                m.callsign,
+                c.first_name,
+                SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END) +
+                SUM(CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
+                SUM(CASE WHEN m.qso_race_medal = 'silver' THEN 1 ELSE 0 END) +
+                SUM(CASE WHEN m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
+                SUM(CASE WHEN m.qso_race_medal = 'bronze' THEN 1 ELSE 0 END) +
+                SUM(CASE WHEN m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count,
+                SUM(CASE WHEN m.qso_race_medal IS NOT NULL THEN 1 ELSE 0 END) +
+                SUM(CASE WHEN m.cool_factor_medal IS NOT NULL THEN 1 ELSE 0 END) as total_medals,
+                SUM(m.total_points) as total_points
+            FROM medals m
+            JOIN competitors c ON m.callsign = c.callsign
+            WHERE m.qualified = 1
+            GROUP BY m.callsign
+            HAVING total_medals > 0
+            ORDER BY total_medals DESC, gold_count DESC, silver_count DESC, bronze_count DESC
+        """)
+        medal_standings = [dict(row) for row in cursor.fetchall()]
+
+    return templates.TemplateResponse("medals.html", {
+        "request": request,
+        "user": user,
+        "medal_standings": medal_standings
+    })
+
+
 @app.get("/competitor/{callsign}", response_class=HTMLResponse)
 async def get_competitor(
     request: Request,
@@ -3060,12 +3093,17 @@ async def clear_qrz_settings(_: bool = Depends(verify_admin)):
 
 @app.post("/admin/recompute-records")
 async def admin_recompute_records(_: bool = Depends(verify_admin)):
-    """Recompute all world records from match-qualifying QSOs."""
+    """Recompute all medals and world records from match-qualifying QSOs."""
     from scoring import recompute_all_records
+    from sync import recompute_all_active_matches
 
+    # First recompute medals for all matches
+    recompute_all_active_matches()
+
+    # Then recompute world records
     recompute_all_records()
 
-    return {"message": "World records recomputed successfully"}
+    return {"message": "Medals and world records recomputed successfully"}
 
 
 @app.get("/admin/teams", response_class=HTMLResponse)

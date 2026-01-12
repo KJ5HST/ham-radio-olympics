@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Medal Standings - Ham Radio Olympics{% endblock %}
+
+{% block content %}
+<h2>Medal Standings</h2>
+
+{% if medal_standings %}
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Rank</th>
+            <th scope="col">Competitor</th>
+            <th scope="col"><span class="medal-emoji gold"></span></th>
+            <th scope="col"><span class="medal-emoji silver"></span></th>
+            <th scope="col"><span class="medal-emoji bronze"></span></th>
+            <th scope="col">Total Medals</th>
+            <th scope="col">Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for competitor in medal_standings %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a></td>
+            <td>{{ competitor.gold_count }}</td>
+            <td>{{ competitor.silver_count }}</td>
+            <td>{{ competitor.bronze_count }}</td>
+            <td><strong>{{ competitor.total_medals }}</strong></td>
+            <td>{{ competitor.total_points }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% else %}
+<div class="card">
+    <p>No medals have been awarded yet. Compete in matches to earn medals!</p>
+</div>
+{% endif %}
+
+<h3>About Medals</h3>
+<div class="card">
+    <p>Medals are awarded for two events in each match:</p>
+    <p><strong>QSO Race:</strong> First three competitors to log a confirmed qualifying contact with the target.</p>
+    <p><strong>Cool Factor:</strong> Three highest distance-to-power ratios (km/W) - rewards efficient, low-power contacts.</p>
+</div>
+{% endblock %}
