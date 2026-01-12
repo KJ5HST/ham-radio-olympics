@@ -1747,12 +1747,12 @@ class TestLandingPage:
         assert "2026 Olympics" in response.text
 
 
-class TestSportEndpointsPublic:
-    """Test public sport endpoints."""
+class TestSportEndpointsAuthenticated:
+    """Test authenticated sport endpoints (require login)."""
 
     @pytest.fixture
     def setup_sport(self, client, admin_headers):
-        """Create olympiad with sport and match."""
+        """Create olympiad with sport, match, and authenticated user."""
         client.post("/admin/olympiad", json={
             "name": "2026 Olympics",
             "start_date": "2026-01-01",
@@ -1772,22 +1772,24 @@ class TestSportEndpointsPublic:
             "end_date": "2026-01-31T23:59:59",
             "target_value": "EU"
         }, headers=admin_headers)
+        # Create authenticated user for viewing sport pages
+        signup_user(client, "W1VIEW")
 
     def test_get_sport_details(self, client, admin_headers, setup_sport):
-        """Test getting sport details page."""
+        """Test getting sport details page (authenticated)."""
         response = client.get("/olympiad/sport/1")
         assert response.status_code == 200
         assert "DX Challenge" in response.text
         assert "Matches" in response.text
         assert "EU" in response.text
 
-    def test_get_sport_not_found(self, client):
-        """Test getting non-existent sport."""
+    def test_get_sport_not_found(self, client, admin_headers, setup_sport):
+        """Test getting non-existent sport (authenticated)."""
         response = client.get("/olympiad/sport/999")
         assert response.status_code == 404
 
     def test_get_match_details(self, client, admin_headers, setup_sport):
-        """Test getting match details page with readable dates."""
+        """Test getting match details page with readable dates (authenticated)."""
         response = client.get("/olympiad/sport/1/match/1")
         assert response.status_code == 200
         assert "EU" in response.text
@@ -1798,9 +1800,58 @@ class TestSportEndpointsPublic:
         assert "Jan 31, 2026" in response.text
 
     def test_get_match_not_found(self, client, admin_headers, setup_sport):
-        """Test getting non-existent match."""
+        """Test getting non-existent match (authenticated)."""
         response = client.get("/olympiad/sport/1/match/999")
         assert response.status_code == 404
+
+    def test_sport_requires_auth(self, client, admin_headers):
+        """Test that sport page requires authentication."""
+        # Setup sport without creating user
+        client.post("/admin/olympiad", json={
+            "name": "2026 Olympics",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        client.post("/admin/olympiad/1/activate", headers=admin_headers)
+        client.post("/admin/olympiad/1/sport", json={
+            "name": "DX Challenge",
+            "target_type": "continent",
+            "work_enabled": True,
+            "activate_enabled": False,
+            "separate_pools": False
+        }, headers=admin_headers)
+        # Without authentication, should redirect to login
+        response = client.get("/olympiad/sport/1", follow_redirects=False)
+        # Should redirect to login or show login page
+        assert response.status_code in [302, 303] or "Log In" in response.text
+
+    def test_match_requires_auth(self, client, admin_headers):
+        """Test that match page requires authentication."""
+        # Setup sport and match without creating user
+        client.post("/admin/olympiad", json={
+            "name": "2026 Olympics",
+            "start_date": "2026-01-01",
+            "end_date": "2026-12-31",
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        client.post("/admin/olympiad/1/activate", headers=admin_headers)
+        client.post("/admin/olympiad/1/sport", json={
+            "name": "DX Challenge",
+            "target_type": "continent",
+            "work_enabled": True,
+            "activate_enabled": False,
+            "separate_pools": False
+        }, headers=admin_headers)
+        client.post("/admin/sport/1/match", json={
+            "start_date": "2026-01-01T00:00:00",
+            "end_date": "2026-01-31T23:59:59",
+            "target_value": "EU"
+        }, headers=admin_headers)
+        # Without authentication, should redirect to login
+        response = client.get("/olympiad/sport/1/match/1", follow_redirects=False)
+        # Should redirect to login or show login page
+        assert response.status_code in [302, 303] or "Log In" in response.text
 
     def test_get_olympiad_sports_no_active(self, client):
         """Test getting sports when no active olympiad."""

@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends, UploadFile, File, Cookie, BackgroundTasks
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from pydantic import BaseModel, EmailStr, field_validator
@@ -130,6 +131,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Templates
 templates = Jinja2Templates(directory="templates")
+
+# Mount static files directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 # CSRF token management
@@ -621,9 +625,8 @@ async def get_olympiad_sports():
 
 
 @app.get("/olympiad/sport/{sport_id}", response_class=HTMLResponse)
-async def get_sport(request: Request, sport_id: int):
+async def get_sport(request: Request, sport_id: int, user: User = Depends(require_user)):
     """Get Sport details and standings."""
-    user = get_current_user(request)
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM sports WHERE id = ?", (sport_id,))
         sport = cursor.fetchone()
@@ -690,9 +693,8 @@ async def get_sport(request: Request, sport_id: int):
 
 
 @app.get("/olympiad/sport/{sport_id}/participants", response_class=HTMLResponse)
-async def get_sport_participants(request: Request, sport_id: int):
+async def get_sport_participants(request: Request, sport_id: int, user: User = Depends(require_user)):
     """View all participants in a Sport."""
-    user = get_current_user(request)
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM sports WHERE id = ?", (sport_id,))
         sport = cursor.fetchone()
@@ -737,9 +739,8 @@ async def get_sport_matches(sport_id: int):
 
 
 @app.get("/olympiad/sport/{sport_id}/match/{match_id}", response_class=HTMLResponse)
-async def get_match(request: Request, sport_id: int, match_id: int):
+async def get_match(request: Request, sport_id: int, match_id: int, user: User = Depends(require_user)):
     """Get Match details and leaderboard."""
-    user = get_current_user(request)
     with get_db() as conn:
         cursor = conn.execute(
             "SELECT * FROM matches WHERE id = ? AND sport_id = ?",
@@ -3416,9 +3417,8 @@ def get_team_members(conn, team_id: int):
 
 
 @app.get("/teams", response_class=HTMLResponse)
-async def teams_list_page(request: Request, page: int = 1, per_page: int = 20):
+async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, user: User = Depends(require_user)):
     """List all active teams."""
-    user = get_current_user(request)
     offset = (max(1, page) - 1) * per_page
 
     with get_db() as conn:
@@ -3466,9 +3466,8 @@ async def teams_list_page(request: Request, page: int = 1, per_page: int = 20):
 
 
 @app.get("/team/{team_id}", response_class=HTMLResponse)
-async def team_profile_page(request: Request, team_id: int):
+async def team_profile_page(request: Request, team_id: int, user: User = Depends(require_user)):
     """Team profile page."""
-    user = get_current_user(request)
 
     with get_db() as conn:
         # Get team
@@ -3570,11 +3569,8 @@ async def team_profile_page(request: Request, team_id: int):
 
 
 @app.post("/team")
-async def create_team(request: Request, data: CreateTeamRequest):
+async def create_team(request: Request, data: CreateTeamRequest, user: User = Depends(require_user)):
     """Create a new team. Creator becomes captain."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         # Check if user is already on a team
@@ -3614,11 +3610,8 @@ async def create_team(request: Request, data: CreateTeamRequest):
 
 
 @app.put("/team/{team_id}")
-async def update_team(request: Request, team_id: int, data: UpdateTeamRequest):
+async def update_team(request: Request, team_id: int, data: UpdateTeamRequest, user: User = Depends(require_user)):
     """Update team info. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         # Check team exists and user is captain
@@ -3654,11 +3647,8 @@ async def update_team(request: Request, team_id: int, data: UpdateTeamRequest):
 
 
 @app.delete("/team/{team_id}")
-async def delete_team(request: Request, team_id: int):
+async def delete_team(request: Request, team_id: int, user: User = Depends(require_user)):
     """Delete team. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
@@ -3683,11 +3673,8 @@ async def delete_team(request: Request, team_id: int):
 
 
 @app.post("/team/{team_id}/request")
-async def request_to_join_team(request: Request, team_id: int):
+async def request_to_join_team(request: Request, team_id: int, user: User = Depends(require_user)):
     """Request to join a team. Captain must approve."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         # Check team exists and is active
@@ -3733,11 +3720,8 @@ async def request_to_join_team(request: Request, team_id: int):
 
 
 @app.post("/team/{team_id}/invite/{callsign}")
-async def invite_to_team(request: Request, team_id: int, callsign: str):
+async def invite_to_team(request: Request, team_id: int, callsign: str, user: User = Depends(require_user)):
     """Invite a user to join the team. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     callsign = callsign.upper().strip()
 
@@ -3790,11 +3774,8 @@ async def invite_to_team(request: Request, team_id: int, callsign: str):
 
 
 @app.post("/team/{team_id}/approve/{callsign}")
-async def approve_join_request(request: Request, team_id: int, callsign: str):
+async def approve_join_request(request: Request, team_id: int, callsign: str, user: User = Depends(require_user)):
     """Approve a join request. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     callsign = callsign.upper().strip()
 
@@ -3836,11 +3817,8 @@ async def approve_join_request(request: Request, team_id: int, callsign: str):
 
 
 @app.post("/team/{team_id}/decline/{callsign}")
-async def decline_join_request(request: Request, team_id: int, callsign: str):
+async def decline_join_request(request: Request, team_id: int, callsign: str, user: User = Depends(require_user)):
     """Decline a join request or cancel an invite. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     callsign = callsign.upper().strip()
 
@@ -3865,11 +3843,8 @@ async def decline_join_request(request: Request, team_id: int, callsign: str):
 
 
 @app.post("/team/{team_id}/accept")
-async def accept_team_invite(request: Request, team_id: int):
+async def accept_team_invite(request: Request, team_id: int, user: User = Depends(require_user)):
     """Accept an invite to join a team."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
@@ -3903,11 +3878,8 @@ async def accept_team_invite(request: Request, team_id: int):
 
 
 @app.post("/team/{team_id}/reject")
-async def reject_team_invite(request: Request, team_id: int):
+async def reject_team_invite(request: Request, team_id: int, user: User = Depends(require_user)):
     """Reject an invite to join a team."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         cursor = conn.execute(
@@ -3921,11 +3893,8 @@ async def reject_team_invite(request: Request, team_id: int):
 
 
 @app.post("/team/{team_id}/leave")
-async def leave_team(request: Request, team_id: int):
+async def leave_team(request: Request, team_id: int, user: User = Depends(require_user)):
     """Leave a team."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM teams WHERE id = ?", (team_id,))
@@ -3968,11 +3937,8 @@ async def leave_team(request: Request, team_id: int):
 
 
 @app.post("/team/{team_id}/remove/{callsign}")
-async def remove_team_member(request: Request, team_id: int, callsign: str):
+async def remove_team_member(request: Request, team_id: int, callsign: str, user: User = Depends(require_user)):
     """Remove a member from the team. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     callsign = callsign.upper()
 
@@ -4017,11 +3983,8 @@ async def remove_team_member(request: Request, team_id: int, callsign: str):
 
 
 @app.post("/team/{team_id}/transfer/{callsign}")
-async def transfer_captaincy(request: Request, team_id: int, callsign: str):
+async def transfer_captaincy(request: Request, team_id: int, callsign: str, user: User = Depends(require_user)):
     """Transfer team captaincy to another member. Captain only."""
-    user = get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
     callsign = callsign.upper()
 

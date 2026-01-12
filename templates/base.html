@@ -454,6 +454,30 @@
         }
         .btn-loading .btn-text { opacity: 0.6; }
 
+        /* Help link icon */
+        .help-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-weight: bold;
+            font-size: 14px;
+            text-decoration: none;
+            margin-left: 10px;
+            transition: all 0.2s;
+        }
+        .help-link:hover {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+            text-decoration: none;
+        }
+
         /* Theme toggle button */
         .theme-toggle {
             background: none;
@@ -689,6 +713,7 @@
                     <a href="/signup">Sign Up</a>
                     <a href="/login">Log In</a>
                 {% endif %}
+                <a href="/static/user_guide.html" class="help-link" title="User Guide" aria-label="Help and User Guide" target="_blank">?</a>
                 <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" title="Toggle dark mode">
                     <span class="theme-icon">🌙</span>
                 </button>
