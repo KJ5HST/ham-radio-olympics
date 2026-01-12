@@ -10,7 +10,7 @@
     <p><strong>Start:</strong> {{ match.start_date | format_datetime }}</p>
     <p><strong>End:</strong> {{ match.end_date | format_datetime }}</p>
     {% if match.max_power_w %}
-    <p><strong>Max Power:</strong> {{ match.max_power_w }}W (QRP)</p>
+    <p><strong>Max Power:</strong> {{ match.max_power_w }}W{% if match.max_power_w <= 10 %} (QRP){% endif %}</p>
     {% endif %}
 </div>
 
