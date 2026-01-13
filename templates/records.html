@@ -6,6 +6,7 @@
 <h2>World Records</h2>
 
 {% if world_records %}
+<h3>Overall Records</h3>
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -13,6 +14,7 @@
             <th scope="col">Value</th>
             <th scope="col">Holder</th>
             <th scope="col">QSO With</th>
+            <th scope="col">Mode</th>
             <th scope="col">Match</th>
             <th scope="col">Date</th>
         </tr>
@@ -40,6 +42,7 @@
                 {% endif %}
             </td>
             <td>{{ record.dx_callsign or '-' }}</td>
+            <td>{{ record.mode or '-' }}</td>
             <td>
                 {% if record.match_id %}
                     <a href="/olympiad/sport/{{ record.linked_sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target_value | pota_tooltip }}</a>
@@ -56,6 +59,56 @@
 <div class="card">
     <p>No world records have been set yet. Be the first to set a record!</p>
 </div>
+{% endif %}
+
+{% if mode_records %}
+<h3>Records by Mode</h3>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Mode</th>
+            <th scope="col">Longest Distance</th>
+            <th scope="col">Distance Holder</th>
+            <th scope="col">Best Cool Factor</th>
+            <th scope="col">Cool Factor Holder</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in mode_records %}
+        <tr>
+            <td><strong>{{ record.mode }}</strong></td>
+            <td>
+                {% if record.max_distance %}
+                    {{ "%.1f" | format(record.max_distance) }} km
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.distance_holder %}
+                    <a href="/competitor/{{ record.distance_holder }}">{{ record.distance_holder_name | competitor_display(record.distance_holder) }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.max_cool_factor %}
+                    {{ "%.1f" | format(record.max_cool_factor) }} km/W
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.cool_factor_holder %}
+                    <a href="/competitor/{{ record.cool_factor_holder }}">{{ record.cool_factor_holder_name | competitor_display(record.cool_factor_holder) }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
 {% endif %}
 
 <h3>About Records</h3>

@@ -873,7 +873,7 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         # Global records (sport_id IS NULL, callsign IS NULL) with holder names and match info
         cursor = conn.execute("""
             SELECT r.record_type, r.value, r.qso_id, r.achieved_at, r.match_id,
-                   q.competitor_callsign as holder, q.dx_callsign,
+                   q.competitor_callsign as holder, q.dx_callsign, q.mode, q.band,
                    c.first_name as holder_first_name,
                    m.target_value,
                    s.id as linked_sport_id, s.name as sport_name
@@ -887,10 +887,54 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         """)
         world_records = [dict(row) for row in cursor.fetchall()]
 
+        # Per-mode records for distance and cool factor
+        cursor = conn.execute("""
+            SELECT q.mode,
+                   MAX(q.distance_km) as max_distance,
+                   MAX(q.cool_factor) as max_cool_factor
+            FROM qsos q
+            WHERE q.is_confirmed = 1 AND q.mode IS NOT NULL AND q.mode != ''
+            GROUP BY q.mode
+            ORDER BY max_distance DESC
+        """)
+        mode_records_raw = cursor.fetchall()
+
+        # Build cleaner mode records with holder names
+        mode_records = []
+        for row in mode_records_raw:
+            row_dict = dict(row)
+            mode = row_dict['mode']
+            # Get distance holder
+            if row_dict.get('max_distance'):
+                d = conn.execute("""
+                    SELECT q.competitor_callsign, c.first_name
+                    FROM qsos q
+                    LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
+                    WHERE q.mode = ? AND q.distance_km = ? AND q.is_confirmed = 1
+                    LIMIT 1
+                """, (mode, row_dict['max_distance'])).fetchone()
+                if d:
+                    row_dict['distance_holder'] = d['competitor_callsign']
+                    row_dict['distance_holder_name'] = d['first_name']
+            # Get cool factor holder
+            if row_dict.get('max_cool_factor'):
+                cf = conn.execute("""
+                    SELECT q.competitor_callsign, c.first_name
+                    FROM qsos q
+                    LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
+                    WHERE q.mode = ? AND q.cool_factor = ? AND q.is_confirmed = 1
+                    LIMIT 1
+                """, (mode, row_dict['max_cool_factor'])).fetchone()
+                if cf:
+                    row_dict['cool_factor_holder'] = cf['competitor_callsign']
+                    row_dict['cool_factor_holder_name'] = cf['first_name']
+            mode_records.append(row_dict)
+
         return templates.TemplateResponse("records.html", {
             "request": request,
             "user": user,
-            "world_records": world_records
+            "world_records": world_records,
+            "mode_records": mode_records
         })
 
 
