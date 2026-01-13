@@ -902,18 +902,20 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         """)
         mode_records_raw = cursor.fetchall()
 
-        # Build cleaner mode records with holder names
+        # Build cleaner mode records with holder names and match info
         mode_records = []
         for row in mode_records_raw:
             row_dict = dict(row)
             mode = row_dict['mode']
-            # Get distance holder (from match-qualifying QSOs)
+            # Get distance holder with match info (from match-qualifying QSOs)
             if row_dict.get('max_distance'):
                 d = conn.execute("""
-                    SELECT q.competitor_callsign, c.first_name
+                    SELECT q.competitor_callsign, c.first_name,
+                           m.id as match_id, m.target_value, s.id as sport_id, s.name as sport_name
                     FROM qsos q
                     INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
                                         AND q.qso_datetime_utc <= m.end_date
+                    INNER JOIN sports s ON m.sport_id = s.id
                     LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
                     WHERE q.mode = ? AND q.distance_km = ? AND q.is_confirmed = 1
                     LIMIT 1
@@ -921,13 +923,19 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                 if d:
                     row_dict['distance_holder'] = d['competitor_callsign']
                     row_dict['distance_holder_name'] = d['first_name']
-            # Get cool factor holder (from match-qualifying QSOs)
+                    row_dict['distance_match_id'] = d['match_id']
+                    row_dict['distance_sport_id'] = d['sport_id']
+                    row_dict['distance_sport_name'] = d['sport_name']
+                    row_dict['distance_target'] = d['target_value']
+            # Get cool factor holder with match info (from match-qualifying QSOs)
             if row_dict.get('max_cool_factor'):
                 cf = conn.execute("""
-                    SELECT q.competitor_callsign, c.first_name
+                    SELECT q.competitor_callsign, c.first_name,
+                           m.id as match_id, m.target_value, s.id as sport_id, s.name as sport_name
                     FROM qsos q
                     INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
                                         AND q.qso_datetime_utc <= m.end_date
+                    INNER JOIN sports s ON m.sport_id = s.id
                     LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
                     WHERE q.mode = ? AND q.cool_factor = ? AND q.is_confirmed = 1
                     LIMIT 1
@@ -935,6 +943,10 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                 if cf:
                     row_dict['cool_factor_holder'] = cf['competitor_callsign']
                     row_dict['cool_factor_holder_name'] = cf['first_name']
+                    row_dict['cool_factor_match_id'] = cf['match_id']
+                    row_dict['cool_factor_sport_id'] = cf['sport_id']
+                    row_dict['cool_factor_sport_name'] = cf['sport_name']
+                    row_dict['cool_factor_target'] = cf['target_value']
             mode_records.append(row_dict)
 
         return templates.TemplateResponse("records.html", {

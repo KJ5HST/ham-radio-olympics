@@ -68,9 +68,11 @@
         <tr>
             <th scope="col">Mode</th>
             <th scope="col">Longest Distance</th>
-            <th scope="col">Distance Holder</th>
+            <th scope="col">Holder</th>
+            <th scope="col">Match</th>
             <th scope="col">Best Cool Factor</th>
-            <th scope="col">Cool Factor Holder</th>
+            <th scope="col">Holder</th>
+            <th scope="col">Match</th>
         </tr>
     </thead>
     <tbody>
@@ -92,6 +94,13 @@
                 {% endif %}
             </td>
             <td>
+                {% if record.distance_match_id %}
+                    <a href="/olympiad/sport/{{ record.distance_sport_id }}/match/{{ record.distance_match_id }}">{{ record.distance_sport_name }}: {{ record.distance_target | pota_tooltip }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
                 {% if record.max_cool_factor %}
                     {{ "%.1f" | format(record.max_cool_factor) }} km/W
                 {% else %}
@@ -101,6 +110,13 @@
             <td>
                 {% if record.cool_factor_holder %}
                     <a href="/competitor/{{ record.cool_factor_holder }}">{{ record.cool_factor_holder_name | competitor_display(record.cool_factor_holder) }}</a>
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+            <td>
+                {% if record.cool_factor_match_id %}
+                    <a href="/olympiad/sport/{{ record.cool_factor_sport_id }}/match/{{ record.cool_factor_match_id }}">{{ record.cool_factor_sport_name }}: {{ record.cool_factor_target | pota_tooltip }}</a>
                 {% else %}
                     -
                 {% endif %}
