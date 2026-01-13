@@ -200,20 +200,28 @@ async function deleteOlympiad(id) {
 
 async function recomputeRecords() {
     if (!confirm('Recompute all world records? This will recalculate records from match-qualifying QSOs.')) return;
+    showToast('Recomputing records... This may take a minute.', 'info');
     try {
         const resp = await fetch('/admin/recompute-records', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             credentials: 'same-origin'
         });
-        const data = await resp.json();
-        if (resp.ok) {
-            showToast(data.message, 'success');
-        } else {
-            showToast('Error: ' + data.detail, 'error');
+        if (!resp.ok) {
+            // Try to get error detail from JSON response
+            try {
+                const errData = await resp.json();
+                showToast('Error: ' + (errData.detail || resp.statusText), 'error');
+            } catch {
+                showToast('Error: ' + resp.status + ' ' + resp.statusText, 'error');
+            }
+            return;
         }
+        const data = await resp.json();
+        showToast(data.message || 'Records recomputed successfully', 'success');
     } catch (err) {
-        showToast('Error: ' + err.message, 'error');
+        console.error('Recompute records error:', err);
+        showToast('Error: ' + (err.message || 'Request failed'), 'error');
     }
 }
 </script>

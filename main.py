@@ -646,8 +646,10 @@ async def get_olympiad_sports(user: User = Depends(require_user)):
 
 
 @app.get("/olympiad/sport/{sport_id}", response_class=HTMLResponse)
-async def get_sport(request: Request, sport_id: int, user: User = Depends(require_user)):
+async def get_sport(request: Request, sport_id: int, page: int = 1, user: User = Depends(require_user)):
     """Get Sport details and standings."""
+    MATCHES_PER_PAGE = 50
+
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM sports WHERE id = ?", (sport_id,))
         sport = cursor.fetchone()
@@ -655,10 +657,22 @@ async def get_sport(request: Request, sport_id: int, user: User = Depends(requir
         if not sport:
             raise HTTPException(status_code=404, detail="Sport not found")
 
-        # Get all matches
+        # Get total match count for pagination
         cursor = conn.execute(
-            "SELECT * FROM matches WHERE sport_id = ? ORDER BY start_date",
+            "SELECT COUNT(*) as count FROM matches WHERE sport_id = ?",
             (sport_id,)
+        )
+        total_matches = cursor.fetchone()["count"]
+        total_pages = (total_matches + MATCHES_PER_PAGE - 1) // MATCHES_PER_PAGE
+
+        # Clamp page to valid range
+        page = max(1, min(page, total_pages)) if total_pages > 0 else 1
+        offset = (page - 1) * MATCHES_PER_PAGE
+
+        # Get paginated matches
+        cursor = conn.execute(
+            "SELECT * FROM matches WHERE sport_id = ? ORDER BY start_date LIMIT ? OFFSET ?",
+            (sport_id, MATCHES_PER_PAGE, offset)
         )
         matches = [dict(row) for row in cursor.fetchall()]
 
@@ -710,6 +724,9 @@ async def get_sport(request: Request, sport_id: int, user: User = Depends(requir
             "standings": standings,
             "is_entered": is_entered,
             "entry_count": entry_count,
+            "page": page,
+            "total_pages": total_pages,
+            "total_matches": total_matches,
         })
 
 
@@ -887,72 +904,118 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         """)
         world_records = [dict(row) for row in cursor.fetchall()]
 
-        # Per-mode records from match-qualifying QSOs only
-        # Get all candidate QSOs with match info including allowed_modes
+        # Per-mode records from medal-qualifying QSOs only
+        # Join medals with QSOs to find actual QSOs that earned medals
+        # Then rank by distance/cool_factor per mode
+        # Note: We also fetch allowed_modes to filter in Python (SQLite lacks good string functions)
         cursor = conn.execute("""
-            SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
-                   c.first_name, m.id as match_id, m.target_value, m.allowed_modes as match_allowed_modes,
-                   s.id as sport_id, s.name as sport_name, s.allowed_modes as sport_allowed_modes
-            FROM qsos q
-            INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
-                                AND q.qso_datetime_utc <= m.end_date
-            INNER JOIN sports s ON m.sport_id = s.id
-            LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
-            WHERE q.is_confirmed = 1 AND q.mode IS NOT NULL AND q.mode != ''
-            ORDER BY q.distance_km DESC
+            WITH medal_competitor_matches AS (
+                -- Get all competitor/match pairs that have medals
+                SELECT DISTINCT med.callsign, med.match_id
+                FROM medals med
+                WHERE med.qualified = 1
+            ),
+            matching_qsos AS (
+                -- Find QSOs from medal-holding competitors during their matches
+                -- that match the target (for parks, check sig_info)
+                SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
+                       q.qso_datetime_utc, c.first_name, m.id as match_id, m.target_value,
+                       s.id as sport_id, s.name as sport_name, s.target_type,
+                       COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes
+                FROM medal_competitor_matches mcm
+                INNER JOIN matches m ON mcm.match_id = m.id
+                INNER JOIN sports s ON m.sport_id = s.id
+                INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
+                                 AND q.qso_datetime_utc >= m.start_date
+                                 AND q.qso_datetime_utc <= m.end_date
+                                 AND q.is_confirmed = 1
+                LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
+                WHERE q.mode IS NOT NULL AND q.mode != ''
+                  -- For parks, verify the QSO matches the target
+                  AND (s.target_type != 'park'
+                       OR q.dx_sig_info = m.target_value
+                       OR q.my_sig_info = m.target_value)
+            ),
+            ranked_qsos AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (PARTITION BY mode ORDER BY distance_km DESC) as dist_rank,
+                       ROW_NUMBER() OVER (PARTITION BY mode ORDER BY cool_factor DESC) as cf_rank
+                FROM matching_qsos
+            )
+            SELECT * FROM ranked_qsos
+            WHERE dist_rank <= 3 OR cf_rank <= 3
+            ORDER BY mode, dist_rank
         """)
-        all_qsos = cursor.fetchall()
+        candidate_qsos = cursor.fetchall()
 
-        # Filter QSOs by allowed_modes (match overrides sport)
-        valid_qsos = []
-        for qso in all_qsos:
+        # Import mode filtering function
+        from scoring import is_mode_allowed
+
+        # Build mode records (filtering by allowed_modes for each sport/match)
+        mode_best = {}
+        for qso in candidate_qsos:
             qso_dict = dict(qso)
-            allowed = qso_dict['match_allowed_modes'] or qso_dict['sport_allowed_modes']
-            if is_mode_allowed(qso_dict['mode'], allowed):
-                valid_qsos.append(qso_dict)
+            mode = qso_dict['mode']
 
-        # Build mode records from valid QSOs
-        mode_best = {}  # mode -> {max_distance, max_cool_factor, distance_qso, cool_factor_qso}
-        for qso in valid_qsos:
-            mode = qso['mode']
+            # Skip QSOs whose mode isn't allowed for the sport/match
+            allowed_modes = qso_dict.get('allowed_modes')
+            if not is_mode_allowed(mode, allowed_modes):
+                continue
+
             if mode not in mode_best:
                 mode_best[mode] = {'max_distance': 0, 'max_cool_factor': 0}
 
-            if qso['distance_km'] and qso['distance_km'] > mode_best[mode]['max_distance']:
-                mode_best[mode]['max_distance'] = qso['distance_km']
-                mode_best[mode]['distance_qso'] = qso
+            if qso_dict['distance_km'] and qso_dict['distance_km'] > mode_best[mode]['max_distance']:
+                mode_best[mode]['max_distance'] = qso_dict['distance_km']
+                mode_best[mode]['distance_qso'] = qso_dict
 
-            if qso['cool_factor'] and qso['cool_factor'] > mode_best[mode]['max_cool_factor']:
-                mode_best[mode]['max_cool_factor'] = qso['cool_factor']
-                mode_best[mode]['cool_factor_qso'] = qso
+            if qso_dict['cool_factor'] and qso_dict['cool_factor'] > mode_best[mode]['max_cool_factor']:
+                mode_best[mode]['max_cool_factor'] = qso_dict['cool_factor']
+                mode_best[mode]['cool_factor_qso'] = qso_dict
 
-        # Convert to list sorted by max_distance
-        mode_records = []
-        for mode, data in sorted(mode_best.items(), key=lambda x: x[1]['max_distance'], reverse=True):
-            record = {'mode': mode, 'max_distance': data['max_distance'], 'max_cool_factor': data['max_cool_factor']}
-            if 'distance_qso' in data:
+        # Build separate lists for distance and cool factor records
+        distance_records = []
+        cool_factor_records = []
+
+        for mode, data in mode_best.items():
+            if 'distance_qso' in data and data['max_distance']:
                 d = data['distance_qso']
-                record['distance_holder'] = d['competitor_callsign']
-                record['distance_holder_name'] = d['first_name']
-                record['distance_match_id'] = d['match_id']
-                record['distance_sport_id'] = d['sport_id']
-                record['distance_sport_name'] = d['sport_name']
-                record['distance_target'] = d['target_value']
-            if 'cool_factor_qso' in data:
+                distance_records.append({
+                    'mode': mode,
+                    'value': data['max_distance'],
+                    'holder': d['competitor_callsign'],
+                    'holder_name': d['first_name'],
+                    'match_id': d['match_id'],
+                    'sport_id': d['sport_id'],
+                    'sport_name': d['sport_name'],
+                    'target': d['target_value'],
+                    'date': d['qso_datetime_utc'],
+                })
+
+            if 'cool_factor_qso' in data and data['max_cool_factor']:
                 cf = data['cool_factor_qso']
-                record['cool_factor_holder'] = cf['competitor_callsign']
-                record['cool_factor_holder_name'] = cf['first_name']
-                record['cool_factor_match_id'] = cf['match_id']
-                record['cool_factor_sport_id'] = cf['sport_id']
-                record['cool_factor_sport_name'] = cf['sport_name']
-                record['cool_factor_target'] = cf['target_value']
-            mode_records.append(record)
+                cool_factor_records.append({
+                    'mode': mode,
+                    'value': data['max_cool_factor'],
+                    'holder': cf['competitor_callsign'],
+                    'holder_name': cf['first_name'],
+                    'match_id': cf['match_id'],
+                    'sport_id': cf['sport_id'],
+                    'sport_name': cf['sport_name'],
+                    'target': cf['target_value'],
+                    'date': cf['qso_datetime_utc'],
+                })
+
+        # Sort each by date (newest first)
+        distance_records.sort(key=lambda x: x.get('date') or '', reverse=True)
+        cool_factor_records.sort(key=lambda x: x.get('date') or '', reverse=True)
 
         return templates.TemplateResponse("records.html", {
             "request": request,
             "user": user,
             "world_records": world_records,
-            "mode_records": mode_records
+            "distance_records": distance_records,
+            "cool_factor_records": cool_factor_records,
         })
 
 
