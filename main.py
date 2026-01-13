@@ -469,6 +469,13 @@ def verify_admin(request: Request):
     user = get_session_user(session_id)
     if user and user.is_admin:
         return True
+    # For browser requests, redirect to login instead of JSON error
+    accept = request.headers.get("Accept", "")
+    if "text/html" in accept:
+        raise HTTPException(
+            status_code=303,
+            headers={"Location": "/login"}
+        )
     raise HTTPException(status_code=403, detail="Admin access required")
 
 
@@ -496,6 +503,13 @@ def verify_admin_or_sport_referee(request: Request, sport_id: int):
             return True
         if user.is_referee and is_referee_for_sport(user.callsign, sport_id):
             return True
+    # For browser requests, redirect to login instead of JSON error
+    accept = request.headers.get("Accept", "")
+    if "text/html" in accept:
+        raise HTTPException(
+            status_code=303,
+            headers={"Location": "/login"}
+        )
     raise HTTPException(status_code=403, detail="Admin or referee access required")
 
 
@@ -510,6 +524,13 @@ def verify_admin_or_referee(request: Request):
     user = get_session_user(session_id)
     if user and (user.is_admin or user.is_referee):
         return True
+    # For browser requests, redirect to login instead of JSON error
+    accept = request.headers.get("Accept", "")
+    if "text/html" in accept:
+        raise HTTPException(
+            status_code=303,
+            headers={"Location": "/login"}
+        )
     raise HTTPException(status_code=403, detail="Admin or referee access required")
 
 
