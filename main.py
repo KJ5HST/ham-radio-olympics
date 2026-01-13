@@ -887,12 +887,15 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         """)
         world_records = [dict(row) for row in cursor.fetchall()]
 
-        # Per-mode records for distance and cool factor
+        # Per-mode records from match-qualifying QSOs only
+        # Join with matches to ensure QSO falls within a match time window
         cursor = conn.execute("""
             SELECT q.mode,
                    MAX(q.distance_km) as max_distance,
                    MAX(q.cool_factor) as max_cool_factor
             FROM qsos q
+            INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
+                                AND q.qso_datetime_utc <= m.end_date
             WHERE q.is_confirmed = 1 AND q.mode IS NOT NULL AND q.mode != ''
             GROUP BY q.mode
             ORDER BY max_distance DESC
@@ -904,11 +907,13 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         for row in mode_records_raw:
             row_dict = dict(row)
             mode = row_dict['mode']
-            # Get distance holder
+            # Get distance holder (from match-qualifying QSOs)
             if row_dict.get('max_distance'):
                 d = conn.execute("""
                     SELECT q.competitor_callsign, c.first_name
                     FROM qsos q
+                    INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
+                                        AND q.qso_datetime_utc <= m.end_date
                     LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
                     WHERE q.mode = ? AND q.distance_km = ? AND q.is_confirmed = 1
                     LIMIT 1
@@ -916,11 +921,13 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                 if d:
                     row_dict['distance_holder'] = d['competitor_callsign']
                     row_dict['distance_holder_name'] = d['first_name']
-            # Get cool factor holder
+            # Get cool factor holder (from match-qualifying QSOs)
             if row_dict.get('max_cool_factor'):
                 cf = conn.execute("""
                     SELECT q.competitor_callsign, c.first_name
                     FROM qsos q
+                    INNER JOIN matches m ON q.qso_datetime_utc >= m.start_date
+                                        AND q.qso_datetime_utc <= m.end_date
                     LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
                     WHERE q.mode = ? AND q.cool_factor = ? AND q.is_confirmed = 1
                     LIMIT 1
