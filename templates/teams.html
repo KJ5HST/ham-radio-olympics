@@ -40,7 +40,7 @@
             <tr>
                 <td>{{ loop.index + (pagination.page - 1) * pagination.per_page }}</td>
                 <td><a href="/team/{{ team.id }}">{{ team.name }}</a></td>
-                <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_callsign }}</a></td>
+                <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_first_name | competitor_display(team.captain_callsign) }}</a></td>
                 <td>{{ team.member_count }}</td>
                 <td>{{ team.total_points | int }}</td>
                 <td>

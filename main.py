@@ -3938,12 +3938,14 @@ async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, u
         # Get teams with member counts and total points
         cursor = conn.execute("""
             SELECT t.*,
+                   c.first_name as captain_first_name,
                    COUNT(DISTINCT tm.callsign) as member_count,
                    COALESCE(SUM(m.total_points), 0) as total_points,
                    COUNT(CASE WHEN m.qso_race_medal = 'gold' OR m.cool_factor_medal = 'gold' THEN 1 END) as gold,
                    COUNT(CASE WHEN m.qso_race_medal = 'silver' OR m.cool_factor_medal = 'silver' THEN 1 END) as silver,
                    COUNT(CASE WHEN m.qso_race_medal = 'bronze' OR m.cool_factor_medal = 'bronze' THEN 1 END) as bronze
             FROM teams t
+            LEFT JOIN competitors c ON t.captain_callsign = c.callsign
             LEFT JOIN team_members tm ON t.id = tm.team_id
             LEFT JOIN medals m ON tm.callsign = m.callsign
             WHERE t.is_active = 1
