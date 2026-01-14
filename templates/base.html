@@ -391,6 +391,14 @@
         .alert-success { background: #c6f6d5; color: #22543d; border-left: 4px solid #38a169; }
         .alert-error { background: #fed7d7; color: #822727; border-left: 4px solid #e53e3e; }
         .alert-info { background: #bee3f8; color: #2a4365; border-left: 4px solid #3182ce; }
+        [data-theme="dark"] .alert-success { background: rgba(56, 161, 105, 0.2); color: #9ae6b4; }
+        [data-theme="dark"] .alert-error { background: rgba(229, 62, 62, 0.2); color: #feb2b2; }
+        [data-theme="dark"] .alert-info { background: rgba(49, 130, 206, 0.2); color: #90cdf4; }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) .alert-success { background: rgba(56, 161, 105, 0.2); color: #9ae6b4; }
+            :root:not([data-theme="light"]) .alert-error { background: rgba(229, 62, 62, 0.2); color: #feb2b2; }
+            :root:not([data-theme="light"]) .alert-info { background: rgba(49, 130, 206, 0.2); color: #90cdf4; }
+        }
 
         /* Toast notifications */
         .toast-container {

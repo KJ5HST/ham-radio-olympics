@@ -25,9 +25,13 @@
             <td><strong>{{ record.record_type | replace('_', ' ') | title }}</strong></td>
             <td>
                 {% if 'distance' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km
+                    {{ record.value | format_distance(display_prefs.distance_unit or 'km') }}
                 {% elif 'cool_factor' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km/W
+                    {% if display_prefs.distance_unit == 'mi' %}
+                        {{ "%.1f" | format(record.value * 0.621371) }} mi/W
+                    {% else %}
+                        {{ "%.1f" | format(record.value) }} km/W
+                    {% endif %}
                 {% elif 'power' in record.record_type %}
                     {{ "%.1f" | format(record.value) }} W
                 {% else %}
@@ -77,7 +81,7 @@
         {% for record in distance_records %}
         <tr>
             <td><strong>{{ record.mode }}</strong></td>
-            <td>{{ "%.1f" | format(record.value) }} km</td>
+            <td>{{ record.value | format_distance(display_prefs.distance_unit or 'km') }}</td>
             <td>
                 <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
@@ -107,7 +111,7 @@
         {% for record in cool_factor_records %}
         <tr>
             <td><strong>{{ record.mode }}</strong></td>
-            <td>{{ "%.1f" | format(record.value) }} km/W</td>
+            <td>{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(record.value * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(record.value) }} km/W{% endif %}</td>
             <td>
                 <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
@@ -123,7 +127,7 @@
 
 <h3>About Records</h3>
 <div class="card">
-    <p><strong>Distance Records:</strong> Longest confirmed QSO distance in kilometers.</p>
-    <p><strong>Cool Factor Records:</strong> Best distance-to-power ratio (km/W) - rewards efficient, low-power contacts.</p>
+    <p><strong>Distance Records:</strong> Longest confirmed QSO distance{% if display_prefs.distance_unit == 'mi' %} in miles{% else %} in kilometers{% endif %}.</p>
+    <p><strong>Cool Factor Records:</strong> Best distance-to-power ratio ({% if display_prefs.distance_unit == 'mi' %}mi/W{% else %}km/W{% endif %}) - rewards efficient, low-power contacts.</p>
 </div>
 {% endblock %}

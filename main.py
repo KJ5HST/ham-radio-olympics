@@ -7,7 +7,7 @@ import logging
 import os
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
 from contextlib import asynccontextmanager
 
@@ -345,6 +345,86 @@ def pota_tooltip(value: str) -> str:
 
 
 templates.env.filters["pota_tooltip"] = pota_tooltip
+
+
+def format_distance(value, unit: str = "km") -> str:
+    """Format distance with unit conversion.
+
+    Args:
+        value: Distance in kilometers
+        unit: 'km' or 'mi'
+    """
+    if value is None:
+        return ""
+    try:
+        km = float(value)
+        if unit == "mi":
+            miles = km * 0.621371
+            return f"{miles:,.0f} mi"
+        return f"{km:,.0f} km"
+    except (ValueError, TypeError):
+        return str(value)
+
+
+templates.env.filters["format_distance"] = format_distance
+
+
+def grid_to_timezone_offset(grid: str) -> int:
+    """Calculate timezone offset (hours from UTC) based on grid square longitude.
+
+    Uses simplified calculation: each 20 degrees = ~1.33 hours offset.
+    Grid squares are 2 degrees wide for the first 2 chars (field).
+    """
+    if not grid or len(grid) < 2:
+        return 0
+
+    try:
+        # First char (A-R) represents 20-degree longitude zones
+        lon_field = ord(grid[0].upper()) - ord('A')  # 0-17
+        # Calculate center longitude: -180 + (field * 20) + 10
+        lon = -180 + (lon_field * 20) + 10
+
+        # Timezone is roughly longitude / 15
+        offset = round(lon / 15)
+        return offset
+    except (ValueError, IndexError):
+        return 0
+
+
+def format_time_local(value, home_grid: str = None, time_display: str = "utc") -> str:
+    """Format datetime with optional local time conversion.
+
+    Args:
+        value: ISO datetime string (UTC)
+        home_grid: User's home grid square for timezone calculation
+        time_display: 'utc' or 'local'
+    """
+    if not value:
+        return ""
+
+    try:
+        if isinstance(value, str):
+            # Handle ISO format with or without T
+            value = value.replace('T', ' ').split('.')[0]
+            dt = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        else:
+            dt = value
+
+        if time_display == "local" and home_grid:
+            offset = grid_to_timezone_offset(home_grid)
+            dt = dt + timedelta(hours=offset)
+            sign = "+" if offset >= 0 else ""
+            tz_str = f" (UTC{sign}{offset})"
+        else:
+            tz_str = " UTC"
+
+        return dt.strftime("%b %-d, %Y %-I:%M %p") + tz_str
+    except (ValueError, AttributeError):
+        return str(value)
+
+
+templates.env.filters["format_time_local"] = format_time_local
+
 
 # Admin key from environment
 ADMIN_KEY = config.ADMIN_KEY
@@ -1023,12 +1103,20 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         distance_records.sort(key=lambda x: x.get('date') or '', reverse=True)
         cool_factor_records.sort(key=lambda x: x.get('date') or '', reverse=True)
 
+        # Get user's display preferences
+        cursor = conn.execute(
+            "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
+            (user.callsign,)
+        )
+        display_prefs = dict(cursor.fetchone()) if cursor else {}
+
         return templates.TemplateResponse("records.html", {
             "request": request,
             "user": user,
             "world_records": world_records,
             "distance_records": distance_records,
             "cool_factor_records": cool_factor_records,
+            "display_prefs": display_prefs,
         })
 
 
@@ -1242,6 +1330,18 @@ async def get_competitor(
 
         # Can sync if: viewing own profile with QRZ key, OR admin/referee viewing someone with QRZ key
         can_sync = has_qrz_key and (is_own_profile or user.is_admin or user.is_referee)
+
+        # Get logged-in user's display preferences (used for displaying distances/times)
+        cursor = conn.execute(
+            "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
+            (user.callsign,)
+        )
+        user_prefs = cursor.fetchone()
+        if user_prefs:
+            # Add display preferences to competitor_dict so template can use them
+            competitor_dict["distance_unit"] = user_prefs["distance_unit"]
+            competitor_dict["time_display"] = user_prefs["time_display"]
+            competitor_dict["home_grid"] = user_prefs["home_grid"]
 
         # Get team info if viewing own profile
         user_team = None
@@ -1918,9 +2018,11 @@ async def user_dashboard(
         bronze = sum((1 if m["qso_race_medal"] == "bronze" else 0) + (1 if m["cool_factor_medal"] == "bronze" else 0) for m in medals)
         total_points = sum(m["total_points"] for m in medals)
 
-        # Get competitor info
+        # Get competitor info including display preferences
         cursor = conn.execute(
-            "SELECT first_name, registered_at, last_sync_at FROM competitors WHERE callsign = ?",
+            """SELECT first_name, registered_at, last_sync_at,
+                      distance_unit, time_display, home_grid
+               FROM competitors WHERE callsign = ?""",
             (user.callsign,)
         )
         competitor_info = dict(cursor.fetchone())
@@ -2000,7 +2102,8 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
         cursor = conn.execute(
             """SELECT email, email_verified, registered_at, first_name, last_name,
                       email_notifications_enabled, email_medal_notifications,
-                      email_match_reminders, email_record_notifications
+                      email_match_reminders, email_record_notifications,
+                      distance_unit, time_display, home_grid
                FROM competitors WHERE callsign = ?""",
             (user.callsign,)
         )
@@ -2171,6 +2274,31 @@ async def update_notification_preferences(
             )
         )
     return RedirectResponse(url="/settings?updated=notifications", status_code=303)
+
+
+@app.post("/settings/display")
+async def update_display_preferences(
+    request: Request,
+    distance_unit: str = Form("km"),
+    time_display: str = Form("utc"),
+    user: User = Depends(require_user)
+):
+    """Update display preferences (distance units, time format)."""
+    # Validate inputs
+    if distance_unit not in ("km", "mi"):
+        distance_unit = "km"
+    if time_display not in ("utc", "local"):
+        time_display = "utc"
+
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE competitors SET
+               distance_unit = ?,
+               time_display = ?
+               WHERE callsign = ?""",
+            (distance_unit, time_display, user.callsign)
+        )
+    return RedirectResponse(url="/settings?updated=display", status_code=303)
 
 
 # ============================================================

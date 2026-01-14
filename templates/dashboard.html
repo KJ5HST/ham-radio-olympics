@@ -416,9 +416,13 @@ async function rejectInvite(teamId) {
             <td>{{ record.record_type | replace('_', ' ') | title }}</td>
             <td>
                 {% if 'distance' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km
+                    {{ record.value | format_distance(competitor.distance_unit or 'km') }}
                 {% elif 'cool_factor' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km/W
+                    {% if competitor.distance_unit == 'mi' %}
+                        {{ "%.1f" | format(record.value * 0.621371) }} mi/W
+                    {% else %}
+                        {{ "%.1f" | format(record.value) }} km/W
+                    {% endif %}
                 {% elif 'power' in record.record_type %}
                     {{ "%.1f" | format(record.value) }} W
                 {% else %}
@@ -449,9 +453,13 @@ async function rejectInvite(teamId) {
             <td>{{ record.record_type | replace('_', ' ') | title }}</td>
             <td>
                 {% if 'distance' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km
+                    {{ record.value | format_distance(competitor.distance_unit or 'km') }}
                 {% elif 'cool_factor' in record.record_type %}
-                    {{ "%.1f" | format(record.value) }} km/W
+                    {% if competitor.distance_unit == 'mi' %}
+                        {{ "%.1f" | format(record.value * 0.621371) }} mi/W
+                    {% else %}
+                        {{ "%.1f" | format(record.value) }} km/W
+                    {% endif %}
                 {% elif 'power' in record.record_type %}
                     {{ "%.1f" | format(record.value) }} W
                 {% else %}
@@ -573,7 +581,7 @@ async function rejectInvite(teamId) {
     <tbody>
         {% for qso in qsos %}
         <tr>
-            <td>{{ qso.qso_datetime_utc | format_datetime }}</td>
+            <td>{{ qso.qso_datetime_utc | format_time_local(qso.dx_grid if competitor.time_display == 'local' else none, competitor.time_display or 'utc') }}</td>
             <td>
                 <span class="dx-callsign" title="{{ qso.dx_country or '' }}">
                     {{ qso.dx_dxcc | country_flag }}
@@ -586,7 +594,7 @@ async function rejectInvite(teamId) {
             <td>{{ qso.band or '-' }}</td>
             <td>{{ qso.mode or '-' }}</td>
             <td>{% if qso.tx_power_w %}{{ qso.tx_power_w }}W{% else %}-{% endif %}</td>
-            <td>{{ "%.0f" | format(qso.distance_km) if qso.distance_km else '-' }} km</td>
+            <td>{{ qso.distance_km | format_distance(competitor.distance_unit or 'km') if qso.distance_km else '-' }}</td>
             <td>{{ "%.1f" | format(qso.cool_factor) if qso.cool_factor else '-' }}</td>
             <td>{% if qso.is_confirmed %}Yes{% else %}No{% endif %}</td>
         </tr>

@@ -19,6 +19,7 @@
     {% elif request.query_params.get('updated') == 'lotw_removed' %}LoTW credentials removed.
     {% elif request.query_params.get('updated') == 'verification_sent' %}Verification email sent. Please check your inbox.
     {% elif request.query_params.get('updated') == 'notifications' %}Email notification preferences updated.
+    {% elif request.query_params.get('updated') == 'display' %}Display preferences updated.
     {% endif %}
 </div>
 {% endif %}
@@ -133,6 +134,31 @@
             <button type="button" class="btn" style="background: #c53030;" onclick="removeLotwCreds()">Remove</button>
             {% endif %}
         </div>
+    </form>
+</div>
+
+<h3 id="display">Display Preferences</h3>
+<div class="card">
+    <p style="font-size: 0.9em; color: #718096; margin-bottom: 15px;">Customize how distances and times are displayed throughout the site.</p>
+    <form action="/settings/display" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 15px;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="distance_unit">Distance Unit</label>
+                <select id="distance_unit" name="distance_unit" style="width: 100%;">
+                    <option value="km" {% if account.distance_unit == 'km' %}selected{% endif %}>Kilometers (km)</option>
+                    <option value="mi" {% if account.distance_unit == 'mi' %}selected{% endif %}>Miles (mi)</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="time_display">Time Display</label>
+                <select id="time_display" name="time_display" style="width: 100%;">
+                    <option value="utc" {% if account.time_display == 'utc' %}selected{% endif %}>UTC</option>
+                    <option value="local" {% if account.time_display == 'local' %}selected{% endif %}>Local Time (based on QSO grid)</option>
+                </select>
+            </div>
+        </div>
+        <button type="submit" class="btn">Save Display Preferences</button>
     </form>
 </div>
 

@@ -282,16 +282,44 @@ tr {
 .alert-success {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%);
     border-left: 4px solid var(--success-color);
+    color: #065f46;
 }
 
 .alert-error {
     background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
     border-left: 4px solid var(--danger-color);
+    color: #991b1b;
 }
 
 .alert-info {
     background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
     border-left: 4px solid var(--info-color);
+    color: #1e40af;
+}
+
+/* Dark mode alerts */
+[data-theme="dark"] .alert-success {
+    color: #6ee7b7;
+}
+
+[data-theme="dark"] .alert-error {
+    color: #fca5a5;
+}
+
+[data-theme="dark"] .alert-info {
+    color: #93c5fd;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .alert-success {
+        color: #6ee7b7;
+    }
+    :root:not([data-theme="light"]) .alert-error {
+        color: #fca5a5;
+    }
+    :root:not([data-theme="light"]) .alert-info {
+        color: #93c5fd;
+    }
 }
 
 /* Toast notifications with blur */
