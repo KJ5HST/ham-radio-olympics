@@ -3266,6 +3266,34 @@ async def admin_merge_duplicates(_: bool = Depends(verify_admin)):
         return {"message": "No duplicate QSOs found"}
 
 
+@app.post("/admin/send-medal-notifications")
+async def admin_send_medal_notifications(_: bool = Depends(verify_admin)):
+    """Send email notifications for new medals."""
+    from email_service import notify_new_medals
+
+    result = await notify_new_medals()
+
+    if result["sent"] > 0:
+        return {"message": f"Sent {result['sent']} medal notifications, skipped {result['skipped']}, errors {result['errors']}"}
+    elif result["skipped"] > 0:
+        return {"message": f"No notifications sent, skipped {result['skipped']} (no email or disabled)"}
+    else:
+        return {"message": "No new medals to notify"}
+
+
+@app.post("/admin/send-match-reminders")
+async def admin_send_match_reminders(_: bool = Depends(verify_admin), hours: int = 24):
+    """Send email reminders for matches starting soon."""
+    from email_service import send_match_reminders
+
+    result = await send_match_reminders(hours_before=hours)
+
+    if result["sent"] > 0:
+        return {"message": f"Sent {result['sent']} match reminders, errors {result['errors']}"}
+    else:
+        return {"message": "No upcoming matches to remind about"}
+
+
 @app.get("/admin/teams", response_class=HTMLResponse)
 async def admin_teams_page(
     request: Request,

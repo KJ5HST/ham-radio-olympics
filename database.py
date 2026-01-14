@@ -278,6 +278,22 @@ def init_db():
                 conn.execute("ALTER TABLE matches ADD COLUMN max_power_w INTEGER")
                 conn.commit()
 
+        # Migration: add email_notifications_enabled to competitors
+        if 'competitors' in tables:
+            cursor = conn.execute("PRAGMA table_info(competitors)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'email_notifications_enabled' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN email_notifications_enabled INTEGER NOT NULL DEFAULT 1")
+                conn.commit()
+
+        # Migration: add notified_at to medals
+        if 'medals' in tables:
+            cursor = conn.execute("PRAGMA table_info(medals)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'notified_at' not in columns:
+                conn.execute("ALTER TABLE medals ADD COLUMN notified_at TEXT")
+                conn.commit()
+
         # Migration: update sports table to support 'any' target_type
         # SQLite doesn't support modifying CHECK constraints, so we need to recreate the table
         if 'sports' in tables:
@@ -318,6 +334,7 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 email TEXT,
                 email_verified INTEGER NOT NULL DEFAULT 0,
+                email_notifications_enabled INTEGER NOT NULL DEFAULT 1,
                 first_name TEXT,
                 last_name TEXT,
                 qrz_api_key_encrypted TEXT,
@@ -433,6 +450,7 @@ def init_db():
                 cool_factor_claim_time TEXT,
                 pota_bonus INTEGER NOT NULL DEFAULT 0,
                 total_points INTEGER NOT NULL DEFAULT 0,
+                notified_at TEXT,
                 FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
                 FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
                 UNIQUE (match_id, callsign, role)

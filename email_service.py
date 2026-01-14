@@ -725,3 +725,161 @@ Ham Radio Olympics
         body=plain_body.strip(),
         html_body=html_body
     )
+
+
+async def notify_new_medals() -> dict:
+    """
+    Send notifications for new medals that haven't been notified yet.
+
+    Returns:
+        Dict with counts of notifications sent and any errors
+    """
+    from database import get_db
+
+    results = {"sent": 0, "skipped": 0, "errors": 0}
+
+    with get_db() as conn:
+        # Find medals with actual medals (gold/silver/bronze) that haven't been notified
+        # Only notify users who have email notifications enabled and a verified email
+        cursor = conn.execute("""
+            SELECT m.id, m.callsign, m.role, m.qso_race_medal, m.cool_factor_medal,
+                   m.total_points, mat.target_value, s.name as sport_name,
+                   c.email, c.email_notifications_enabled, c.email_verified
+            FROM medals m
+            JOIN matches mat ON m.match_id = mat.id
+            JOIN sports s ON mat.sport_id = s.id
+            JOIN competitors c ON m.callsign = c.callsign
+            WHERE m.notified_at IS NULL
+              AND (m.qso_race_medal IS NOT NULL OR m.cool_factor_medal IS NOT NULL)
+        """)
+        medals = cursor.fetchall()
+
+        for medal in medals:
+            medal = dict(medal)
+
+            # Skip if no email or notifications disabled
+            if not medal["email"] or not medal["email_notifications_enabled"]:
+                results["skipped"] += 1
+                # Mark as notified anyway to prevent future attempts
+                conn.execute(
+                    "UPDATE medals SET notified_at = ? WHERE id = ?",
+                    (datetime.utcnow().isoformat(), medal["id"])
+                )
+                continue
+
+            # Skip unverified emails
+            if not medal["email_verified"]:
+                results["skipped"] += 1
+                conn.execute(
+                    "UPDATE medals SET notified_at = ? WHERE id = ?",
+                    (datetime.utcnow().isoformat(), medal["id"])
+                )
+                continue
+
+            # Determine which medal(s) to report
+            notifications_to_send = []
+            if medal["qso_race_medal"]:
+                notifications_to_send.append(("QSO Race", medal["qso_race_medal"]))
+            if medal["cool_factor_medal"]:
+                notifications_to_send.append(("Cool Factor", medal["cool_factor_medal"]))
+
+            # Send one email per medal record (may have multiple competitions)
+            for competition, medal_type in notifications_to_send:
+                points = {"gold": 3, "silver": 2, "bronze": 1}.get(medal_type, 0)
+                try:
+                    success = await send_medal_notification_email(
+                        callsign=medal["callsign"],
+                        email=medal["email"],
+                        sport_name=medal["sport_name"],
+                        match_name=medal["target_value"],
+                        medal_type=medal_type,
+                        competition=competition,
+                        points=points
+                    )
+                    if success:
+                        results["sent"] += 1
+                    else:
+                        results["errors"] += 1
+                except Exception as e:
+                    logger.error(f"Failed to send medal notification to {medal['callsign']}: {e}")
+                    results["errors"] += 1
+
+            # Mark as notified
+            conn.execute(
+                "UPDATE medals SET notified_at = ? WHERE id = ?",
+                (datetime.utcnow().isoformat(), medal["id"])
+            )
+
+    logger.info(f"Medal notifications: sent={results['sent']}, skipped={results['skipped']}, errors={results['errors']}")
+    return results
+
+
+async def send_match_reminders(hours_before: int = 24) -> dict:
+    """
+    Send reminders for matches starting soon.
+
+    Args:
+        hours_before: Hours before match start to send reminder
+
+    Returns:
+        Dict with counts of reminders sent and any errors
+    """
+    from database import get_db
+
+    results = {"sent": 0, "skipped": 0, "errors": 0}
+    now = datetime.utcnow()
+    reminder_window = now + timedelta(hours=hours_before)
+
+    with get_db() as conn:
+        # Find matches starting within the reminder window that haven't had reminders sent
+        # We use a simple approach: only send reminders for matches starting in the next X hours
+        # that start after now
+        cursor = conn.execute("""
+            SELECT m.id, m.target_value, m.start_date, m.end_date,
+                   s.id as sport_id, s.name as sport_name
+            FROM matches m
+            JOIN sports s ON m.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE o.is_active = 1
+              AND m.start_date > ?
+              AND m.start_date <= ?
+        """, (now.isoformat(), reminder_window.isoformat()))
+        upcoming_matches = cursor.fetchall()
+
+        for match in upcoming_matches:
+            match = dict(match)
+
+            # Get all competitors entered in this sport with notifications enabled
+            cursor = conn.execute("""
+                SELECT c.callsign, c.email, c.email_verified, c.email_notifications_enabled
+                FROM competitors c
+                JOIN sport_entries se ON c.callsign = se.callsign
+                WHERE se.sport_id = ?
+                  AND c.email IS NOT NULL
+                  AND c.email_verified = 1
+                  AND c.email_notifications_enabled = 1
+            """, (match["sport_id"],))
+            competitors = cursor.fetchall()
+
+            for competitor in competitors:
+                competitor = dict(competitor)
+                try:
+                    success = await send_match_reminder_email(
+                        callsign=competitor["callsign"],
+                        email=competitor["email"],
+                        sport_name=match["sport_name"],
+                        match_name=match["target_value"],
+                        target_value=match["target_value"],
+                        start_date=match["start_date"][:10],  # Just the date portion
+                        end_date=match["end_date"][:10]
+                    )
+                    if success:
+                        results["sent"] += 1
+                    else:
+                        results["errors"] += 1
+                except Exception as e:
+                    logger.error(f"Failed to send match reminder to {competitor['callsign']}: {e}")
+                    results["errors"] += 1
+
+    logger.info(f"Match reminders: sent={results['sent']}, skipped={results['skipped']}, errors={results['errors']}")
+    return results

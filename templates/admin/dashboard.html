@@ -38,6 +38,14 @@
         <div class="value">🔗</div>
         <div class="label">Merge Duplicates</div>
     </div>
+    <div class="stat-box" style="cursor: pointer;" onclick="sendMedalNotifications()">
+        <div class="value">📧</div>
+        <div class="label">Medal Emails</div>
+    </div>
+    <div class="stat-box" style="cursor: pointer;" onclick="sendMatchReminders()">
+        <div class="value">⏰</div>
+        <div class="label">Match Reminders</div>
+    </div>
 </div>
 
 <h3>Olympiads</h3>
@@ -251,6 +259,58 @@ async function mergeDuplicates() {
         showToast(data.message || 'Duplicates merged', 'success');
     } catch (err) {
         console.error('Merge duplicates error:', err);
+        showToast('Error: ' + (err.message || 'Request failed'), 'error');
+    }
+}
+
+async function sendMedalNotifications() {
+    if (!confirm('Send medal notification emails to competitors who earned new medals?')) return;
+    showToast('Sending medal notifications...', 'info');
+    try {
+        const resp = await fetch('/admin/send-medal-notifications', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            try {
+                const errData = await resp.json();
+                showToast('Error: ' + (errData.detail || resp.statusText), 'error');
+            } catch {
+                showToast('Error: ' + resp.status + ' ' + resp.statusText, 'error');
+            }
+            return;
+        }
+        const data = await resp.json();
+        showToast(data.message || 'Notifications sent', 'success');
+    } catch (err) {
+        console.error('Medal notifications error:', err);
+        showToast('Error: ' + (err.message || 'Request failed'), 'error');
+    }
+}
+
+async function sendMatchReminders() {
+    if (!confirm('Send reminder emails for matches starting in the next 24 hours?')) return;
+    showToast('Sending match reminders...', 'info');
+    try {
+        const resp = await fetch('/admin/send-match-reminders', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            try {
+                const errData = await resp.json();
+                showToast('Error: ' + (errData.detail || resp.statusText), 'error');
+            } catch {
+                showToast('Error: ' + resp.status + ' ' + resp.statusText, 'error');
+            }
+            return;
+        }
+        const data = await resp.json();
+        showToast(data.message || 'Reminders sent', 'success');
+    } catch (err) {
+        console.error('Match reminders error:', err);
         showToast('Error: ' + (err.message || 'Request failed'), 'error');
     }
 }
