@@ -141,28 +141,6 @@
             background: var(--code-bg);
         }
 
-        code {
-            background: var(--code-bg);
-            padding: 0.2rem 0.4rem;
-            border-radius: 4px;
-            font-family: "SF Mono", Monaco, "Courier New", monospace;
-            font-size: 0.9em;
-        }
-
-        pre {
-            background: #2d3748;
-            color: #e2e8f0;
-            padding: 1rem;
-            border-radius: 8px;
-            overflow-x: auto;
-        }
-
-        pre code {
-            background: none;
-            padding: 0;
-            color: inherit;
-        }
-
         blockquote {
             border-left: 4px solid var(--accent-color);
             margin: 1rem 0;
@@ -188,6 +166,14 @@
         .note {
             background: #e6f3ff;
             border-left: 4px solid var(--accent-color);
+            padding: 1rem;
+            margin: 1rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .tip {
+            background: #f0fff4;
+            border-left: 4px solid #38a169;
             padding: 1rem;
             margin: 1rem 0;
             border-radius: 0 8px 8px 0;
@@ -221,7 +207,7 @@
     <div class="container">
         <h1>Ham Radio Olympics User Guide</h1>
         <p class="subtitle"><strong>A Competition Platform for Amateur Radio Operators</strong></p>
-        <p class="version">Version 1.0 &mdash; January 2026</p>
+        <p class="version">Version 1.1 &mdash; January 2026</p>
 
         <hr>
 
@@ -235,11 +221,11 @@
                         <li><a href="#competition-modes">1.3 Competition Modes</a></li>
                     </ul>
                 </li>
-                <li><a href="#getting-started">2. Getting Started (Competitors)</a>
+                <li><a href="#getting-started">2. Getting Started</a>
                     <ul>
                         <li><a href="#registration">2.1 Registration</a></li>
                         <li><a href="#syncing-qsos">2.2 Syncing Your QSOs</a></li>
-                        <li><a href="#competitor-profile">2.3 Your Dashboard and Profile</a></li>
+                        <li><a href="#competitor-profile">2.3 Your Dashboard</a></li>
                     </ul>
                 </li>
                 <li><a href="#competing">3. Competing</a>
@@ -247,6 +233,7 @@
                         <li><a href="#finding-competitions">3.1 Finding Active Competitions</a></li>
                         <li><a href="#target-types">3.2 Target Types</a></li>
                         <li><a href="#match-events">3.3 Match Events</a></li>
+                        <li><a href="#qrp-competitions">3.4 QRP Competitions</a></li>
                     </ul>
                 </li>
                 <li><a href="#scoring">4. Scoring &amp; Medals</a>
@@ -274,33 +261,33 @@
                         <li><a href="#medal-standings">6.3 Medal Standings</a></li>
                     </ul>
                 </li>
-                <li><a href="#referee-guide">7. Referee Guide</a>
+                <li><a href="#settings">7. Settings &amp; Preferences</a>
                     <ul>
-                        <li><a href="#referee-overview">7.1 Referee Role Overview</a></li>
-                        <li><a href="#referee-dashboard">7.2 Accessing the Referee Dashboard</a></li>
-                        <li><a href="#managing-matches">7.3 Managing Matches</a></li>
+                        <li><a href="#account-settings">7.1 Account Settings</a></li>
+                        <li><a href="#display-preferences">7.2 Display Preferences</a></li>
+                        <li><a href="#email-notifications">7.3 Email Notifications</a></li>
+                        <li><a href="#dark-mode">7.4 Dark Mode</a></li>
                     </ul>
                 </li>
-                <li><a href="#admin-guide">8. Administrator Guide</a>
+                <li><a href="#referee-guide">8. Referee Guide</a>
                     <ul>
-                        <li><a href="#admin-auth">8.1 Admin Authentication</a></li>
-                        <li><a href="#creating-olympiad">8.2 Creating an Olympiad</a></li>
-                        <li><a href="#creating-sports">8.3 Creating Sports</a></li>
-                        <li><a href="#creating-matches">8.4 Creating Matches</a></li>
-                        <li><a href="#managing-competitors">8.5 Managing Competitors</a></li>
-                        <li><a href="#managing-teams">8.6 Managing Teams</a></li>
+                        <li><a href="#referee-overview">8.1 Referee Role Overview</a></li>
+                        <li><a href="#referee-dashboard">8.2 Accessing the Referee Dashboard</a></li>
+                        <li><a href="#managing-matches">8.3 Managing Matches</a></li>
                     </ul>
                 </li>
-                <li><a href="#deployment">9. Deployment &amp; Configuration</a>
+                <li><a href="#admin-guide">9. Administrator Guide</a>
                     <ul>
-                        <li><a href="#env-vars">9.1 Environment Variables</a></li>
-                        <li><a href="#local-dev">9.2 Local Development</a></li>
-                        <li><a href="#flyio">9.3 Fly.io Deployment</a></li>
-                        <li><a href="#running-tests">9.4 Running Tests</a></li>
+                        <li><a href="#admin-dashboard">9.1 Admin Dashboard</a></li>
+                        <li><a href="#creating-olympiad">9.2 Creating an Olympiad</a></li>
+                        <li><a href="#creating-sports">9.3 Creating Sports</a></li>
+                        <li><a href="#creating-matches">9.4 Creating Matches</a></li>
+                        <li><a href="#managing-competitors">9.5 Managing Competitors</a></li>
+                        <li><a href="#managing-teams">9.6 Managing Teams</a></li>
+                        <li><a href="#site-settings">9.7 Site Settings</a></li>
                     </ul>
                 </li>
-                <li><a href="#api-reference">Appendix A: API Reference</a></li>
-                <li><a href="#glossary">Appendix B: Glossary</a></li>
+                <li><a href="#glossary">Glossary</a></li>
             </ul>
         </nav>
 
@@ -338,7 +325,7 @@
 
         <hr>
 
-        <h2 id="getting-started">2. Getting Started (Competitors)</h2>
+        <h2 id="getting-started">2. Getting Started</h2>
 
         <h3 id="registration">2.1 Registration</h3>
         <p>To participate in Ham Radio Olympics, you need to register with your callsign and connect at least one logging service (QRZ.com or LoTW).</p>
@@ -350,7 +337,7 @@
             <li>Enter your amateur radio callsign (e.g., W1ABC)</li>
             <li>Create a password for your account</li>
             <li>Provide your QRZ.com API key and/or LoTW credentials (at least one required)</li>
-            <li>Optionally provide an email address for password recovery</li>
+            <li>Optionally provide an email address for notifications and password recovery</li>
             <li>Submit your registration</li>
         </ol>
 
@@ -366,25 +353,24 @@
         <p>Ham Radio Olympics automatically pulls your QSO data from QRZ.com and/or LoTW. This includes confirmation status, which is required for medal eligibility.</p>
 
         <h4>Manual Sync</h4>
-        <p>To manually trigger a sync of your QSOs:</p>
         <ol>
-            <li>Navigate to your dashboard or the Sync page (<code>/sync</code>)</li>
+            <li>Navigate to your dashboard</li>
             <li>Click the "Sync QSOs" button</li>
             <li>Wait for the sync to complete (this may take a moment depending on log size)</li>
         </ol>
         <p>The system will fetch all QSOs from your connected services and match them against active matches in the current Olympiad.</p>
 
-        <h3 id="competitor-profile">2.3 Your Dashboard and Profile</h3>
-        <p>After logging in, your <strong>Dashboard</strong> (<code>/dashboard</code>) is your home base, displaying:</p>
+        <h3 id="competitor-profile">2.3 Your Dashboard</h3>
+        <p>After logging in, your <strong>Dashboard</strong> is your home base, displaying:</p>
         <ul>
             <li>Total points earned across all sports</li>
             <li>Medal count (Gold, Silver, Bronze)</li>
-            <li>Personal best records</li>
+            <li>Personal best records (current season and all-time)</li>
             <li>Team membership (if any)</li>
             <li>Recent qualifying QSOs</li>
             <li>Quick access to sync, settings, and exports</li>
         </ul>
-        <p>Your <strong>public profile</strong> is visible to other competitors at <code>/competitor/YOUR_CALLSIGN</code> (e.g., <code>/competitor/W1ABC</code>).</p>
+        <p>Your <strong>public profile</strong> is visible to other competitors and shows your achievements, medals, and competition history.</p>
 
         <hr>
 
@@ -432,6 +418,12 @@
             <li>8,000 km contact at 10 watts = 800 cool factor</li>
         </ul>
         <p>The three highest cool factor scores win medals. Ties are broken by earliest QSO time.</p>
+
+        <h3 id="qrp-competitions">3.4 QRP Competitions</h3>
+        <p>Some matches may have a maximum power limit for QRP (low power) competitions. Only QSOs at or below the specified power will qualify for that match. Check the match details to see if there's a power restriction.</p>
+        <div class="tip">
+            <strong>Tip:</strong> QRP contacts often have higher Cool Factor scores since you're dividing distance by a smaller power number!
+        </div>
 
         <hr>
 
@@ -488,7 +480,7 @@
         <h3 id="creating-team">5.2 Creating a Team</h3>
         <p>Any registered competitor can create a team:</p>
         <ol>
-            <li>Navigate to the Teams page (<code>/teams</code>)</li>
+            <li>Navigate to the Teams page</li>
             <li>Click "Create Team"</li>
             <li>Enter a team name and optional description</li>
             <li>Submit to create the team</li>
@@ -500,7 +492,7 @@
 
         <h4>Requesting to Join</h4>
         <ol>
-            <li>Browse existing teams at <code>/teams</code></li>
+            <li>Browse existing teams on the Teams page</li>
             <li>Click on the team you want to join</li>
             <li>Click "Request to Join"</li>
             <li>Wait for the team captain to approve your request</li>
@@ -531,7 +523,6 @@
                 <tr><td><strong>Delete Team</strong></td><td>Permanently delete the team</td></tr>
             </tbody>
         </table>
-        <p>To manage your team, navigate to your team's profile page at <code>/team/{id}</code>.</p>
 
         <h3 id="leaving-team">5.5 Leaving a Team</h3>
         <p>To leave your current team:</p>
@@ -552,17 +543,23 @@
         <h3 id="world-records">6.1 World Records</h3>
         <p>Ham Radio Olympics automatically tracks world records across all competitions. Records are tracked for achievements like:</p>
         <ul>
-            <li>Highest Cool Factor score in a single QSO</li>
-            <li>Fastest qualifying QSO after match start</li>
+            <li>Longest distance QSO</li>
+            <li>Highest Cool Factor score</li>
             <li>Longest distance QRP contact</li>
+            <li>Records by mode (CW, SSB, FT8, etc.)</li>
         </ul>
-        <p>View current records at <code>/records</code>.</p>
+        <p>View current records on the Records page.</p>
 
         <h3 id="personal-bests">6.2 Personal Bests</h3>
-        <p>Your competitor profile tracks your personal best performances, allowing you to measure your improvement over time. These are displayed on your profile page alongside your medal count and total points.</p>
+        <p>Your competitor profile tracks your personal best performances:</p>
+        <ul>
+            <li><strong>Current Season:</strong> Best performances during the active Olympiad</li>
+            <li><strong>All-Time:</strong> Your best performances across all Olympiads</li>
+        </ul>
+        <p>These are displayed on your dashboard alongside your medal count and total points.</p>
 
         <h3 id="medal-standings">6.3 Medal Standings</h3>
-        <p>The Medal Standings page (<code>/medals</code>) displays all competitors ranked by their total medal count. The leaderboard shows:</p>
+        <p>The Medal Standings page displays all competitors ranked by their total medal count. The leaderboard shows:</p>
         <ul>
             <li>Gold, Silver, and Bronze medal counts</li>
             <li>Total medals earned</li>
@@ -572,15 +569,67 @@
 
         <hr>
 
-        <h2 id="referee-guide">7. Referee Guide</h2>
+        <h2 id="settings">7. Settings &amp; Preferences</h2>
 
-        <h3 id="referee-overview">7.1 Referee Role Overview</h3>
+        <h3 id="account-settings">7.1 Account Settings</h3>
+        <p>Access your settings from the dropdown menu in the navigation bar. Here you can manage:</p>
+
+        <h4>Your Name</h4>
+        <p>Set your first and last name to display on leaderboards and in the navigation.</p>
+
+        <h4>Email Address</h4>
+        <p>Add or update your email for password recovery and notifications. Verify your email to enable notifications.</p>
+
+        <h4>Password</h4>
+        <p>Change your account password at any time.</p>
+
+        <h4>QRZ API Key</h4>
+        <p>Add, update, or remove your QRZ Logbook API key for automatic QSO sync.</p>
+
+        <h4>LoTW Credentials</h4>
+        <p>Add, update, or remove your Logbook of The World credentials for automatic QSO sync.</p>
+
+        <h3 id="display-preferences">7.2 Display Preferences</h3>
+        <p>Customize how information is displayed throughout the site:</p>
+
+        <h4>Distance Unit</h4>
+        <p>Choose between <strong>Kilometers (km)</strong> or <strong>Miles (mi)</strong>. All distances on the site will be converted to your preferred unit, including:</p>
+        <ul>
+            <li>QSO distances in tables</li>
+            <li>Cool Factor scores (shown as km/W or mi/W)</li>
+            <li>Personal records</li>
+            <li>World records</li>
+        </ul>
+
+        <h4>Time Display</h4>
+        <ul>
+            <li><strong>UTC:</strong> All times shown in Coordinated Universal Time (standard for amateur radio logging)</li>
+            <li><strong>Local Time:</strong> Times are converted to local time based on the QSO's grid square location</li>
+        </ul>
+
+        <h3 id="email-notifications">7.3 Email Notifications</h3>
+        <p>If you've added and verified an email address, you can receive notifications for:</p>
+        <ul>
+            <li><strong>Medal notifications:</strong> When you earn a new medal</li>
+            <li><strong>Weekly match digest:</strong> Upcoming matches in sports you've entered</li>
+            <li><strong>Record notifications:</strong> When you set a new world record</li>
+        </ul>
+        <p>You can enable or disable each notification type individually, or turn off all notifications at once.</p>
+
+        <h3 id="dark-mode">7.4 Dark Mode</h3>
+        <p>Click the moon/sun icon in the navigation bar to toggle between light and dark mode. The site also respects your device's color scheme preference automatically.</p>
+
+        <hr>
+
+        <h2 id="referee-guide">8. Referee Guide</h2>
+
+        <h3 id="referee-overview">8.1 Referee Role Overview</h3>
         <p>Referees are competitors with elevated privileges for specific sports. The referee role is granted by an administrator and allows you to manage matches and view detailed competitor information within your assigned sport(s).</p>
 
-        <h3 id="referee-dashboard">7.2 Accessing the Referee Dashboard</h3>
-        <p>Once granted referee status, you can access the referee dashboard at <code>/referee</code>. This provides an overview of your assigned sports and any pending tasks.</p>
+        <h3 id="referee-dashboard">8.2 Accessing the Referee Dashboard</h3>
+        <p>Once granted referee status, you can access the referee dashboard from the dropdown menu. This provides an overview of your assigned sports and any pending tasks.</p>
 
-        <h3 id="managing-matches">7.3 Managing Matches</h3>
+        <h3 id="managing-matches">8.3 Managing Matches</h3>
         <p>As a referee for a sport, you can:</p>
         <ul>
             <li>View all matches in your assigned sport(s)</li>
@@ -594,274 +643,106 @@
 
         <hr>
 
-        <h2 id="admin-guide">8. Administrator Guide</h2>
+        <h2 id="admin-guide">9. Administrator Guide</h2>
 
-        <h3 id="admin-auth">8.1 Admin Authentication</h3>
-        <p>Administrator access can be granted in two ways:</p>
-        <ol>
-            <li><strong>Admin User Account:</strong> A competitor account with admin privileges. Admins can grant admin status to other users via the admin dashboard.</li>
-            <li><strong>API Key Header:</strong> For programmatic access, include the <code>X-Admin-Key</code> header with requests. This key is configured as an environment variable (<code>ADMIN_KEY</code>) during deployment.</li>
-        </ol>
-        <p>To access the admin dashboard, log in with an admin account and navigate to <code>/admin</code>.</p>
+        <h3 id="admin-dashboard">9.1 Admin Dashboard</h3>
+        <p>Administrator access provides full control over the competition platform. Access the admin dashboard from the dropdown menu after logging in with an admin account.</p>
 
-        <h3 id="creating-olympiad">8.2 Creating an Olympiad</h3>
+        <h3 id="creating-olympiad">9.2 Creating an Olympiad</h3>
         <p>An Olympiad is the top-level container for a competition season. To create one:</p>
         <ol>
-            <li>Access the admin dashboard at <code>/admin</code></li>
+            <li>Access the admin dashboard</li>
             <li>Click "Create Olympiad"</li>
             <li>Provide name, start date, end date, and qualifying QSO minimum</li>
             <li>After creation, activate the Olympiad to make it current</li>
         </ol>
         <p>Only one Olympiad can be active at a time.</p>
 
-        <h3 id="creating-sports">8.3 Creating Sports</h3>
+        <h3 id="creating-sports">9.3 Creating Sports</h3>
         <p>Sports define categories of competition. Configuration options include:</p>
         <table>
             <thead>
-                <tr><th>Setting</th><th>Options / Description</th></tr>
+                <tr><th>Setting</th><th>Description</th></tr>
             </thead>
             <tbody>
-                <tr><td>Target Type</td><td>continent, country, park, call, grid, any</td></tr>
-                <tr><td>Interval</td><td>daily, weekly, bi-weekly, monthly, quarterly, annually</td></tr>
-                <tr><td>Work Enabled</td><td>true/false &mdash; allows hunting (working stations)</td></tr>
-                <tr><td>Activate Enabled</td><td>true/false &mdash; allows activating (being the target)</td></tr>
-                <tr><td>Separate Pools</td><td>true/false &mdash; if true, hunters and activators compete separately</td></tr>
+                <tr><td><strong>Target Type</strong></td><td>What to work/activate: continent, country, park, call, grid, or any</td></tr>
+                <tr><td><strong>Interval</strong></td><td>Suggested match frequency: daily, weekly, bi-weekly, monthly, quarterly, annually</td></tr>
+                <tr><td><strong>Work Enabled</strong></td><td>Allow hunters to compete</td></tr>
+                <tr><td><strong>Activate Enabled</strong></td><td>Allow activators to compete</td></tr>
+                <tr><td><strong>Separate Pools</strong></td><td>When enabled, hunters and activators compete in separate leaderboards</td></tr>
             </tbody>
         </table>
 
-        <h3 id="creating-matches">8.4 Creating Matches</h3>
+        <h3 id="creating-matches">9.4 Creating Matches</h3>
         <p>Matches are timed events within a sport. Each match requires:</p>
         <ul>
-            <li><strong>Start Date/Time:</strong> When the match begins (UTC recommended)</li>
+            <li><strong>Start Date/Time:</strong> When the match begins (UTC)</li>
             <li><strong>End Date/Time:</strong> When the match ends</li>
             <li><strong>Target Value:</strong> The specific target (e.g., "EU" for continent, "K-1234" for park)</li>
         </ul>
         <p>Optional match settings:</p>
         <ul>
-            <li><strong>Allowed Modes:</strong> Override sport-level mode restrictions for this match only</li>
-            <li><strong>Max Power (watts):</strong> Limit the match to QRP contacts &mdash; only QSOs at or below this power will qualify</li>
+            <li><strong>Allowed Modes:</strong> Restrict the match to specific modes (e.g., CW only)</li>
+            <li><strong>Max Power (watts):</strong> Set a power limit to create QRP-only competitions</li>
         </ul>
 
-        <h3 id="managing-competitors">8.5 Managing Competitors</h3>
+        <h3 id="managing-competitors">9.5 Managing Competitors</h3>
         <p>Administrators can:</p>
         <ul>
-            <li>View all registered competitors at <code>/admin/contestants</code></li>
+            <li>View all registered competitors</li>
+            <li>Enable or disable competitor accounts</li>
+            <li>Grant or revoke admin privileges</li>
+            <li>Grant or revoke referee roles</li>
+            <li>Assign referees to specific sports</li>
+            <li>Reset competitor passwords</li>
             <li>Remove competitors if necessary</li>
-            <li>Grant referee roles for specific sports</li>
-            <li>Revoke referee roles when needed</li>
         </ul>
 
-        <h3 id="managing-teams">8.6 Managing Teams</h3>
+        <h3 id="managing-teams">9.6 Managing Teams</h3>
         <p>Administrators have full team management capabilities:</p>
         <ul>
-            <li>View all teams at <code>/admin/teams</code></li>
+            <li>View all teams</li>
             <li>Create teams directly</li>
+            <li>Add or remove team members</li>
+            <li>Transfer team captaincy</li>
             <li>Delete teams if necessary</li>
         </ul>
 
-        <hr>
-
-        <h2 id="deployment">9. Deployment &amp; Configuration</h2>
-
-        <h3 id="env-vars">9.1 Environment Variables</h3>
-        <table>
-            <thead>
-                <tr><th>Variable</th><th>Description</th><th>Required</th></tr>
-            </thead>
-            <tbody>
-                <tr><td><code>ENCRYPTION_KEY</code></td><td>Secret key for encrypting QRZ API keys at rest</td><td>Yes</td></tr>
-                <tr><td><code>ADMIN_KEY</code></td><td>Secret for administrator authentication</td><td>Yes</td></tr>
-                <tr><td><code>DATABASE_PATH</code></td><td>Path to SQLite database file</td><td>No (default: <code>ham_olympics.db</code>)</td></tr>
-                <tr><td><code>PORT</code></td><td>Server port</td><td>No (default: <code>8000</code>)</td></tr>
-            </tbody>
-        </table>
-
-        <h3 id="local-dev">9.2 Local Development</h3>
-        <p>To run Ham Radio Olympics locally for development or testing:</p>
-        <ol>
-            <li>Clone the repository from GitHub</li>
-            <li>Install dependencies: <code>pip install -r requirements.txt</code></li>
-            <li>Set environment variables (<code>ENCRYPTION_KEY</code>, <code>ADMIN_KEY</code>)</li>
-            <li>Run: <code>python -m uvicorn main:app --reload</code></li>
-            <li>Open http://localhost:8000 in your browser</li>
-        </ol>
-
-        <h3 id="flyio">9.3 Fly.io Deployment</h3>
-        <p>Ham Radio Olympics includes a Dockerfile and <code>fly.toml</code> for easy deployment to Fly.io:</p>
-        <ol>
-            <li>Install flyctl: <code>curl -L https://fly.io/install.sh | sh</code></li>
-            <li>Login: <code>fly auth login</code></li>
-            <li>Create app: <code>fly launch --name ham-radio-olympics</code></li>
-            <li>Create persistent volume: <code>fly volumes create ham_olympics_data --size 1 --region iad</code></li>
-            <li>Set secrets: <code>fly secrets set ENCRYPTION_KEY="..." ADMIN_KEY="..."</code></li>
-            <li>Deploy: <code>fly deploy</code></li>
-        </ol>
-
-        <h3 id="running-tests">9.4 Running Tests</h3>
-        <p>The project includes a comprehensive test suite. Run tests with:</p>
-        <pre><code>pytest tests/ -v</code></pre>
-
-        <hr>
-
-        <h2 id="api-reference">Appendix A: API Reference</h2>
-
-        <h3>A.1 Public Endpoints (No Authentication Required)</h3>
-        <table>
-            <thead>
-                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-                <tr><td>GET</td><td><code>/</code></td><td>Landing page</td></tr>
-                <tr><td>GET</td><td><code>/health</code></td><td>Health check</td></tr>
-                <tr><td>GET</td><td><code>/signup</code></td><td>Registration page</td></tr>
-                <tr><td>POST</td><td><code>/signup</code></td><td>Register new competitor</td></tr>
-                <tr><td>GET</td><td><code>/login</code></td><td>Login page</td></tr>
-                <tr><td>POST</td><td><code>/login</code></td><td>Authenticate user</td></tr>
-                <tr><td>GET</td><td><code>/forgot-password</code></td><td>Password reset request page</td></tr>
-                <tr><td>POST</td><td><code>/forgot-password</code></td><td>Request password reset email</td></tr>
-                <tr><td>GET</td><td><code>/reset-password/{token}</code></td><td>Password reset page</td></tr>
-                <tr><td>POST</td><td><code>/reset-password/{token}</code></td><td>Reset password with token</td></tr>
-                <tr><td>GET</td><td><code>/verify-email/{token}</code></td><td>Verify email address</td></tr>
-            </tbody>
-        </table>
-
-        <h3>A.2 Authenticated User Endpoints</h3>
-        <p>These endpoints require a logged-in user:</p>
-        <table>
-            <thead>
-                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-                <tr><td>POST</td><td><code>/logout</code></td><td>Log out current user</td></tr>
-                <tr><td>GET</td><td><code>/dashboard</code></td><td>User dashboard</td></tr>
-                <tr><td>GET</td><td><code>/settings</code></td><td>User settings page</td></tr>
-                <tr><td>POST</td><td><code>/settings/name</code></td><td>Update display name</td></tr>
-                <tr><td>POST</td><td><code>/settings/email</code></td><td>Update email address</td></tr>
-                <tr><td>POST</td><td><code>/settings/password</code></td><td>Change password</td></tr>
-                <tr><td>POST</td><td><code>/settings/qrz-key</code></td><td>Set QRZ API key</td></tr>
-                <tr><td>DELETE</td><td><code>/settings/qrz-key</code></td><td>Remove QRZ API key</td></tr>
-                <tr><td>POST</td><td><code>/settings/lotw</code></td><td>Set LoTW credentials</td></tr>
-                <tr><td>DELETE</td><td><code>/settings/lotw</code></td><td>Remove LoTW credentials</td></tr>
-                <tr><td>GET</td><td><code>/olympiad</code></td><td>Current Olympiad details</td></tr>
-                <tr><td>GET</td><td><code>/olympiad/sports</code></td><td>List Sports</td></tr>
-                <tr><td>GET</td><td><code>/olympiad/sport/{id}</code></td><td>Sport details</td></tr>
-                <tr><td>GET</td><td><code>/olympiad/sport/{id}/participants</code></td><td>Sport participants</td></tr>
-                <tr><td>GET</td><td><code>/olympiad/sport/{id}/matches</code></td><td>List Matches</td></tr>
-                <tr><td>GET</td><td><code>/olympiad/sport/{id}/match/{id}</code></td><td>Match leaderboard</td></tr>
-                <tr><td>POST</td><td><code>/sport/{id}/enter</code></td><td>Enter a sport</td></tr>
-                <tr><td>POST</td><td><code>/sport/{id}/leave</code></td><td>Leave a sport</td></tr>
-                <tr><td>GET</td><td><code>/medals</code></td><td>Medal standings</td></tr>
-                <tr><td>GET</td><td><code>/records</code></td><td>World records</td></tr>
-                <tr><td>GET</td><td><code>/competitor/{call}</code></td><td>Competitor profile</td></tr>
-                <tr><td>GET</td><td><code>/sync</code></td><td>Sync page</td></tr>
-                <tr><td>POST</td><td><code>/sync</code></td><td>Trigger QRZ/LoTW sync</td></tr>
-                <tr><td>GET</td><td><code>/export/qsos</code></td><td>Export QSOs (CSV)</td></tr>
-                <tr><td>GET</td><td><code>/export/medals</code></td><td>Export medals (CSV)</td></tr>
-                <tr><td>GET</td><td><code>/teams</code></td><td>Team listings</td></tr>
-                <tr><td>GET</td><td><code>/team/{id}</code></td><td>Team profile</td></tr>
-                <tr><td>POST</td><td><code>/team</code></td><td>Create team</td></tr>
-                <tr><td>PUT</td><td><code>/team/{id}</code></td><td>Update team (captain only)</td></tr>
-                <tr><td>DELETE</td><td><code>/team/{id}</code></td><td>Delete team (captain only)</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/request</code></td><td>Request to join team</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/invite/{call}</code></td><td>Invite member (captain only)</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/approve/{call}</code></td><td>Approve join request (captain only)</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/decline/{call}</code></td><td>Decline join request (captain only)</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/accept</code></td><td>Accept team invitation</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/reject</code></td><td>Reject team invitation</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/leave</code></td><td>Leave team</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/remove/{call}</code></td><td>Remove member (captain only)</td></tr>
-                <tr><td>POST</td><td><code>/team/{id}/transfer/{call}</code></td><td>Transfer captain role</td></tr>
-            </tbody>
-        </table>
-
-        <h3>A.3 Referee Endpoints</h3>
-        <p>These endpoints require referee role for the associated sport:</p>
-        <table>
-            <thead>
-                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-                <tr><td>GET</td><td><code>/referee</code></td><td>Referee dashboard</td></tr>
-                <tr><td>GET</td><td><code>/admin/sport/{id}/matches</code></td><td>Manage sport matches</td></tr>
-                <tr><td>GET</td><td><code>/admin/sport/{id}/competitors</code></td><td>View sport competitors</td></tr>
-                <tr><td>POST</td><td><code>/admin/sport/{id}/competitor/{call}/disqualify</code></td><td>Disqualify competitor from sport</td></tr>
-            </tbody>
-        </table>
-
-        <h3>A.4 Admin Endpoints</h3>
-        <p>These endpoints require administrator privileges (admin user login or <code>X-Admin-Key</code> header):</p>
-        <table>
-            <thead>
-                <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-                <tr><td>GET</td><td><code>/admin</code></td><td>Admin dashboard</td></tr>
-                <tr><td>GET</td><td><code>/admin/audit-log</code></td><td>View audit log</td></tr>
-                <tr><td>GET</td><td><code>/admin/backup</code></td><td>Download database backup</td></tr>
-                <tr><td>POST</td><td><code>/admin/recompute-records</code></td><td>Recompute all medals and records</td></tr>
-                <tr><td>POST</td><td><code>/admin/olympiad</code></td><td>Create Olympiad</td></tr>
-                <tr><td>GET</td><td><code>/admin/olympiad/{id}</code></td><td>Get Olympiad details</td></tr>
-                <tr><td>PUT</td><td><code>/admin/olympiad/{id}</code></td><td>Update Olympiad</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/olympiad/{id}</code></td><td>Delete Olympiad</td></tr>
-                <tr><td>POST</td><td><code>/admin/olympiad/{id}/activate</code></td><td>Set as active Olympiad</td></tr>
-                <tr><td>POST</td><td><code>/admin/olympiad/{id}/deactivate</code></td><td>Deactivate Olympiad</td></tr>
-                <tr><td>GET</td><td><code>/admin/olympiad/{id}/sports</code></td><td>List sports in Olympiad</td></tr>
-                <tr><td>POST</td><td><code>/admin/olympiad/{id}/sport</code></td><td>Create Sport</td></tr>
-                <tr><td>GET</td><td><code>/admin/sport/{id}</code></td><td>Get Sport details</td></tr>
-                <tr><td>PUT</td><td><code>/admin/sport/{id}</code></td><td>Update Sport</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/sport/{id}</code></td><td>Delete Sport</td></tr>
-                <tr><td>POST</td><td><code>/admin/sport/{id}/match</code></td><td>Create Match</td></tr>
-                <tr><td>GET</td><td><code>/admin/match/{id}</code></td><td>Get Match details</td></tr>
-                <tr><td>PUT</td><td><code>/admin/match/{id}</code></td><td>Update Match</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/match/{id}</code></td><td>Delete Match</td></tr>
-                <tr><td>GET</td><td><code>/admin/competitors</code></td><td>List competitors</td></tr>
-                <tr><td>GET</td><td><code>/admin/export/competitors</code></td><td>Export competitors (CSV)</td></tr>
-                <tr><td>GET</td><td><code>/admin/export/standings/{id}</code></td><td>Export standings (CSV)</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitors/bulk-disable</code></td><td>Bulk disable competitors</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitors/bulk-enable</code></td><td>Bulk enable competitors</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitors/bulk-delete</code></td><td>Bulk delete competitors</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/disable</code></td><td>Disable competitor</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/enable</code></td><td>Enable competitor</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/set-admin</code></td><td>Grant admin role</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/remove-admin</code></td><td>Revoke admin role</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/set-referee</code></td><td>Grant referee role</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/remove-referee</code></td><td>Revoke referee role</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/assign-sport/{id}</code></td><td>Assign referee to sport</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/competitor/{call}/assign-sport/{id}</code></td><td>Remove referee from sport</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/disqualify</code></td><td>Disqualify competitor globally</td></tr>
-                <tr><td>POST</td><td><code>/admin/competitor/{call}/reset-password</code></td><td>Reset competitor password</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/competitor/{call}</code></td><td>Delete competitor</td></tr>
-                <tr><td>GET</td><td><code>/admin/teams</code></td><td>List all teams</td></tr>
-                <tr><td>POST</td><td><code>/admin/team</code></td><td>Create team</td></tr>
-                <tr><td>DELETE</td><td><code>/admin/team/{id}</code></td><td>Delete team</td></tr>
-                <tr><td>POST</td><td><code>/admin/team/{id}/add/{call}</code></td><td>Add member to team</td></tr>
-                <tr><td>POST</td><td><code>/admin/team/{id}/remove/{call}</code></td><td>Remove member from team</td></tr>
-                <tr><td>POST</td><td><code>/admin/team/{id}/transfer/{call}</code></td><td>Transfer team captain</td></tr>
-            </tbody>
-        </table>
-
-        <hr>
-
-        <h2 id="glossary">Appendix B: Glossary</h2>
+        <h3 id="site-settings">9.7 Site Settings</h3>
+        <p>Administrators can customize the site appearance from Admin Settings:</p>
         <ul>
-            <li><strong>Cool Factor:</strong> A scoring metric calculated as distance divided by transmit power, rewarding efficient operating.</li>
-            <li><strong>DXCC:</strong> DX Century Club, an ARRL award program. Also refers to the list of recognized "entities" (countries/territories) for award purposes.</li>
-            <li><strong>Grid Square:</strong> A Maidenhead Locator System designation for geographic location (e.g., FN31).</li>
-            <li><strong>LoTW:</strong> Logbook of The World, an ARRL-operated QSO confirmation service.</li>
-            <li><strong>Match:</strong> A timed competition event within a sport, targeting a specific entity.</li>
-            <li><strong>Olympiad:</strong> A competition season containing multiple sports.</li>
-            <li><strong>P2P (Park-to-Park):</strong> A contact where both stations are activating parks, earning bonus points.</li>
-            <li><strong>POTA:</strong> Parks on the Air, an amateur radio program encouraging portable operations from parks.</li>
-            <li><strong>QRP:</strong> Low-power amateur radio operation, typically 5 watts or less for CW and 10 watts or less for SSB. Matches can set a max power limit to create QRP-only competitions.</li>
-            <li><strong>QRZ:</strong> QRZ.com, a callsign lookup database and online logbook service.</li>
-            <li><strong>QSO:</strong> A radio contact between two stations.</li>
-            <li><strong>QSO Race:</strong> A medal event rewarding the first three confirmed contacts with a match target.</li>
-            <li><strong>Sport:</strong> A category of competition within an Olympiad (e.g., DX Challenge, POTA).</li>
+            <li><strong>Theme:</strong> Choose from multiple visual themes (Olympics, Cool Contest, Neon, Midnight)</li>
+            <li><strong>Site Name:</strong> Customize the site title displayed in the header</li>
+            <li><strong>Tagline:</strong> Set a custom tagline displayed below the site name</li>
         </ul>
 
         <hr>
 
-        <p class="footer"><em>&mdash; End of Document &mdash;</em></p>
+        <h2 id="glossary">Glossary</h2>
+        <table>
+            <thead>
+                <tr><th>Term</th><th>Definition</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Cool Factor</strong></td><td>A scoring metric calculated as distance divided by transmit power, rewarding efficient operating.</td></tr>
+                <tr><td><strong>DXCC</strong></td><td>DX Century Club, an ARRL award program. Also refers to the list of recognized "entities" (countries/territories) for award purposes.</td></tr>
+                <tr><td><strong>Grid Square</strong></td><td>A Maidenhead Locator System designation for geographic location (e.g., FN31).</td></tr>
+                <tr><td><strong>LoTW</strong></td><td>Logbook of The World, an ARRL-operated QSO confirmation service.</td></tr>
+                <tr><td><strong>Match</strong></td><td>A timed competition event within a sport, targeting a specific entity.</td></tr>
+                <tr><td><strong>Olympiad</strong></td><td>A competition season containing multiple sports.</td></tr>
+                <tr><td><strong>P2P (Park-to-Park)</strong></td><td>A contact where both stations are activating parks, earning bonus points.</td></tr>
+                <tr><td><strong>POTA</strong></td><td>Parks on the Air, an amateur radio program encouraging portable operations from parks.</td></tr>
+                <tr><td><strong>QRP</strong></td><td>Low-power amateur radio operation, typically 5 watts or less for CW and 10 watts or less for SSB.</td></tr>
+                <tr><td><strong>QRZ</strong></td><td>QRZ.com, a callsign lookup database and online logbook service.</td></tr>
+                <tr><td><strong>QSO</strong></td><td>A radio contact between two stations.</td></tr>
+                <tr><td><strong>QSO Race</strong></td><td>A medal event rewarding the first three confirmed contacts with a match target.</td></tr>
+                <tr><td><strong>Sport</strong></td><td>A category of competition within an Olympiad (e.g., DX Challenge, POTA).</td></tr>
+            </tbody>
+        </table>
+
+        <hr>
+
+        <p class="footer"><em>&mdash; End of User Guide &mdash;</em></p>
     </div>
 </body>
 </html>
