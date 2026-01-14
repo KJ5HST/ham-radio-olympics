@@ -11,7 +11,7 @@
 
 <div class="card">
     <p><strong>Target Type:</strong> {{ sport.target_type | title }}</p>
-    <p><strong>Modes:</strong>
+    <p><strong>Competition Modes:</strong>
         {% if sport.work_enabled %}Work{% endif %}
         {% if sport.work_enabled and sport.activate_enabled %} / {% endif %}
         {% if sport.activate_enabled %}Activate{% endif %}
@@ -19,6 +19,7 @@
     {% if sport.separate_pools %}
     <p><em>Work and Activate have separate medal pools</em></p>
     {% endif %}
+    <p><strong>Allowed Modes:</strong> {{ sport.allowed_modes if sport.allowed_modes else 'All modes' }}</p>
     <p><strong>Participants:</strong> {{ entry_count }} <a href="/olympiad/sport/{{ sport.id }}/participants" title="View participants"><span class="icon">👥</span></a></p>
     {% if user %}
     <div style="margin-top: 10px;">
