@@ -518,22 +518,60 @@ tr:hover {
     font-family: 'Rajdhani', sans-serif !important;
 }
 
+/* Light mode alerts - darker text for readability */
 .alert-success {
+    background: #e8f5e9 !important;
+    border-color: #2e7d32 !important;
+    color: #1b5e20 !important;
+}
+
+.alert-error {
+    background: #ffebee !important;
+    border-color: #c62828 !important;
+    color: #b71c1c !important;
+}
+
+.alert-info {
+    background: #e3f2fd !important;
+    border-color: #1565c0 !important;
+    color: #0d47a1 !important;
+}
+
+/* Dark mode alerts - neon colors */
+[data-theme="dark"] .alert-success {
     background: rgba(0, 255, 136, 0.1) !important;
     border-color: #00ff88 !important;
     color: #00ff88 !important;
 }
 
-.alert-error {
+[data-theme="dark"] .alert-error {
     background: rgba(255, 0, 85, 0.1) !important;
     border-color: #ff0055 !important;
     color: #ff0055 !important;
 }
 
-.alert-info {
+[data-theme="dark"] .alert-info {
     background: rgba(0, 245, 255, 0.1) !important;
     border-color: #00f5ff !important;
     color: #00f5ff !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .alert-success {
+        background: rgba(0, 255, 136, 0.1) !important;
+        border-color: #00ff88 !important;
+        color: #00ff88 !important;
+    }
+    :root:not([data-theme="light"]) .alert-error {
+        background: rgba(255, 0, 85, 0.1) !important;
+        border-color: #ff0055 !important;
+        color: #ff0055 !important;
+    }
+    :root:not([data-theme="light"]) .alert-info {
+        background: rgba(0, 245, 255, 0.1) !important;
+        border-color: #00f5ff !important;
+        color: #00f5ff !important;
+    }
 }
 
 /* Toast notifications */
