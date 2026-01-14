@@ -1041,7 +1041,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
             WHERE m.qualified = 1
             GROUP BY m.callsign
             HAVING total_medals > 0
-            ORDER BY total_points DESC, gold_count DESC, silver_count DESC, bronze_count DESC
+            ORDER BY total_medals DESC, gold_count DESC, silver_count DESC, bronze_count DESC
         """)
         medal_standings = [dict(row) for row in cursor.fetchall()]
 
