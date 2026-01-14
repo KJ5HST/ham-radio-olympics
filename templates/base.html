@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Ham Radio Olympics{% endblock %}</title>
+    <title>{% block title %}{{ get_site_config().name }}{% endblock %}</title>
     <style>
         /* CSS Custom Properties for theming */
         :root {
@@ -670,6 +670,8 @@
             }
         }
     </style>
+    <!-- Theme-specific styles -->
+    <link rel="stylesheet" href="/static/themes/{{ get_site_config().theme }}.css">
 </head>
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -680,8 +682,8 @@
     <header>
         <div class="header-content">
             <div>
-                <h1>Ham Radio Olympics</h1>
-                <p>Olympic-style amateur radio competition</p>
+                <h1>{{ get_site_config().name }}</h1>
+                <p>{{ get_site_config().tagline }}</p>
             </div>
             <a href="/static/user_guide.html" class="header-help-link" title="User Guide" aria-label="Help and User Guide" target="_blank">?</a>
         </div>

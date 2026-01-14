@@ -1,0 +1,423 @@
+/* Midnight Theme - Luxurious dark blue with gold accents */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Source+Sans+Pro:wght@400;500;600&display=swap');
+
+:root {
+    /* Light mode - navy and cream */
+    --bg-primary: #f7f5f2 !important;
+    --bg-secondary: #ffffff !important;
+    --bg-card: linear-gradient(145deg, #ffffff 0%, #f0ede8 100%) !important;
+    --bg-card-solid: #f7f5f2 !important;
+    --text-primary: #1a1a2e !important;
+    --text-secondary: #4a4a5a !important;
+    --text-heading: #1a1a2e !important;
+    --text-subheading: #2d2d44 !important;
+    --border-color: #d4cfc4 !important;
+    --shadow-color: rgba(26, 26, 46, 0.1) !important;
+    --shadow-lg: 0 10px 40px -10px rgba(26, 26, 46, 0.2) !important;
+
+    /* Gold accent */
+    --accent-color: #b8860b !important;
+    --accent-hover: #996600 !important;
+    --accent-glow: rgba(184, 134, 11, 0.3) !important;
+
+    /* Header - deep navy */
+    --header-gradient: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #2d3a4f 100%) !important;
+    --header-glow: 0 4px 30px rgba(184, 134, 11, 0.2) !important;
+
+    /* Buttons */
+    --btn-primary-bg: linear-gradient(135deg, #b8860b 0%, #d4a017 100%) !important;
+    --btn-primary-hover: linear-gradient(135deg, #996600 0%, #b8860b 100%) !important;
+
+    /* Status colors */
+    --success-color: #2e7d32 !important;
+    --warning-color: #f9a825 !important;
+    --danger-color: #c62828 !important;
+    --info-color: #1565c0 !important;
+
+    /* Fonts - elegant serif for headings */
+    --font-sans: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-heading: 'Playfair Display', Georgia, serif;
+
+    /* Slightly larger radius for elegance */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 20px;
+}
+
+/* Dark mode - deep navy with gold */
+[data-theme="dark"] {
+    --bg-primary: #0d1b2a !important;
+    --bg-secondary: #1b263b !important;
+    --bg-card: linear-gradient(145deg, #1b263b 0%, #0d1b2a 100%) !important;
+    --bg-card-solid: #1b263b !important;
+    --text-primary: #e8e4dc !important;
+    --text-secondary: #a09a8c !important;
+    --text-heading: #f0ede8 !important;
+    --text-subheading: #c8c2b4 !important;
+    --border-color: #2d3a4f !important;
+    --shadow-color: rgba(0, 0, 0, 0.4) !important;
+    --shadow-lg: 0 10px 40px -10px rgba(0, 0, 0, 0.6) !important;
+    --accent-glow: rgba(184, 134, 11, 0.4) !important;
+    --header-gradient: linear-gradient(135deg, #050d14 0%, #0d1b2a 50%, #1b263b 100%) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-primary: #0d1b2a !important;
+        --bg-secondary: #1b263b !important;
+        --bg-card: linear-gradient(145deg, #1b263b 0%, #0d1b2a 100%) !important;
+        --bg-card-solid: #1b263b !important;
+        --text-primary: #e8e4dc !important;
+        --text-secondary: #a09a8c !important;
+        --text-heading: #f0ede8 !important;
+        --text-subheading: #c8c2b4 !important;
+        --border-color: #2d3a4f !important;
+        --shadow-color: rgba(0, 0, 0, 0.4) !important;
+        --shadow-lg: 0 10px 40px -10px rgba(0, 0, 0, 0.6) !important;
+        --accent-glow: rgba(184, 134, 11, 0.4) !important;
+        --header-gradient: linear-gradient(135deg, #050d14 0%, #0d1b2a 50%, #1b263b 100%) !important;
+    }
+}
+
+/* Base typography */
+body {
+    font-family: var(--font-sans) !important;
+    letter-spacing: 0.01em !important;
+}
+
+/* Elegant headings with serif font */
+h1, h2, h3 {
+    font-family: var(--font-heading) !important;
+}
+
+/* Enhanced header with gold accent line */
+header {
+    background: var(--header-gradient) !important;
+    box-shadow: var(--header-glow) !important;
+    border-radius: var(--radius-lg) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+header::before {
+    content: '' !important;
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 3px !important;
+    background: linear-gradient(90deg, transparent, #b8860b, #d4a017, #b8860b, transparent) !important;
+}
+
+header::after {
+    content: '' !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background: radial-gradient(ellipse at 50% 0%, rgba(184, 134, 11, 0.08) 0%, transparent 60%) !important;
+    pointer-events: none !important;
+}
+
+header h1 {
+    font-family: var(--font-heading) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em !important;
+    color: #f0ede8 !important;
+}
+
+header p {
+    font-family: var(--font-sans) !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    font-size: 0.7rem !important;
+    color: #b8860b !important;
+}
+
+/* Elegant navigation */
+nav {
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+nav a {
+    font-weight: 500 !important;
+    transition: color 0.2s ease !important;
+}
+
+/* Links - dark gold in light mode */
+a {
+    color: #8b6914 !important;
+}
+
+a:hover {
+    color: #6b5010 !important;
+}
+
+/* Links in dark mode - brighter gold */
+[data-theme="dark"] a {
+    color: #d4a017 !important;
+}
+
+[data-theme="dark"] a:hover {
+    color: #e8b820 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) a {
+        color: #d4a017 !important;
+    }
+    :root:not([data-theme="light"]) a:hover {
+        color: #e8b820 !important;
+    }
+}
+
+/* Header links stay light */
+header a,
+header a:hover {
+    color: #e8e4dc !important;
+}
+
+/* Main content */
+main {
+    border-radius: var(--radius-lg) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Headings */
+h2 {
+    font-weight: 600 !important;
+    letter-spacing: 0.01em !important;
+    color: var(--text-heading) !important;
+}
+
+h3 {
+    font-weight: 500 !important;
+    color: var(--text-subheading) !important;
+}
+
+/* Cards with subtle elegance */
+.card {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+/* Stat boxes */
+.stat-box {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.stat-box:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.stat-box .value {
+    font-weight: 700 !important;
+    color: #b8860b !important;
+}
+
+/* Elegant buttons with gold gradient */
+.btn {
+    border-radius: var(--radius-sm) !important;
+    font-weight: 500 !important;
+    font-family: var(--font-sans) !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 8px var(--shadow-color) !important;
+}
+
+.btn-primary {
+    background: var(--btn-primary-bg) !important;
+    border: none !important;
+    color: #1a1a2e !important;
+}
+
+.btn-primary:hover {
+    background: var(--btn-primary-hover) !important;
+    box-shadow: 0 4px 20px var(--accent-glow) !important;
+}
+
+.btn:hover {
+    transform: translateY(-2px) !important;
+}
+
+/* Table styling */
+table {
+    border-radius: var(--radius-md) !important;
+    overflow: hidden !important;
+}
+
+th {
+    font-family: var(--font-sans) !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    font-size: 0.7rem !important;
+    letter-spacing: 0.1em !important;
+    background: var(--bg-card-solid) !important;
+    color: var(--text-secondary) !important;
+}
+
+tr {
+    transition: background 0.15s ease !important;
+}
+
+/* Medal colors - rich and elegant */
+.medal-gold {
+    color: #b8860b !important;
+    text-shadow: 0 0 8px rgba(184, 134, 11, 0.4) !important;
+}
+
+.medal-silver {
+    color: #7f8c8d !important;
+    text-shadow: 0 0 8px rgba(127, 140, 141, 0.4) !important;
+}
+
+.medal-bronze {
+    color: #a0522d !important;
+    text-shadow: 0 0 8px rgba(160, 82, 45, 0.4) !important;
+}
+
+/* Status badges */
+.status-badge {
+    border-radius: var(--radius-sm) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em !important;
+    font-size: 0.75rem !important;
+}
+
+.status-active {
+    background: linear-gradient(135deg, #2e7d32 0%, #388e3c 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3) !important;
+}
+
+.status-upcoming {
+    background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%) !important;
+    color: white !important;
+    box-shadow: 0 2px 8px rgba(21, 101, 192, 0.3) !important;
+}
+
+.status-ended {
+    background: var(--bg-card-solid) !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Alerts */
+.alert {
+    border-radius: var(--radius-md) !important;
+    border: none !important;
+    box-shadow: 0 2px 8px var(--shadow-color) !important;
+}
+
+.alert-success {
+    background: rgba(46, 125, 50, 0.1) !important;
+    border-left: 4px solid #2e7d32 !important;
+}
+
+.alert-error {
+    background: rgba(198, 40, 40, 0.1) !important;
+    border-left: 4px solid #c62828 !important;
+}
+
+.alert-info {
+    background: rgba(21, 101, 192, 0.1) !important;
+    border-left: 4px solid #1565c0 !important;
+}
+
+/* Toast */
+.toast {
+    border-radius: var(--radius-md) !important;
+    backdrop-filter: blur(10px) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* Form inputs */
+.form-group input,
+.form-group select,
+.form-group textarea {
+    border-radius: var(--radius-sm) !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: #b8860b !important;
+    box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    border-color: var(--border-color) !important;
+    border-top-color: #b8860b !important;
+}
+
+/* Dropdown */
+.dropdown-menu {
+    border-radius: var(--radius-md) !important;
+    backdrop-filter: blur(10px) !important;
+    box-shadow: var(--shadow-lg) !important;
+}
+
+/* Header help link */
+.header-help-link {
+    background: rgba(184, 134, 11, 0.2) !important;
+    border: 2px solid rgba(184, 134, 11, 0.4) !important;
+}
+
+.header-help-link:hover {
+    background: rgba(184, 134, 11, 0.3) !important;
+    box-shadow: 0 0 20px var(--accent-glow) !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary) !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color) !important;
+    border-radius: 4px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary) !important;
+}
+
+/* Selection */
+::selection {
+    background: #b8860b !important;
+    color: white !important;
+}
+
+/* Focus rings */
+a:focus,
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid #b8860b !important;
+    outline-offset: 2px !important;
+}
+
+.btn:focus {
+    box-shadow: 0 0 0 3px var(--accent-glow) !important;
+}

@@ -132,6 +132,19 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Templates
 templates = Jinja2Templates(directory="templates")
 
+
+def get_site_config():
+    """Get current site config from database with fallback to env vars."""
+    from database import get_setting
+    return {
+        "theme": get_setting("site_theme") or config.SITE_THEME,
+        "name": get_setting("site_name") or config.SITE_NAME,
+        "tagline": get_setting("site_tagline") or config.SITE_TAGLINE,
+    }
+
+
+templates.env.globals["get_site_config"] = get_site_config
+
 # Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -3295,11 +3308,19 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     qrz_username = get_setting("qrz_username", decrypt=True)
     qrz_configured = qrz_username is not None and get_setting("qrz_password") is not None
 
+    # Get current theme settings (from DB, falling back to config)
+    current_theme = get_setting("site_theme") or config.SITE_THEME
+    site_name = get_setting("site_name") or config.SITE_NAME
+    site_tagline = get_setting("site_tagline") or config.SITE_TAGLINE
+
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
         "user": get_current_user(request),
         "qrz_username": qrz_username,
         "qrz_configured": qrz_configured,
+        "current_theme": current_theme,
+        "site_name": site_name,
+        "site_tagline": site_tagline,
     })
 
 
@@ -3375,6 +3396,34 @@ async def clear_qrz_settings(_: bool = Depends(verify_admin)):
     callsign_lookup._qrz_session_expires = None
 
     return {"message": "QRZ credentials cleared"}
+
+
+@app.post("/admin/settings/theme")
+async def update_theme_settings(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update site theme settings."""
+    from database import set_setting
+
+    data = await request.json()
+    theme = data.get("theme", "olympics")
+    name = data.get("name", "").strip()
+    tagline = data.get("tagline", "").strip()
+
+    # Validate theme
+    valid_themes = ["olympics", "coolcontest", "neon", "midnight"]
+    if theme not in valid_themes:
+        raise HTTPException(status_code=400, detail=f"Invalid theme. Must be one of: {', '.join(valid_themes)}")
+
+    # Save settings
+    set_setting("site_theme", theme)
+    if name:
+        set_setting("site_name", name)
+    if tagline:
+        set_setting("site_tagline", tagline)
+
+    return {"message": "Theme settings saved successfully"}
 
 
 @app.post("/admin/recompute-records")

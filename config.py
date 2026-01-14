@@ -30,6 +30,11 @@ def _require_env(name: str, test_default: str) -> str:
 class Config:
     """Application configuration loaded from environment variables."""
 
+    # Site theming
+    SITE_THEME: str = os.getenv("SITE_THEME", "olympics")  # olympics, coolcontest
+    SITE_NAME: str = os.getenv("SITE_NAME", "Ham Radio Olympics")
+    SITE_TAGLINE: str = os.getenv("SITE_TAGLINE", "Compete. Connect. Conquer the Airwaves.")
+
     # Database
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "ham_olympics.db")
 

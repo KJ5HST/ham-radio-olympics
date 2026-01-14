@@ -7,6 +7,36 @@
 <p><a href="/admin">&larr; Back to Dashboard</a></p>
 
 <div class="card">
+    <h3>Site Theme</h3>
+    <p style="color: #718096; margin-bottom: 1rem;">
+        Choose the visual theme for your site. Changes take effect immediately for all users.
+    </p>
+    <form id="theme-form">
+        <div class="form-group">
+            <label for="site_theme">Theme</label>
+            <select id="site_theme" style="width: 100%; max-width: 300px;">
+                <option value="olympics" {% if current_theme == 'olympics' %}selected{% endif %}>Olympics - Classic blue and gold</option>
+                <option value="coolcontest" {% if current_theme == 'coolcontest' %}selected{% endif %}>Cool Contest - Modern indigo</option>
+                <option value="neon" {% if current_theme == 'neon' %}selected{% endif %}>Neon - Cyberpunk purple</option>
+                <option value="midnight" {% if current_theme == 'midnight' %}selected{% endif %}>Midnight - Luxurious navy and gold</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="site_name">Site Name</label>
+            <input type="text" id="site_name" value="{{ site_name or 'Ham Radio Olympics' }}" placeholder="Ham Radio Olympics">
+        </div>
+        <div class="form-group">
+            <label for="site_tagline">Tagline</label>
+            <input type="text" id="site_tagline" value="{{ site_tagline or 'Compete. Connect. Conquer the Airwaves.' }}" placeholder="Compete. Connect. Conquer the Airwaves.">
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Save Theme Settings</button>
+        </div>
+    </form>
+    <div id="theme-result" style="margin-top: 1rem;"></div>
+</div>
+
+<div class="card">
     <h3>QRZ XML API Credentials</h3>
     <p style="color: #718096; margin-bottom: 1rem;">
         These credentials are used for callsign lookups to fetch competitor names and country information.
@@ -36,6 +66,34 @@
 </div>
 
 <script>
+// Theme form handler
+document.getElementById('theme-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('theme-result');
+    const theme = document.getElementById('site_theme').value;
+    const name = document.getElementById('site_name').value.trim();
+    const tagline = document.getElementById('site_tagline').value.trim();
+
+    try {
+        const resp = await fetch('/admin/settings/theme', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({ theme, name, tagline })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+// QRZ form handler
 document.getElementById('qrz-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const result = document.getElementById('qrz-result');

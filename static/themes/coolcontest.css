@@ -1,0 +1,381 @@
+/* Cool Contest Theme - Modern, sleek, professional */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+    /* Light mode - clean and modern */
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
+    --bg-card-solid: #f8fafc;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-heading: #0f172a;
+    --text-subheading: #334155;
+    --border-color: #e2e8f0;
+    --shadow-color: rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 10px 40px -10px rgba(15, 23, 42, 0.15);
+
+    /* Vibrant accent - electric indigo/violet */
+    --accent-color: #6366f1;
+    --accent-hover: #4f46e5;
+    --accent-glow: rgba(99, 102, 241, 0.4);
+
+    /* Header gradient - bold and modern */
+    --header-gradient: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+    --header-glow: 0 4px 30px rgba(99, 102, 241, 0.3);
+
+    /* Button colors */
+    --btn-primary-bg: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --btn-primary-hover: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+
+    /* Status colors - more vibrant */
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --info-color: #3b82f6;
+
+    /* Font family */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Spacing and radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+}
+
+/* Dark mode - sleek and immersive */
+[data-theme="dark"] {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-card: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+    --bg-card-solid: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-heading: #f8fafc;
+    --text-subheading: #cbd5e1;
+    --border-color: #334155;
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+    --accent-glow: rgba(99, 102, 241, 0.5);
+    --header-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --bg-card: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+        --bg-card-solid: #1e293b;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+        --text-heading: #f8fafc;
+        --text-subheading: #cbd5e1;
+        --border-color: #334155;
+        --shadow-color: rgba(0, 0, 0, 0.4);
+        --shadow-lg: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+        --accent-glow: rgba(99, 102, 241, 0.5);
+        --header-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%);
+    }
+}
+
+/* Base typography */
+body {
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+}
+
+/* Enhanced header with glow effect */
+header {
+    background: var(--header-gradient);
+    box-shadow: var(--header-glow);
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+}
+
+header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at 30% 0%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 100%, rgba(99, 102, 241, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+header h1 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    position: relative;
+}
+
+header p {
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 0.75rem !important;
+    opacity: 0.85;
+}
+
+/* Modern navigation */
+nav {
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+}
+
+nav a {
+    font-weight: 500;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+nav a:hover {
+    transform: translateY(-1px);
+}
+
+/* Enhanced main content area */
+main {
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+/* Modern headings */
+h2 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* Enhanced cards with subtle gradient */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Stat boxes with modern styling */
+.stat-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-box:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+}
+
+.stat-box .value {
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-color), #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Modern buttons with gradient */
+.btn {
+    border-radius: var(--radius-sm);
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.btn-primary {
+    background: var(--btn-primary-bg);
+    border: none;
+}
+
+.btn-primary:hover {
+    background: var(--btn-primary-hover);
+    box-shadow: 0 4px 20px var(--accent-glow);
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px var(--shadow-color);
+}
+
+/* Enhanced table styling */
+table {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    background: var(--bg-card-solid);
+}
+
+tr {
+    transition: background 0.15s ease;
+}
+
+/* Medal colors - more vibrant */
+.medal-gold {
+    color: #fbbf24;
+    text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+}
+.medal-silver {
+    color: #9ca3af;
+    text-shadow: 0 0 10px rgba(156, 163, 175, 0.3);
+}
+.medal-bronze {
+    color: #f97316;
+    text-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+}
+
+/* Status badges - modern pill style */
+.status-badge {
+    border-radius: 9999px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.status-active {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.status-upcoming {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.status-ended {
+    background: var(--bg-card-solid);
+    color: var(--text-secondary);
+}
+
+[data-theme="dark"] .status-active,
+[data-theme="dark"] .status-upcoming {
+    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.4);
+}
+
+/* Alerts with modern styling */
+.alert {
+    border-radius: var(--radius-md);
+    border: none;
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%);
+    border-left: 4px solid var(--success-color);
+}
+
+.alert-error {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
+    border-left: 4px solid var(--danger-color);
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%);
+    border-left: 4px solid var(--info-color);
+}
+
+/* Toast notifications with blur */
+.toast {
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+}
+
+/* Form inputs - modern styling */
+.form-group input,
+.form-group select,
+.form-group textarea {
+    border-radius: var(--radius-sm);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Loading spinner with accent color */
+.loading-spinner {
+    border-color: var(--border-color);
+    border-top-color: var(--accent-color);
+}
+
+/* Dropdown menu with blur effect */
+.dropdown-menu {
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Help link in header */
+.header-help-link {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(4px);
+}
+
+.header-help-link:hover {
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+
+/* Smooth scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Selection color */
+::selection {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* Focus ring with accent color */
+a:focus,
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+.btn:focus {
+    box-shadow: 0 0 0 3px var(--accent-glow);
+}
