@@ -171,10 +171,8 @@ def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Always required: TX power must be present and positive
-    tx_power = qso.get("tx_power_w")
-    if tx_power is None or tx_power <= 0:
-        return False, "TX power must be present and positive"
+    # TX power is optional - QSOs without power still count for QSO Race
+    # but are excluded from Cool Factor competition
 
     # Must be confirmed
     if not qso.get("is_confirmed"):
@@ -335,10 +333,16 @@ def compute_medals(
         earliest_qso = min(qsos, key=lambda q: q.qso_datetime)
         qso_race_claim_time = earliest_qso.qso_datetime
 
-        # Cool Factor event: highest cool factor
-        best_cf_qso = max(qsos, key=lambda q: (q.cool_factor, -q.qso_datetime.timestamp()))
-        cool_factor_value = best_cf_qso.cool_factor
-        cool_factor_claim_time = best_cf_qso.qso_datetime
+        # Cool Factor event: highest cool factor (only QSOs with power/cool_factor)
+        qsos_with_cf = [q for q in qsos if q.cool_factor and q.cool_factor > 0]
+        if qsos_with_cf:
+            best_cf_qso = max(qsos_with_cf, key=lambda q: (q.cool_factor, -q.qso_datetime.timestamp()))
+            cool_factor_value = best_cf_qso.cool_factor
+            cool_factor_claim_time = best_cf_qso.qso_datetime
+        else:
+            # No QSOs with power data - can't compete in Cool Factor
+            cool_factor_value = 0
+            cool_factor_claim_time = earliest_qso.qso_datetime
 
         # POTA bonus check
         has_pota = any(q.has_pota for q in qsos)
@@ -367,9 +371,10 @@ def compute_medals(
         for i, result in enumerate(role_results[:3]):
             result.qso_race_medal = medals[i]
 
-    # Award Cool Factor medals (per role)
+    # Award Cool Factor medals (per role) - only to those with valid cool factor
     for role in set(r.role for r in results):
-        role_results = [r for r in results if r.role == role and r.qualified]
+        # Exclude competitors with no power data (cool_factor_value = 0)
+        role_results = [r for r in results if r.role == role and r.qualified and r.cool_factor_value > 0]
         # Sort by highest cool factor, then earliest claim time
         role_results.sort(key=lambda r: (-r.cool_factor_value, r.cool_factor_claim_time))
 

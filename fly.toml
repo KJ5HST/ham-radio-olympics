@@ -1,6 +1,6 @@
 # fly.toml - Fly.io configuration for Ham Radio Olympics
 
-app = "your clubs callsign here"
+app = "kd5dx"
 primary_region = "iad"
 
 [build]
