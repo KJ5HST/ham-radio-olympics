@@ -293,7 +293,8 @@ templates.env.filters["format_datetime"] = format_datetime
 
 
 def get_country_flag(dxcc_code) -> str:
-    """Get country flag emoji from DXCC code."""
+    """Get country flag emoji from DXCC code, wrapped in a span with country name tooltip."""
+    from markupsafe import Markup
     from dxcc import get_country_name
     from callsign_lookup import get_country_flag as _get_flag
 
@@ -302,7 +303,11 @@ def get_country_flag(dxcc_code) -> str:
     try:
         country = get_country_name(int(dxcc_code))
         if country:
-            return _get_flag(country)
+            flag = _get_flag(country)
+            if flag:
+                # Escape country name for HTML attribute
+                safe_country = country.replace('"', '&quot;').replace('<', '&lt;').replace('>', '&gt;')
+                return Markup(f'<span title="{safe_country}" style="cursor: help;">{flag}</span>')
     except (ValueError, TypeError):
         pass
     return ""
