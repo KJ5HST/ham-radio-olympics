@@ -20,6 +20,31 @@ logger = logging.getLogger(__name__)
 # Token expiry time
 RESET_TOKEN_EXPIRY_HOURS = 1
 
+# Base URL for the app (used in email links)
+APP_BASE_URL = "https://kd5dx.fly.dev"
+
+
+def _get_email_footer_html() -> str:
+    """Get the HTML footer with unsubscribe link for all emails."""
+    return f"""
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+    <p style="color: #718096; font-size: 12px;">
+        Ham Radio Olympics<br>
+        <a href="{APP_BASE_URL}/settings#notifications" style="color: #718096;">Manage email preferences</a> |
+        <a href="{APP_BASE_URL}/settings#notifications" style="color: #718096;">Unsubscribe</a>
+    </p>
+"""
+
+
+def _get_email_footer_text() -> str:
+    """Get the plain text footer with unsubscribe info for all emails."""
+    return f"""
+---
+Ham Radio Olympics
+Manage email preferences: {APP_BASE_URL}/settings#notifications
+To unsubscribe, visit your settings page and disable email notifications.
+"""
+
 
 async def send_email(
     to: str,
@@ -182,6 +207,8 @@ def render_email_template(template_name: str, **kwargs) -> str:
         return _render_match_reminder_template(**safe_kwargs)
     elif template_name == "email_verification":
         return _render_email_verification_template(**safe_kwargs)
+    elif template_name == "record_notification":
+        return _render_record_notification_template(**safe_kwargs)
     else:
         raise ValueError(f"Unknown template: {template_name}")
 
@@ -209,8 +236,7 @@ def _render_password_reset_template(reset_url: str, callsign: str) -> str:
     <p style="word-break: break-all; color: #4299e1;">{reset_url}</p>
     <p>This link will expire in 1 hour.</p>
     <p>If you didn't request this reset, you can safely ignore this email.</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-    <p style="color: #718096; font-size: 12px;">Ham Radio Olympics</p>
+    {_get_email_footer_html()}
 </body>
 </html>
 """
@@ -236,8 +262,7 @@ def _render_welcome_template(callsign: str) -> str:
         <li>Track your progress on the leaderboard</li>
     </ul>
     <p>Good luck and 73!</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-    <p style="color: #718096; font-size: 12px;">Ham Radio Olympics</p>
+    {_get_email_footer_html()}
 </body>
 </html>
 """
@@ -387,8 +412,7 @@ def _render_medal_notification_template(
     </div>
     <p>Keep up the great work!</p>
     <p>73,<br>Ham Radio Olympics</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-    <p style="color: #718096; font-size: 12px;">Ham Radio Olympics</p>
+    {_get_email_footer_html()}
 </body>
 </html>
 """
@@ -426,8 +450,7 @@ def _render_match_reminder_template(
     </div>
     <p>Get your rig ready and good luck!</p>
     <p>73,<br>Ham Radio Olympics</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-    <p style="color: #718096; font-size: 12px;">Ham Radio Olympics</p>
+    {_get_email_footer_html()}
 </body>
 </html>
 """
@@ -455,11 +478,133 @@ def _render_email_verification_template(callsign: str, verification_url: str) ->
     <p style="word-break: break-all; color: #4299e1;">{verification_url}</p>
     <p>This link will expire in 24 hours.</p>
     <p>If you didn't create an account, you can safely ignore this email.</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-    <p style="color: #718096; font-size: 12px;">Ham Radio Olympics</p>
+    {_get_email_footer_html()}
 </body>
 </html>
 """
+
+
+def _render_record_notification_template(
+    callsign: str,
+    record_type: str,
+    value: str,
+    sport_name: str,
+    previous_holder: str = None,
+    previous_value: str = None
+) -> str:
+    """Render record notification email template."""
+    record_labels = {
+        "longest_distance": "Longest Distance",
+        "highest_cool_factor": "Highest Cool Factor",
+        "lowest_power": "Lowest Power DX"
+    }
+    record_label = record_labels.get(record_type, record_type)
+
+    previous_section = ""
+    if previous_holder and previous_value:
+        previous_section = f"""
+        <p style="margin: 10px 0 0 0; color: #718096; font-size: 14px;">
+            Previous record: {previous_value} by {previous_holder}
+        </p>
+        """
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>New Record - Ham Radio Olympics</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2d3748;">New World Record!</h1>
+    <p>Hello {callsign},</p>
+    <p>Congratulations! You've set a new world record in the Ham Radio Olympics!</p>
+    <div style="background-color: #faf5ff; border-left: 4px solid #9f7aea; padding: 20px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 18px;"><strong>{record_label}</strong></p>
+        <p style="margin: 10px 0 0 0; color: #4a5568;">
+            Sport: {sport_name}
+        </p>
+        <p style="margin: 10px 0 0 0; color: #2d3748; font-size: 24px;">
+            <strong>{value}</strong>
+        </p>
+        {previous_section}
+    </div>
+    <p>Your achievement has been recorded in the Ham Radio Olympics history books!</p>
+    <p>73,<br>Ham Radio Olympics</p>
+    {_get_email_footer_html()}
+</body>
+</html>
+"""
+
+
+async def send_record_notification_email(
+    callsign: str,
+    email: str,
+    record_type: str,
+    value: str,
+    sport_name: str,
+    previous_holder: str = None,
+    previous_value: str = None
+) -> bool:
+    """
+    Send a record notification email.
+
+    Args:
+        callsign: User's callsign
+        email: User's email address
+        record_type: Type of record (longest_distance, highest_cool_factor, lowest_power)
+        value: The record value
+        sport_name: Name of the sport
+        previous_holder: Previous record holder's callsign (optional)
+        previous_value: Previous record value (optional)
+
+    Returns:
+        True if email sent successfully
+    """
+    record_labels = {
+        "longest_distance": "Longest Distance",
+        "highest_cool_factor": "Highest Cool Factor",
+        "lowest_power": "Lowest Power DX"
+    }
+    record_label = record_labels.get(record_type, record_type)
+
+    html_body = render_email_template(
+        "record_notification",
+        callsign=callsign,
+        record_type=record_type,
+        value=value,
+        sport_name=sport_name,
+        previous_holder=previous_holder,
+        previous_value=previous_value
+    )
+
+    previous_text = ""
+    if previous_holder and previous_value:
+        previous_text = f"\nPrevious record: {previous_value} by {previous_holder}"
+
+    plain_body = f"""
+New World Record!
+
+Hello {callsign},
+
+Congratulations! You've set a new world record in the Ham Radio Olympics!
+
+{record_label}
+Sport: {sport_name}
+Value: {value}{previous_text}
+
+Your achievement has been recorded in the Ham Radio Olympics history books!
+
+73,
+Ham Radio Olympics
+"""
+
+    return await send_email(
+        to=email,
+        subject=f"New World Record! {record_label} - Ham Radio Olympics",
+        body=plain_body.strip(),
+        html_body=html_body
+    )
 
 
 async def send_welcome_email(callsign: str, email: str) -> bool:
@@ -744,7 +889,8 @@ async def notify_new_medals() -> dict:
         cursor = conn.execute("""
             SELECT m.id, m.callsign, m.role, m.qso_race_medal, m.cool_factor_medal,
                    m.total_points, mat.target_value, s.name as sport_name,
-                   c.email, c.email_notifications_enabled, c.email_verified
+                   c.email, c.email_notifications_enabled, c.email_verified,
+                   COALESCE(c.email_medal_notifications, 1) as email_medal_notifications
             FROM medals m
             JOIN matches mat ON m.match_id = mat.id
             JOIN sports s ON mat.sport_id = s.id
@@ -757,8 +903,8 @@ async def notify_new_medals() -> dict:
         for medal in medals:
             medal = dict(medal)
 
-            # Skip if no email or notifications disabled
-            if not medal["email"] or not medal["email_notifications_enabled"]:
+            # Skip if no email, notifications disabled, or medal notifications disabled
+            if not medal["email"] or not medal["email_notifications_enabled"] or not medal["email_medal_notifications"]:
                 results["skipped"] += 1
                 # Mark as notified anyway to prevent future attempts
                 conn.execute(
@@ -814,26 +960,61 @@ async def notify_new_medals() -> dict:
     return results
 
 
-async def send_match_reminders(hours_before: int = 24) -> dict:
+def _render_weekly_digest_template(callsign: str, matches: list) -> str:
+    """Render weekly match digest email template."""
+    matches_html = ""
+    for match in matches:
+        matches_html += f"""
+        <div style="background-color: #ebf8ff; border-left: 4px solid #4299e1; padding: 15px; margin: 10px 0;">
+            <p style="margin: 0; font-size: 16px;"><strong>{match['sport_name']}</strong></p>
+            <p style="margin: 5px 0 0 0; color: #4a5568;">
+                Target: {match['target_value']}<br>
+                {match['start_date']} - {match['end_date']}
+            </p>
+        </div>
+        """
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Upcoming Matches - Ham Radio Olympics</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2d3748;">Upcoming Matches This Week</h1>
+    <p>Hello {callsign},</p>
+    <p>Here are the upcoming matches in the Ham Radio Olympics:</p>
+    {matches_html}
+    <p>Get your rig ready and good luck!</p>
+    <p>73,<br>Ham Radio Olympics</p>
+    {_get_email_footer_html()}
+</body>
+</html>
+"""
+
+
+async def send_weekly_match_digest(days_ahead: int = 7) -> dict:
     """
-    Send reminders for matches starting soon.
+    Send weekly digest of upcoming matches.
+
+    Only sends to users who haven't received a digest in the past 7 days.
 
     Args:
-        hours_before: Hours before match start to send reminder
+        days_ahead: Number of days ahead to look for matches
 
     Returns:
-        Dict with counts of reminders sent and any errors
+        Dict with counts of digests sent and any errors
     """
     from database import get_db
 
     results = {"sent": 0, "skipped": 0, "errors": 0}
     now = datetime.utcnow()
-    reminder_window = now + timedelta(hours=hours_before)
+    one_week_ago = now - timedelta(days=7)
+    end_window = now + timedelta(days=days_ahead)
 
     with get_db() as conn:
-        # Find matches starting within the reminder window that haven't had reminders sent
-        # We use a simple approach: only send reminders for matches starting in the next X hours
-        # that start after now
+        # Get all upcoming matches in the next X days
         cursor = conn.execute("""
             SELECT m.id, m.target_value, m.start_date, m.end_date,
                    s.id as sport_id, s.name as sport_name
@@ -841,45 +1022,112 @@ async def send_match_reminders(hours_before: int = 24) -> dict:
             JOIN sports s ON m.sport_id = s.id
             JOIN olympiads o ON s.olympiad_id = o.id
             WHERE o.is_active = 1
-              AND m.start_date > ?
+              AND m.start_date >= ?
               AND m.start_date <= ?
-        """, (now.isoformat(), reminder_window.isoformat()))
-        upcoming_matches = cursor.fetchall()
+            ORDER BY m.start_date
+        """, (now.isoformat(), end_window.isoformat()))
+        all_matches = [dict(row) for row in cursor.fetchall()]
 
-        for match in upcoming_matches:
-            match = dict(match)
+        if not all_matches:
+            logger.info("No upcoming matches to notify about")
+            return results
 
-            # Get all competitors entered in this sport with notifications enabled
-            cursor = conn.execute("""
-                SELECT c.callsign, c.email, c.email_verified, c.email_notifications_enabled
-                FROM competitors c
-                JOIN sport_entries se ON c.callsign = se.callsign
-                WHERE se.sport_id = ?
-                  AND c.email IS NOT NULL
-                  AND c.email_verified = 1
-                  AND c.email_notifications_enabled = 1
-            """, (match["sport_id"],))
-            competitors = cursor.fetchall()
+        # Get competitors who:
+        # - Have email verified and match reminders enabled
+        # - Haven't received a digest in the past week
+        cursor = conn.execute("""
+            SELECT c.callsign, c.email
+            FROM competitors c
+            WHERE c.email IS NOT NULL
+              AND c.email_verified = 1
+              AND c.email_notifications_enabled = 1
+              AND COALESCE(c.email_match_reminders, 1) = 1
+              AND (c.last_match_digest_at IS NULL OR c.last_match_digest_at < ?)
+        """, (one_week_ago.isoformat(),))
+        competitors = cursor.fetchall()
 
-            for competitor in competitors:
-                competitor = dict(competitor)
-                try:
-                    success = await send_match_reminder_email(
-                        callsign=competitor["callsign"],
-                        email=competitor["email"],
-                        sport_name=match["sport_name"],
-                        match_name=match["target_value"],
-                        target_value=match["target_value"],
-                        start_date=match["start_date"][:10],  # Just the date portion
-                        end_date=match["end_date"][:10]
+        for competitor in competitors:
+            competitor = dict(competitor)
+            callsign = competitor["callsign"]
+
+            # Get sports this competitor is entered in
+            cursor = conn.execute(
+                "SELECT sport_id FROM sport_entries WHERE callsign = ?",
+                (callsign,)
+            )
+            entered_sports = {row[0] for row in cursor.fetchall()}
+
+            # Filter matches to only those the competitor is entered in
+            relevant_matches = [
+                m for m in all_matches if m["sport_id"] in entered_sports
+            ]
+
+            if not relevant_matches:
+                results["skipped"] += 1
+                continue
+
+            # Send digest email
+            try:
+                html_body = _render_weekly_digest_template(callsign, relevant_matches)
+
+                matches_text = "\n".join([
+                    f"- {m['sport_name']}: {m['target_value']} ({m['start_date'][:10]} - {m['end_date'][:10]})"
+                    for m in relevant_matches
+                ])
+
+                plain_body = f"""
+Upcoming Matches This Week
+
+Hello {callsign},
+
+Here are the upcoming matches in the Ham Radio Olympics:
+
+{matches_text}
+
+Get your rig ready and good luck!
+
+73,
+Ham Radio Olympics
+{_get_email_footer_text()}
+"""
+
+                success = await send_email(
+                    to=competitor["email"],
+                    subject=f"Upcoming Matches This Week - Ham Radio Olympics",
+                    body=plain_body.strip(),
+                    html_body=html_body
+                )
+
+                if success:
+                    results["sent"] += 1
+                    # Update last_match_digest_at
+                    conn.execute(
+                        "UPDATE competitors SET last_match_digest_at = ? WHERE callsign = ?",
+                        (now.isoformat(), callsign)
                     )
-                    if success:
-                        results["sent"] += 1
-                    else:
-                        results["errors"] += 1
-                except Exception as e:
-                    logger.error(f"Failed to send match reminder to {competitor['callsign']}: {e}")
+                else:
                     results["errors"] += 1
 
-    logger.info(f"Match reminders: sent={results['sent']}, skipped={results['skipped']}, errors={results['errors']}")
+            except Exception as e:
+                logger.error(f"Failed to send weekly digest to {callsign}: {e}")
+                results["errors"] += 1
+
+    logger.info(f"Weekly digest: sent={results['sent']}, skipped={results['skipped']}, errors={results['errors']}")
     return results
+
+
+async def send_match_reminders(hours_before: int = 168) -> dict:
+    """
+    Send weekly match digest emails.
+
+    This is now an alias for send_weekly_match_digest for backwards compatibility.
+    Default is 168 hours (7 days) ahead.
+
+    Args:
+        hours_before: Hours before to look for matches (default 168 = 1 week)
+
+    Returns:
+        Dict with counts of reminders sent and any errors
+    """
+    days_ahead = hours_before // 24 if hours_before >= 24 else 7
+    return await send_weekly_match_digest(days_ahead=days_ahead)

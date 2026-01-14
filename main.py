@@ -1878,7 +1878,10 @@ async def settings_page(request: Request, user: User = Depends(require_user)):
     """Account settings page."""
     with get_db() as conn:
         cursor = conn.execute(
-            "SELECT email, email_verified, registered_at, first_name, last_name FROM competitors WHERE callsign = ?",
+            """SELECT email, email_verified, registered_at, first_name, last_name,
+                      email_notifications_enabled, email_medal_notifications,
+                      email_match_reminders, email_record_notifications
+               FROM competitors WHERE callsign = ?""",
             (user.callsign,)
         )
         account = dict(cursor.fetchone())
@@ -2019,6 +2022,35 @@ async def remove_lotw_credentials(request: Request, user: User = Depends(require
             (user.callsign,)
         )
     return {"message": "LoTW credentials removed"}
+
+
+@app.post("/settings/notifications")
+async def update_notification_preferences(
+    request: Request,
+    email_notifications_enabled: bool = Form(False),
+    email_medal_notifications: bool = Form(False),
+    email_match_reminders: bool = Form(False),
+    email_record_notifications: bool = Form(False),
+    user: User = Depends(require_user)
+):
+    """Update email notification preferences."""
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE competitors SET
+               email_notifications_enabled = ?,
+               email_medal_notifications = ?,
+               email_match_reminders = ?,
+               email_record_notifications = ?
+               WHERE callsign = ?""",
+            (
+                1 if email_notifications_enabled else 0,
+                1 if email_medal_notifications else 0,
+                1 if email_match_reminders else 0,
+                1 if email_record_notifications else 0,
+                user.callsign
+            )
+        )
+    return RedirectResponse(url="/settings?updated=notifications", status_code=303)
 
 
 # ============================================================

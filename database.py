@@ -294,6 +294,17 @@ def init_db():
                 conn.execute("ALTER TABLE medals ADD COLUMN notified_at TEXT")
                 conn.commit()
 
+        # Migration: add granular email notification preferences
+        if 'competitors' in tables:
+            cursor = conn.execute("PRAGMA table_info(competitors)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'email_medal_notifications' not in columns:
+                conn.execute("ALTER TABLE competitors ADD COLUMN email_medal_notifications INTEGER NOT NULL DEFAULT 1")
+                conn.execute("ALTER TABLE competitors ADD COLUMN email_match_reminders INTEGER NOT NULL DEFAULT 1")
+                conn.execute("ALTER TABLE competitors ADD COLUMN email_record_notifications INTEGER NOT NULL DEFAULT 1")
+                conn.execute("ALTER TABLE competitors ADD COLUMN last_match_digest_at TEXT")
+                conn.commit()
+
         # Migration: update sports table to support 'any' target_type
         # SQLite doesn't support modifying CHECK constraints, so we need to recreate the table
         if 'sports' in tables:
@@ -335,6 +346,10 @@ def init_db():
                 email TEXT,
                 email_verified INTEGER NOT NULL DEFAULT 0,
                 email_notifications_enabled INTEGER NOT NULL DEFAULT 1,
+                email_medal_notifications INTEGER NOT NULL DEFAULT 1,
+                email_match_reminders INTEGER NOT NULL DEFAULT 1,
+                email_record_notifications INTEGER NOT NULL DEFAULT 1,
+                last_match_digest_at TEXT,
                 first_name TEXT,
                 last_name TEXT,
                 qrz_api_key_encrypted TEXT,

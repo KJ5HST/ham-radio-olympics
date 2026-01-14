@@ -18,6 +18,7 @@
     {% elif request.query_params.get('updated') == 'lotw' %}LoTW credentials updated successfully.
     {% elif request.query_params.get('updated') == 'lotw_removed' %}LoTW credentials removed.
     {% elif request.query_params.get('updated') == 'verification_sent' %}Verification email sent. Please check your inbox.
+    {% elif request.query_params.get('updated') == 'notifications' %}Email notification preferences updated.
     {% endif %}
 </div>
 {% endif %}
@@ -132,6 +133,38 @@
             <button type="button" class="btn" style="background: #c53030;" onclick="removeLotwCreds()">Remove</button>
             {% endif %}
         </div>
+    </form>
+</div>
+
+<h3 id="notifications">Email Notifications</h3>
+<div class="card">
+    <p style="font-size: 0.9em; color: #718096; margin-bottom: 15px;">Choose which email notifications you'd like to receive. Requires a verified email address.</p>
+    <form action="/settings/notifications" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" name="email_notifications_enabled" value="true" {% if account.email_notifications_enabled %}checked{% endif %} style="width: auto;">
+                <span>Enable all email notifications</span>
+            </label>
+        </div>
+        <div style="margin-left: 28px; display: flex; flex-direction: column; gap: 12px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" name="email_medal_notifications" value="true" {% if account.email_medal_notifications %}checked{% endif %} style="width: auto;">
+                <span>Medal notifications</span>
+                <span style="font-size: 0.85em; color: #718096;">(when you earn a new medal)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" name="email_match_reminders" value="true" {% if account.email_match_reminders %}checked{% endif %} style="width: auto;">
+                <span>Weekly match digest</span>
+                <span style="font-size: 0.85em; color: #718096;">(upcoming matches in your sports)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" name="email_record_notifications" value="true" {% if account.email_record_notifications %}checked{% endif %} style="width: auto;">
+                <span>Record notifications</span>
+                <span style="font-size: 0.85em; color: #718096;">(when you set a new world record)</span>
+            </label>
+        </div>
+        <button type="submit" class="btn" style="margin-top: 15px;">Save Preferences</button>
     </form>
 </div>
 
