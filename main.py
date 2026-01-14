@@ -1801,7 +1801,7 @@ async def user_dashboard(
 
         # Get competitor info
         cursor = conn.execute(
-            "SELECT registered_at, last_sync_at FROM competitors WHERE callsign = ?",
+            "SELECT first_name, registered_at, last_sync_at FROM competitors WHERE callsign = ?",
             (user.callsign,)
         )
         competitor_info = dict(cursor.fetchone())
@@ -3251,6 +3251,19 @@ async def admin_recompute_records(_: bool = Depends(verify_admin)):
     recompute_all_records()
 
     return {"message": "Medals and world records recomputed successfully"}
+
+
+@app.post("/admin/merge-duplicates")
+async def admin_merge_duplicates(_: bool = Depends(verify_admin)):
+    """Merge duplicate QSOs from multiple sources (QRZ + LoTW)."""
+    from sync import merge_duplicate_qsos
+
+    result = merge_duplicate_qsos()
+
+    if result["duplicate_groups"] > 0:
+        return {"message": f"Merged {result['duplicate_groups']} duplicate groups, deleted {result['qsos_deleted']} duplicate QSOs"}
+    else:
+        return {"message": "No duplicate QSOs found"}
 
 
 @app.get("/admin/teams", response_class=HTMLResponse)

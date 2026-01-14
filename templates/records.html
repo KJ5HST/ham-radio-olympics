@@ -61,66 +61,60 @@
 </div>
 {% endif %}
 
-{% if mode_records %}
-<h3>Records by Mode</h3>
+{% if distance_records %}
+<h3>Distance Records by Mode</h3>
 <div class="table-responsive"><table>
     <thead>
         <tr>
             <th scope="col">Mode</th>
-            <th scope="col">Longest Distance</th>
+            <th scope="col">Distance</th>
             <th scope="col">Holder</th>
             <th scope="col">Match</th>
-            <th scope="col">Best Cool Factor</th>
-            <th scope="col">Holder</th>
-            <th scope="col">Match</th>
+            <th scope="col">Date</th>
         </tr>
     </thead>
     <tbody>
-        {% for record in mode_records %}
+        {% for record in distance_records %}
         <tr>
             <td><strong>{{ record.mode }}</strong></td>
+            <td>{{ "%.1f" | format(record.value) }} km</td>
             <td>
-                {% if record.max_distance %}
-                    {{ "%.1f" | format(record.max_distance) }} km
-                {% else %}
-                    -
-                {% endif %}
+                <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
             <td>
-                {% if record.distance_holder %}
-                    <a href="/competitor/{{ record.distance_holder }}">{{ record.distance_holder_name | competitor_display(record.distance_holder) }}</a>
-                {% else %}
-                    -
-                {% endif %}
+                <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
+            </td>
+            <td>{{ record.date | format_date if record.date else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% endif %}
+
+{% if cool_factor_records %}
+<h3>Cool Factor Records by Mode</h3>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Mode</th>
+            <th scope="col">Cool Factor</th>
+            <th scope="col">Holder</th>
+            <th scope="col">Match</th>
+            <th scope="col">Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in cool_factor_records %}
+        <tr>
+            <td><strong>{{ record.mode }}</strong></td>
+            <td>{{ "%.1f" | format(record.value) }} km/W</td>
+            <td>
+                <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
             <td>
-                {% if record.distance_match_id %}
-                    <a href="/olympiad/sport/{{ record.distance_sport_id }}/match/{{ record.distance_match_id }}">{{ record.distance_sport_name }}: {{ record.distance_target | pota_tooltip }}</a>
-                {% else %}
-                    -
-                {% endif %}
+                <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
             </td>
-            <td>
-                {% if record.max_cool_factor %}
-                    {{ "%.1f" | format(record.max_cool_factor) }} km/W
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-            <td>
-                {% if record.cool_factor_holder %}
-                    <a href="/competitor/{{ record.cool_factor_holder }}">{{ record.cool_factor_holder_name | competitor_display(record.cool_factor_holder) }}</a>
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-            <td>
-                {% if record.cool_factor_match_id %}
-                    <a href="/olympiad/sport/{{ record.cool_factor_sport_id }}/match/{{ record.cool_factor_match_id }}">{{ record.cool_factor_sport_name }}: {{ record.cool_factor_target | pota_tooltip }}</a>
-                {% else %}
-                    -
-                {% endif %}
-            </td>
+            <td>{{ record.date | format_date if record.date else '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>

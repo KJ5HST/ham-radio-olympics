@@ -265,12 +265,15 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
         existing = cursor.fetchone()
 
     if existing is None:
-        # Check by callsign + datetime
+        # Check by callsign + datetime + mode (with 2-minute tolerance for different sources)
+        # Mode must match to avoid merging FT4/FT8 or SSB/CW contacts
+        qso_dt = qso.qso_datetime.isoformat()
         cursor = conn.execute(
             """SELECT id, is_confirmed FROM qsos
                WHERE competitor_callsign = ? AND dx_callsign = ?
-               AND qso_datetime_utc = ?""",
-            (competitor_callsign, qso.dx_callsign, qso.qso_datetime.isoformat())
+               AND (mode = ? OR mode IS NULL OR ? IS NULL)
+               AND ABS(CAST((julianday(qso_datetime_utc) - julianday(?)) * 86400 AS INTEGER)) <= 120""",
+            (competitor_callsign, qso.dx_callsign, qso.mode, qso.mode, qso_dt)
         )
         existing = cursor.fetchone()
 
@@ -290,21 +293,22 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             pass  # Invalid grid format
 
     if existing:
-        # Always update to capture any field changes (confirmation, sig_info, etc.)
+        # Merge fields - use COALESCE to keep existing values if new value is NULL
+        # This allows QRZ (with tx_power) and LoTW (with confirmation) to complement each other
         conn.execute("""
             UPDATE qsos SET
-                is_confirmed = ?,
-                band = ?,
-                mode = ?,
-                tx_power_w = ?,
-                my_dxcc = ?,
-                my_grid = ?,
-                my_sig_info = ?,
-                dx_dxcc = ?,
-                dx_grid = ?,
-                dx_sig_info = ?,
-                distance_km = ?,
-                cool_factor = ?
+                is_confirmed = CASE WHEN ? = 1 THEN 1 ELSE is_confirmed END,
+                band = COALESCE(?, band),
+                mode = COALESCE(?, mode),
+                tx_power_w = COALESCE(?, tx_power_w),
+                my_dxcc = COALESCE(?, my_dxcc),
+                my_grid = COALESCE(?, my_grid),
+                my_sig_info = COALESCE(?, my_sig_info),
+                dx_dxcc = COALESCE(?, dx_dxcc),
+                dx_grid = COALESCE(?, dx_grid),
+                dx_sig_info = COALESCE(?, dx_sig_info),
+                distance_km = COALESCE(?, distance_km),
+                cool_factor = COALESCE(?, cool_factor)
             WHERE id = ?
         """, (
             1 if qso.is_confirmed else 0,
@@ -353,15 +357,173 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                 qso.qrz_logid,
             ))
         except sqlite3.IntegrityError:
-            # Duplicate QSO - this can happen in race conditions between
-            # the SELECT check and INSERT. Just skip it.
-            logger.warning(f"Duplicate QSO skipped: {competitor_callsign} -> {qso.dx_callsign} at {qso.qso_datetime}")
+            # Duplicate QSO - race condition. Find the existing record and merge.
+            logger.info(f"Duplicate detected, merging: {competitor_callsign} -> {qso.dx_callsign} at {qso.qso_datetime}")
+            cursor = conn.execute(
+                """SELECT id FROM qsos
+                   WHERE competitor_callsign = ? AND dx_callsign = ?
+                   AND ABS(CAST((julianday(qso_datetime_utc) - julianday(?)) * 86400 AS INTEGER)) <= 120""",
+                (competitor_callsign, qso.dx_callsign, qso.qso_datetime.isoformat())
+            )
+            existing_row = cursor.fetchone()
+            if existing_row:
+                # Merge into existing record
+                conn.execute("""
+                    UPDATE qsos SET
+                        is_confirmed = CASE WHEN ? = 1 THEN 1 ELSE is_confirmed END,
+                        band = COALESCE(?, band),
+                        mode = COALESCE(?, mode),
+                        tx_power_w = COALESCE(?, tx_power_w),
+                        my_dxcc = COALESCE(?, my_dxcc),
+                        my_grid = COALESCE(?, my_grid),
+                        my_sig_info = COALESCE(?, my_sig_info),
+                        dx_dxcc = COALESCE(?, dx_dxcc),
+                        dx_grid = COALESCE(?, dx_grid),
+                        dx_sig_info = COALESCE(?, dx_sig_info),
+                        distance_km = COALESCE(?, distance_km),
+                        cool_factor = COALESCE(?, cool_factor),
+                        qrz_logid = COALESCE(?, qrz_logid)
+                    WHERE id = ?
+                """, (
+                    1 if qso.is_confirmed else 0,
+                    qso.band,
+                    qso.mode,
+                    qso.tx_power,
+                    qso.my_dxcc,
+                    qso.my_grid,
+                    qso.my_sig_info,
+                    qso.dx_dxcc,
+                    qso.dx_grid,
+                    qso.dx_sig_info,
+                    distance_km,
+                    cool_factor,
+                    qso.qrz_logid,
+                    existing_row["id"],
+                ))
+                return "updated"
             return None
 
         # Note: Records are updated via recompute_all_records() which only
         # considers QSOs that qualified for matches (correct target, time period, mode)
 
         return "new"
+
+
+def merge_duplicate_qsos() -> dict:
+    """
+    Find and merge duplicate QSOs in the database.
+
+    Duplicates are identified by: competitor_callsign + dx_callsign + similar timestamp (within 2 minutes)
+    When merging, we keep the best value for each field (non-NULL preferred).
+
+    Returns:
+        dict with merge statistics
+    """
+    from database import get_db
+    from datetime import datetime
+
+    merged_count = 0
+    deleted_count = 0
+
+    with get_db() as conn:
+        # Get all QSOs grouped by competitor, dx_callsign, and mode, ordered by time
+        # Mode must match to avoid merging FT4/FT8 or SSB/CW contacts
+        cursor = conn.execute("""
+            SELECT id, competitor_callsign, dx_callsign, mode, qso_datetime_utc
+            FROM qsos
+            ORDER BY competitor_callsign, dx_callsign, mode, qso_datetime_utc
+        """)
+        all_qsos = [dict(row) for row in cursor.fetchall()]
+
+        # Find duplicates within 2-minute window (same callsigns AND same mode)
+        duplicates_to_merge = []
+        i = 0
+        while i < len(all_qsos):
+            qso = all_qsos[i]
+            group = [qso["id"]]
+
+            # Look ahead for QSOs with same callsigns AND same mode within 2 minutes
+            j = i + 1
+            while j < len(all_qsos):
+                next_qso = all_qsos[j]
+                if (next_qso["competitor_callsign"] != qso["competitor_callsign"] or
+                    next_qso["dx_callsign"] != qso["dx_callsign"] or
+                    next_qso["mode"] != qso["mode"]):
+                    break
+
+                # Check time difference
+                dt1 = datetime.fromisoformat(qso["qso_datetime_utc"])
+                dt2 = datetime.fromisoformat(next_qso["qso_datetime_utc"])
+                if abs((dt2 - dt1).total_seconds()) <= 120:  # 2 minutes
+                    group.append(next_qso["id"])
+                    j += 1
+                else:
+                    break
+
+            if len(group) > 1:
+                duplicates_to_merge.append(group)
+                i = j  # Skip past the group
+            else:
+                i += 1
+
+        # Now merge each duplicate group
+        for id_group in duplicates_to_merge:
+            # Fetch full QSO data for this group
+            placeholders = ",".join("?" * len(id_group))
+            cursor = conn.execute(f"SELECT * FROM qsos WHERE id IN ({placeholders}) ORDER BY id", id_group)
+            qsos = [dict(row) for row in cursor.fetchall()]
+
+            if len(qsos) < 2:
+                continue
+
+            # Keep the first one as the master, merge others into it
+            master_id = qsos[0]["id"]
+
+            for other in qsos[1:]:
+                # Merge each field - take non-NULL value, prefer confirmed
+                conn.execute("""
+                    UPDATE qsos SET
+                        is_confirmed = CASE WHEN ? = 1 OR is_confirmed = 1 THEN 1 ELSE 0 END,
+                        band = COALESCE(band, ?),
+                        mode = COALESCE(mode, ?),
+                        tx_power_w = COALESCE(tx_power_w, ?),
+                        my_dxcc = COALESCE(my_dxcc, ?),
+                        my_grid = COALESCE(my_grid, ?),
+                        my_sig_info = COALESCE(my_sig_info, ?),
+                        dx_dxcc = COALESCE(dx_dxcc, ?),
+                        dx_grid = COALESCE(dx_grid, ?),
+                        dx_sig_info = COALESCE(dx_sig_info, ?),
+                        distance_km = COALESCE(distance_km, ?),
+                        cool_factor = COALESCE(cool_factor, ?),
+                        qrz_logid = COALESCE(qrz_logid, ?)
+                    WHERE id = ?
+                """, (
+                    other["is_confirmed"],
+                    other["band"],
+                    other["mode"],
+                    other["tx_power_w"],
+                    other["my_dxcc"],
+                    other["my_grid"],
+                    other["my_sig_info"],
+                    other["dx_dxcc"],
+                    other["dx_grid"],
+                    other["dx_sig_info"],
+                    other["distance_km"],
+                    other["cool_factor"],
+                    other["qrz_logid"],
+                    master_id,
+                ))
+
+                # Delete the duplicate
+                conn.execute("DELETE FROM qsos WHERE id = ?", (other["id"],))
+                deleted_count += 1
+
+            merged_count += 1
+
+    return {
+        "duplicate_groups": merged_count,
+        "qsos_deleted": deleted_count,
+    }
 
 
 async def sync_all_competitors() -> dict:

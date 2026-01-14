@@ -34,6 +34,10 @@
         <div class="value">🏆</div>
         <div class="label">Recompute Records</div>
     </div>
+    <div class="stat-box" style="cursor: pointer;" onclick="mergeDuplicates()">
+        <div class="value">🔗</div>
+        <div class="label">Merge Duplicates</div>
+    </div>
 </div>
 
 <h3>Olympiads</h3>
@@ -221,6 +225,32 @@ async function recomputeRecords() {
         showToast(data.message || 'Records recomputed successfully', 'success');
     } catch (err) {
         console.error('Recompute records error:', err);
+        showToast('Error: ' + (err.message || 'Request failed'), 'error');
+    }
+}
+
+async function mergeDuplicates() {
+    if (!confirm('Merge duplicate QSOs? This will combine QSOs from QRZ and LoTW that have the same callsign and timestamp.')) return;
+    showToast('Merging duplicates...', 'info');
+    try {
+        const resp = await fetch('/admin/merge-duplicates', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            try {
+                const errData = await resp.json();
+                showToast('Error: ' + (errData.detail || resp.statusText), 'error');
+            } catch {
+                showToast('Error: ' + resp.status + ' ' + resp.statusText, 'error');
+            }
+            return;
+        }
+        const data = await resp.json();
+        showToast(data.message || 'Duplicates merged', 'success');
+    } catch (err) {
+        console.error('Merge duplicates error:', err);
         showToast('Error: ' + (err.message || 'Request failed'), 'error');
     }
 }

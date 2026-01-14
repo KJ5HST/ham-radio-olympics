@@ -96,7 +96,7 @@ async function leaveSport() {
 {% endif %}
 
 {% if matches %}
-<h3>Matches</h3>
+<h3>Matches{% if total_matches > matches|length %} ({{ total_matches }} total){% endif %}</h3>
 {% if sport.target_type == 'park' %}
 <p id="spots-summary" style="margin-bottom: 15px; color: var(--text-secondary);">
     <span class="loading-spinner" style="vertical-align: middle;"></span> Checking for active spots...
@@ -129,6 +129,25 @@ async function leaveSport() {
         {% endfor %}
     </tbody>
 </table></div>
+
+{% if total_pages > 1 %}
+<div class="pagination" style="margin: 20px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}" class="btn btn-sm">Previous</a>
+    {% endif %}
+
+    <span style="color: var(--text-secondary);">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}" class="btn btn-sm">Next</a>
+    {% endif %}
+
+    <span style="margin-left: auto; color: var(--text-secondary);">
+        Showing {{ ((page - 1) * 50) + 1 }}-{{ [page * 50, total_matches] | min }} of {{ total_matches }}
+    </span>
+</div>
+{% endif %}
+
 <script>
 (function() {
     document.querySelectorAll('.status-badge[data-start]').forEach(function(badge) {
@@ -175,7 +194,7 @@ async function leaveSport() {
             const summary = document.getElementById('spots-summary');
             if (summary) {
                 if (activeCount > 0) {
-                    summary.innerHTML = '<span class="live-indicator">📡</span> ' + activeCount + ' of {{ matches|length }} parks have activators on the air right now';
+                    summary.innerHTML = '<span class="live-indicator">📡</span> ' + activeCount + ' of {{ total_matches }} parks have activators on the air right now';
                     summary.style.color = 'var(--text-primary)';
                 } else {
                     summary.innerHTML = 'No parks reporting spots right now';

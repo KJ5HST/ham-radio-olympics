@@ -551,7 +551,7 @@ async function rejectInvite(teamId) {
             </td>
             <td>{{ qso.band or '-' }}</td>
             <td>{{ qso.mode or '-' }}</td>
-            <td>{{ qso.tx_power_w }}W</td>
+            <td>{% if qso.tx_power_w %}{{ qso.tx_power_w }}W{% else %}-{% endif %}</td>
             <td>{{ "%.0f" | format(qso.distance_km) if qso.distance_km else '-' }} km</td>
             <td>{{ "%.1f" | format(qso.cool_factor) if qso.cool_factor else '-' }}</td>
             <td>{% if qso.is_confirmed %}Yes{% else %}No{% endif %}</td>
