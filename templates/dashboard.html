@@ -401,7 +401,7 @@ async function rejectInvite(teamId) {
 {% endif %}
 
 {% if personal_bests %}
-<h3>Personal Bests</h3>
+<h3>Personal Bests (Competition)</h3>
 <div class="table-responsive"><table>
     <thead>
         <tr>
@@ -425,6 +425,40 @@ async function rejectInvite(teamId) {
                     {{ record.value }}
                 {% endif %}
             </td>
+            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% endif %}
+
+{% if alltime_bests %}
+<h3>Personal Bests (All Time)</h3>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Record Type</th>
+            <th scope="col">Value</th>
+            <th scope="col">Contact</th>
+            <th scope="col">Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for record in alltime_bests %}
+        <tr>
+            <td>{{ record.record_type | replace('_', ' ') | title }}</td>
+            <td>
+                {% if 'distance' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km
+                {% elif 'cool_factor' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} km/W
+                {% elif 'power' in record.record_type %}
+                    {{ "%.1f" | format(record.value) }} W
+                {% else %}
+                    {{ record.value }}
+                {% endif %}
+            </td>
+            <td>{{ record.dx_callsign }}</td>
             <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
         </tr>
         {% endfor %}

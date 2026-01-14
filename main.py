@@ -1143,12 +1143,65 @@ async def get_competitor(
         for medal in medals:
             medal["target_display"] = format_target_display(medal["target_value"], medal["target_type"])
 
-        # Get personal bests
+        # Get personal bests (from competitions)
         cursor = conn.execute("""
             SELECT * FROM records
             WHERE callsign = ?
         """, (callsign,))
         personal_bests = [dict(row) for row in cursor.fetchall()]
+
+        # Get all-time personal bests (from all QSOs, regardless of competition or confirmation)
+        cursor = conn.execute("""
+            SELECT
+                MAX(distance_km) as longest_distance,
+                MAX(cool_factor) as highest_cool_factor,
+                MIN(CASE WHEN tx_power_w > 0 THEN tx_power_w END) as lowest_power
+            FROM qsos
+            WHERE competitor_callsign = ? AND distance_km IS NOT NULL
+        """, (callsign,))
+        row = cursor.fetchone()
+        alltime_bests = []
+        if row:
+            if row["longest_distance"]:
+                # Get the QSO details for longest distance
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, distance_km
+                    FROM qsos WHERE competitor_callsign = ? AND distance_km = ? LIMIT 1
+                """, (callsign, row["longest_distance"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "longest_distance",
+                        "value": row["longest_distance"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
+            if row["highest_cool_factor"]:
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, cool_factor
+                    FROM qsos WHERE competitor_callsign = ? AND cool_factor = ? LIMIT 1
+                """, (callsign, row["highest_cool_factor"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "highest_cool_factor",
+                        "value": row["highest_cool_factor"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
+            if row["lowest_power"]:
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, tx_power_w
+                    FROM qsos WHERE competitor_callsign = ? AND tx_power_w = ? LIMIT 1
+                """, (callsign, row["lowest_power"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "lowest_power",
+                        "value": row["lowest_power"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
 
         # Get sports the competitor is entered in with points per sport
         cursor = conn.execute("""
@@ -1212,6 +1265,7 @@ async def get_competitor(
             "qsos": qsos,
             "medals": medals,
             "personal_bests": personal_bests,
+            "alltime_bests": alltime_bests,
             "sport_entries": sport_entries,
             "is_own_profile": is_own_profile,
             "can_sync": can_sync,
@@ -1793,6 +1847,58 @@ async def user_dashboard(
         """, (user.callsign,))
         personal_bests = [dict(row) for row in cursor.fetchall()]
 
+        # Get all-time personal bests (from all QSOs, regardless of competition or confirmation)
+        cursor = conn.execute("""
+            SELECT
+                MAX(distance_km) as longest_distance,
+                MAX(cool_factor) as highest_cool_factor,
+                MIN(CASE WHEN tx_power_w > 0 THEN tx_power_w END) as lowest_power
+            FROM qsos
+            WHERE competitor_callsign = ? AND distance_km IS NOT NULL
+        """, (user.callsign,))
+        row = cursor.fetchone()
+        alltime_bests = []
+        if row:
+            if row["longest_distance"]:
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, distance_km
+                    FROM qsos WHERE competitor_callsign = ? AND distance_km = ? LIMIT 1
+                """, (user.callsign, row["longest_distance"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "longest_distance",
+                        "value": row["longest_distance"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
+            if row["highest_cool_factor"]:
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, cool_factor
+                    FROM qsos WHERE competitor_callsign = ? AND cool_factor = ? LIMIT 1
+                """, (user.callsign, row["highest_cool_factor"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "highest_cool_factor",
+                        "value": row["highest_cool_factor"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
+            if row["lowest_power"]:
+                cursor = conn.execute("""
+                    SELECT dx_callsign, qso_datetime_utc, tx_power_w
+                    FROM qsos WHERE competitor_callsign = ? AND tx_power_w = ? LIMIT 1
+                """, (user.callsign, row["lowest_power"]))
+                qso = cursor.fetchone()
+                if qso:
+                    alltime_bests.append({
+                        "record_type": "lowest_power",
+                        "value": row["lowest_power"],
+                        "achieved_at": qso["qso_datetime_utc"],
+                        "dx_callsign": qso["dx_callsign"]
+                    })
+
         # Calculate medal summary (count each medal type separately)
         gold = sum((1 if m["qso_race_medal"] == "gold" else 0) + (1 if m["cool_factor_medal"] == "gold" else 0) for m in medals)
         silver = sum((1 if m["qso_race_medal"] == "silver" else 0) + (1 if m["cool_factor_medal"] == "silver" else 0) for m in medals)
@@ -1851,6 +1957,7 @@ async def user_dashboard(
         "qsos": qsos,
         "medals": medals,
         "personal_bests": personal_bests,
+        "alltime_bests": alltime_bests,
         "sport_entries": sport_entries,
         "medal_summary": {
             "gold": gold,

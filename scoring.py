@@ -430,6 +430,9 @@ def recompute_match_medals(match_id: int):
     This should be called after a sync to update standings.
     Uses exclusive transaction to prevent race conditions during concurrent syncs.
     """
+    # Collect QSOs for record updates (done outside exclusive block to avoid deadlock)
+    qsos_for_records = []
+
     with get_db_exclusive() as conn:
         # Get match and sport config
         cursor = conn.execute("""
@@ -469,6 +472,10 @@ def recompute_match_medals(match_id: int):
             max_power_w=match_data.get("max_power_w"),
         )
 
+        # Collect QSO info for record updates
+        for qso in matching:
+            qsos_for_records.append((qso.qso_id, qso.callsign))
+
         # Compute medals
         results = compute_medals(
             matching,
@@ -501,6 +508,10 @@ def recompute_match_medals(match_id: int):
                 result.pota_bonus,
                 result.total_points,
             ))
+
+    # Update records after exclusive block is released
+    for qso_id, callsign in qsos_for_records:
+        update_records(qso_id, callsign, match_id=match_id)
 
 
 def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, match_id: Optional[int] = None):
