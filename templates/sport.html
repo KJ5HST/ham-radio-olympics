@@ -99,9 +99,11 @@ async function leaveSport() {
 {% if matches %}
 <h3>Matches{% if total_matches > matches|length %} ({{ total_matches }} total){% endif %}</h3>
 {% if sport.target_type == 'park' %}
-<p id="spots-summary" style="margin-bottom: 15px; color: var(--text-secondary);">
+<p id="spots-summary" style="margin-bottom: 10px; color: var(--text-secondary);">
     <span class="loading-spinner" style="vertical-align: middle;"></span> Checking for active spots...
 </p>
+<div id="active-parks-list" style="display: none; margin-bottom: 15px; padding: 10px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
+</div>
 {% endif %}
 <div class="table-responsive"><table>
     <thead>
@@ -173,6 +175,16 @@ async function leaveSport() {
 {% if sport.target_type == 'park' %}
 <script>
 (function() {
+    // Build map of park -> match info
+    const parkMatches = {
+        {% for match in matches %}
+        "{{ match.target_value }}": {
+            id: {{ match.id }},
+            display: "{{ match.target_display | replace('"', '\\"') }}"
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    };
+
     async function updateLiveIndicators() {
         try {
             const resp = await fetch('/api/v1/spots');
@@ -181,11 +193,15 @@ async function leaveSport() {
             const activeParks = new Set(data.parks_with_spots || []);
 
             let activeCount = 0;
+            const activeMatchParks = [];
             document.querySelectorAll('.live-indicator[data-park]').forEach(el => {
                 const park = el.getAttribute('data-park');
                 if (activeParks.has(park)) {
                     el.style.display = 'inline';
                     activeCount++;
+                    if (parkMatches[park]) {
+                        activeMatchParks.push({ park: park, ...parkMatches[park] });
+                    }
                 } else {
                     el.style.display = 'none';
                 }
@@ -193,13 +209,24 @@ async function leaveSport() {
 
             // Update summary message
             const summary = document.getElementById('spots-summary');
+            const parksList = document.getElementById('active-parks-list');
             if (summary) {
                 if (activeCount > 0) {
                     summary.innerHTML = '<span class="live-indicator">📡</span> ' + activeCount + ' of {{ total_matches }} parks have activators on the air right now';
                     summary.style.color = 'var(--text-primary)';
+
+                    // Build list of active parks with links
+                    if (parksList && activeMatchParks.length > 0) {
+                        const links = activeMatchParks.map(p =>
+                            '<a href="/olympiad/sport/{{ sport.id }}/match/' + p.id + '" style="margin-right: 12px; white-space: nowrap;">📡 ' + p.display + '</a>'
+                        ).join('');
+                        parksList.innerHTML = '<strong style="margin-right: 10px;">Active now:</strong>' + links;
+                        parksList.style.display = 'block';
+                    }
                 } else {
                     summary.innerHTML = 'No parks reporting spots right now';
                     summary.style.color = 'var(--text-secondary)';
+                    if (parksList) parksList.style.display = 'none';
                 }
             }
         } catch (e) {
