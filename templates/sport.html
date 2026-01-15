@@ -69,6 +69,7 @@ async function leaveSport() {
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Rank</th>
             <th scope="col">Callsign</th>
             <th scope="col">🥇</th>
@@ -79,7 +80,12 @@ async function leaveSport() {
     </thead>
     <tbody>
         {% for standing in standings[:20] %}
-        <tr>
+        <tr class="standings-row" data-callsign="{{ standing.callsign }}">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleDetails('{{ standing.callsign }}')">
+                {% if medal_details.get(standing.callsign) %}
+                <span class="expand-icon" id="icon-{{ standing.callsign }}">▶</span>
+                {% endif %}
+            </td>
             <td>{{ loop.index }}</td>
             <td><a href="/competitor/{{ standing.callsign }}">{{ standing.first_name | competitor_display(standing.callsign) }}</a></td>
             <td class="medal-gold">{{ standing.gold or '-' }}</td>
@@ -87,9 +93,91 @@ async function leaveSport() {
             <td class="medal-bronze">{{ standing.bronze or '-' }}</td>
             <td><strong>{{ standing.total_points }}</strong></td>
         </tr>
+        {% if medal_details.get(standing.callsign) %}
+        <tr class="details-row" id="details-{{ standing.callsign }}" style="display: none;">
+            <td colspan="7" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.9em;">
+                        <thead>
+                            <tr>
+                                <th>Match</th>
+                                <th>QSO Race</th>
+                                <th>Cool Factor</th>
+                                <th>POTA</th>
+                                <th>Pts</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for detail in medal_details[standing.callsign] %}
+                            <tr>
+                                <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ detail.match_id }}">{{ detail.target | pota_tooltip }}</a></td>
+                                <td>
+                                    {% if detail.qso_medal == 'gold' %}🥇
+                                    {% elif detail.qso_medal == 'silver' %}🥈
+                                    {% elif detail.qso_medal == 'bronze' %}🥉
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if detail.cf_medal == 'gold' %}🥇
+                                    {% elif detail.cf_medal == 'silver' %}🥈
+                                    {% elif detail.cf_medal == 'bronze' %}🥉
+                                    {% else %}-{% endif %}
+                                    {% if detail.cf_value %}<span style="color: var(--text-secondary); font-size: 0.85em;">({{ "%.1f" | format(detail.cf_value) }})</span>{% endif %}
+                                </td>
+                                <td>{% if detail.pota_bonus %}+{{ detail.pota_bonus }}{% else %}-{% endif %}</td>
+                                <td><strong>{{ detail.points }}</strong></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>
+
+<script>
+function toggleDetails(callsign) {
+    const detailsRow = document.getElementById('details-' + callsign);
+    const icon = document.getElementById('icon-' + callsign);
+    if (!detailsRow || !icon) return;
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
+
+<style>
+.expand-icon {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+.standings-row:hover .expand-icon {
+    color: var(--text-primary);
+}
+.details-row table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.details-row th, .details-row td {
+    padding: 5px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.details-row th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.85em;
+}
+</style>
 {% else %}
 <div class="card">
     <p>No standings yet. Medals are awarded as matches complete.</p>

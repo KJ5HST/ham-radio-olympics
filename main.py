@@ -798,6 +798,34 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
         """, (sport_id,))
         standings = [dict(row) for row in cursor.fetchall()]
 
+        # Get detailed medals per match for each competitor (for expandable rows)
+        cursor = conn.execute("""
+            SELECT m.callsign, m.match_id, ma.target_value,
+                   m.qso_race_medal, m.qso_race_claim_time,
+                   m.cool_factor_medal, m.cool_factor_value,
+                   m.pota_bonus, m.total_points
+            FROM medals m
+            JOIN matches ma ON m.match_id = ma.id
+            WHERE ma.sport_id = ?
+            ORDER BY ma.start_date DESC
+        """, (sport_id,))
+        medal_details = {}
+        for row in cursor.fetchall():
+            callsign = row["callsign"]
+            if callsign not in medal_details:
+                medal_details[callsign] = []
+            medal_details[callsign].append({
+                "match_id": row["match_id"],
+                "target": format_target_display(row["target_value"], sport_dict["target_type"]),
+                "target_value": row["target_value"],
+                "qso_medal": row["qso_race_medal"],
+                "qso_time": row["qso_race_claim_time"],
+                "cf_medal": row["cool_factor_medal"],
+                "cf_value": row["cool_factor_value"],
+                "pota_bonus": row["pota_bonus"],
+                "points": row["total_points"]
+            })
+
         # Check if user has entered this sport
         is_entered = False
         if user:
@@ -820,6 +848,7 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
             "sport": dict(sport),
             "matches": matches,
             "standings": standings,
+            "medal_details": medal_details,
             "is_entered": is_entered,
             "entry_count": entry_count,
             "page": page,
