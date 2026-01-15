@@ -934,6 +934,35 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         match_dict = dict(match)
         target_display = format_target_display(match_dict["target_value"], sport["target_type"]) if sport else match_dict["target_value"]
 
+        # Get QSOs for each competitor in this match (for expandable rows)
+        cursor = conn.execute("""
+            SELECT q.contestant_callsign, q.dx_callsign, q.qso_datetime_utc,
+                   q.mode, q.tx_power_w, q.distance_km, q.cool_factor, q.is_confirmed,
+                   q.dx_grid, q.dx_sig_info, q.my_sig_info
+            FROM qsos q
+            WHERE q.contestant_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
+              AND datetime(q.qso_datetime_utc) >= datetime(?)
+              AND datetime(q.qso_datetime_utc) <= datetime(?)
+            ORDER BY q.qso_datetime_utc ASC
+        """, (match_id, match_dict["start_date"], match_dict["end_date"]))
+
+        qso_details = {}
+        for row in cursor.fetchall():
+            callsign = row["contestant_callsign"]
+            if callsign not in qso_details:
+                qso_details[callsign] = []
+            qso_details[callsign].append({
+                "dx_callsign": row["dx_callsign"],
+                "time": row["qso_datetime_utc"],
+                "mode": row["mode"],
+                "power": row["tx_power_w"],
+                "distance": row["distance_km"],
+                "cool_factor": row["cool_factor"],
+                "confirmed": row["is_confirmed"],
+                "grid": row["dx_grid"],
+                "park": row["dx_sig_info"] or row["my_sig_info"]
+            })
+
         return templates.TemplateResponse("match.html", {
             "request": request,
             "user": user,
@@ -944,6 +973,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
             "sport_name": sport["name"] if sport else "Unknown",
             "sport_id": sport_id,
             "medals": medals,
+            "qso_details": qso_details,
         })
 
 
