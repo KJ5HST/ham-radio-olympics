@@ -10,18 +10,19 @@
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Record Type</th>
             <th scope="col">Value</th>
             <th scope="col">Holder</th>
-            <th scope="col">QSO With</th>
-            <th scope="col">Mode</th>
             <th scope="col">Match</th>
-            <th scope="col">Date</th>
         </tr>
     </thead>
     <tbody>
         {% for record in world_records %}
-        <tr>
+        <tr class="record-row">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleRecord('world-{{ loop.index }}')">
+                <span class="expand-icon" id="icon-world-{{ loop.index }}">▶</span>
+            </td>
             <td><strong>{{ record.record_type | replace('_', ' ') | title }}</strong></td>
             <td>
                 {% if 'distance' in record.record_type %}
@@ -45,8 +46,6 @@
                     -
                 {% endif %}
             </td>
-            <td>{{ record.dx_callsign or '-' }}</td>
-            <td>{{ record.mode or '-' }}</td>
             <td>
                 {% if record.match_id %}
                     <a href="/olympiad/sport/{{ record.linked_sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target_value | pota_tooltip }}</a>
@@ -54,7 +53,20 @@
                     -
                 {% endif %}
             </td>
-            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+        </tr>
+        <tr class="details-row" id="details-world-{{ loop.index }}" style="display: none;">
+            <td colspan="5" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em;">
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">QSO With:</th><td><strong>{{ record.dx_callsign or '-' }}</strong></td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Mode:</th><td>{{ record.mode or '-' }}{% if record.my_sig_info %} <span title="Activated from {{ record.my_sig_info }}">📡</span>{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th><td>{% if record.tx_power_w %}{{ record.tx_power_w }}W{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Distance:</th><td>{% if record.distance_km %}{{ record.distance_km | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{{ "%.1f" | format(record.cool_factor) }} km/W{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th><td>{{ record.qso_datetime_utc | format_datetime if record.qso_datetime_utc else (record.achieved_at | format_date if record.achieved_at else '-') }}</td></tr>
+                    </table>
+                </div>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -70,16 +82,19 @@
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Mode</th>
             <th scope="col">Distance</th>
             <th scope="col">Holder</th>
             <th scope="col">Match</th>
-            <th scope="col">Date</th>
         </tr>
     </thead>
     <tbody>
         {% for record in distance_records %}
-        <tr>
+        <tr class="record-row">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleRecord('dist-{{ loop.index }}')">
+                <span class="expand-icon" id="icon-dist-{{ loop.index }}">▶</span>
+            </td>
             <td><strong>{{ record.mode }}</strong></td>
             <td>{{ record.value | format_distance(display_prefs.distance_unit or 'km') }}</td>
             <td>
@@ -88,7 +103,18 @@
             <td>
                 <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
             </td>
-            <td>{{ record.date | format_date if record.date else '-' }}</td>
+        </tr>
+        <tr class="details-row" id="details-dist-{{ loop.index }}" style="display: none;">
+            <td colspan="5" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em;">
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">QSO With:</th><td><strong>{{ record.dx_callsign or '-' }}</strong></td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th><td>{% if record.power %}{{ record.power }}W{% else %}-{% endif %}{% if record.my_sig_info %} <span title="Activated from {{ record.my_sig_info }}">📡</span>{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{{ "%.1f" | format(record.cool_factor) }} km/W{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th><td>{{ record.date | format_datetime if record.date else '-' }}</td></tr>
+                    </table>
+                </div>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -100,16 +126,19 @@
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Mode</th>
             <th scope="col">Cool Factor</th>
             <th scope="col">Holder</th>
             <th scope="col">Match</th>
-            <th scope="col">Date</th>
         </tr>
     </thead>
     <tbody>
         {% for record in cool_factor_records %}
-        <tr>
+        <tr class="record-row">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleRecord('cf-{{ loop.index }}')">
+                <span class="expand-icon" id="icon-cf-{{ loop.index }}">▶</span>
+            </td>
             <td><strong>{{ record.mode }}</strong></td>
             <td>{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(record.value * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(record.value) }} km/W{% endif %}</td>
             <td>
@@ -118,12 +147,53 @@
             <td>
                 <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
             </td>
-            <td>{{ record.date | format_date if record.date else '-' }}</td>
+        </tr>
+        <tr class="details-row" id="details-cf-{{ loop.index }}" style="display: none;">
+            <td colspan="5" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em;">
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">QSO With:</th><td><strong>{{ record.dx_callsign or '-' }}</strong></td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th><td>{% if record.power %}{{ record.power }}W{% else %}-{% endif %}{% if record.my_sig_info %} <span title="Activated from {{ record.my_sig_info }}">📡</span>{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Distance:</th><td>{% if record.distance %}{{ record.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th><td>{{ record.date | format_datetime if record.date else '-' }}</td></tr>
+                    </table>
+                </div>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table></div>
 {% endif %}
+
+<script>
+function toggleRecord(id) {
+    const detailsRow = document.getElementById('details-' + id);
+    const icon = document.getElementById('icon-' + id);
+    if (!detailsRow || !icon) return;
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
+
+<style>
+.expand-icon {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+.record-row:hover .expand-icon {
+    color: var(--text-primary);
+}
+.details-row table {
+    border-collapse: collapse;
+}
+</style>
 
 <h3>About Records</h3>
 <div class="card">

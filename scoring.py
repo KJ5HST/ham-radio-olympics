@@ -227,6 +227,9 @@ def get_matching_qsos(
     # Match-level modes override sport-level if specified
     allowed_modes = match_allowed_modes if match_allowed_modes else sport_config.get("allowed_modes")
 
+    # POTA activation requires 10+ QSOs per day from the park
+    POTA_MIN_QSOS = 10
+
     with get_db() as conn:
         # Get all confirmed QSOs in the time window from competitors who opted in
         cursor = conn.execute("""
@@ -239,9 +242,27 @@ def get_matching_qsos(
             AND q.qso_datetime_utc <= ?
         """, (sport_id, start_date.isoformat(), end_date.isoformat()))
 
-        for row in cursor.fetchall():
-            qso = dict(row)
+        all_qsos = [dict(row) for row in cursor.fetchall()]
 
+        # For park activations, pre-compute valid activation days (10+ QSOs per day)
+        valid_activation_days = set()  # (callsign, park, date) tuples
+        if activate_enabled and target_type == "park":
+            # Count QSOs per (callsign, park, date)
+            activation_counts: Dict[Tuple[str, str, str], int] = {}
+            for qso in all_qsos:
+                park = (qso.get("my_sig_info") or "").upper().strip()
+                if park == target_value.upper().strip():
+                    callsign = qso["competitor_callsign"]
+                    qso_date = qso["qso_datetime_utc"][:10]  # UTC date
+                    key = (callsign, park, qso_date)
+                    activation_counts[key] = activation_counts.get(key, 0) + 1
+
+            # Only days with 10+ QSOs count as valid activations
+            for key, count in activation_counts.items():
+                if count >= POTA_MIN_QSOS:
+                    valid_activation_days.add(key)
+
+        for qso in all_qsos:
             # Check if QSO mode is allowed (applies to both work and activate)
             if not is_mode_allowed(qso.get("mode"), allowed_modes):
                 continue
@@ -275,6 +296,13 @@ def get_matching_qsos(
             if activate_enabled:
                 valid, _ = validate_qso_for_mode(qso, "activate")
                 if valid and matches_target(qso, target_type, target_value, "activate"):
+                    # For park activations, require 10+ QSOs on that day
+                    if target_type == "park":
+                        park = (qso.get("my_sig_info") or "").upper().strip()
+                        qso_date = qso["qso_datetime_utc"][:10]
+                        if (qso["competitor_callsign"], park, qso_date) not in valid_activation_days:
+                            continue  # Skip - not a valid activation day
+
                     role = "activate" if separate_pools else "combined"
                     has_pota = bool(qso.get("my_sig_info"))
 

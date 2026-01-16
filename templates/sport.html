@@ -105,6 +105,7 @@ async function leaveSport() {
                                 <th>Cool Factor</th>
                                 <th>POTA</th>
                                 <th>Pts</th>
+                                <th>QSOs</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -126,6 +127,11 @@ async function leaveSport() {
                                 </td>
                                 <td>{% if detail.pota_bonus %}+{{ detail.pota_bonus }}{% else %}-{% endif %}</td>
                                 <td><strong>{{ detail.points }}</strong></td>
+                                <td>
+                                    {% if detail.qsos %}
+                                        {{ detail.qsos | length }} QSO{% if detail.qsos | length != 1 %}s{% endif %}
+                                    {% else %}-{% endif %}
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>

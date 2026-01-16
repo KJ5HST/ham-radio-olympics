@@ -9,18 +9,24 @@
 <div class="table-responsive"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Rank</th>
             <th scope="col">Competitor</th>
             <th scope="col"><span class="medal-emoji gold"></span></th>
             <th scope="col"><span class="medal-emoji silver"></span></th>
             <th scope="col"><span class="medal-emoji bronze"></span></th>
-            <th scope="col">Total Medals</th>
+            <th scope="col">Total</th>
             <th scope="col">Points</th>
         </tr>
     </thead>
     <tbody>
         {% for competitor in medal_standings %}
-        <tr>
+        <tr class="standings-row" data-callsign="{{ competitor.callsign }}">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleDetails('{{ competitor.callsign }}')">
+                {% if medal_details.get(competitor.callsign) %}
+                <span class="expand-icon" id="icon-{{ competitor.callsign }}">▶</span>
+                {% endif %}
+            </td>
             <td>{{ loop.index }}</td>
             <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a></td>
             <td>{{ competitor.gold_count }}</td>
@@ -29,9 +35,92 @@
             <td><strong>{{ competitor.total_medals }}</strong></td>
             <td>{{ competitor.total_points }}</td>
         </tr>
+        {% if medal_details.get(competitor.callsign) %}
+        <tr class="details-row" id="details-{{ competitor.callsign }}" style="display: none;">
+            <td colspan="8" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 4px 8px;">Match</th>
+                                <th style="padding: 4px 8px;">Medal</th>
+                                <th style="padding: 4px 8px;">DX Call</th>
+                                <th style="padding: 4px 8px;">Time (UTC)</th>
+                                <th style="padding: 4px 8px;">Mode</th>
+                                <th style="padding: 4px 8px;">Power</th>
+                                <th style="padding: 4px 8px;">Distance</th>
+                                <th style="padding: 4px 8px;">CF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for detail in medal_details[competitor.callsign] %}
+                            {% for qso in detail.qsos %}
+                            <tr>
+                                <td style="padding: 4px 8px;"><a href="/olympiad/sport/{{ detail.sport_id }}/match/{{ detail.match_id }}">{{ detail.sport_name }}: {{ detail.target | pota_tooltip }}</a></td>
+                                <td style="padding: 4px 8px;">
+                                    {% if qso.medal_type == 'QSO Race' %}
+                                        {% if detail.qso_medal == 'gold' %}🥇{% elif detail.qso_medal == 'silver' %}🥈{% elif detail.qso_medal == 'bronze' %}🥉{% endif %} Race
+                                    {% else %}
+                                        {% if detail.cf_medal == 'gold' %}🥇{% elif detail.cf_medal == 'silver' %}🥈{% elif detail.cf_medal == 'bronze' %}🥉{% endif %} CF
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 4px 8px;"><strong>{{ qso.dx_callsign }}</strong></td>
+                                <td style="padding: 4px 8px;">{{ qso.time | format_datetime }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td style="padding: 4px 8px;">{{ qso.mode or '-' }}</td>
+                                <td style="padding: 4px 8px;">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.distance %}{{ "%.0f" | format(qso.distance) }} km{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.cool_factor %}{{ "%.1f" | format(qso.cool_factor) }}{% else %}-{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>
+
+<script>
+function toggleDetails(callsign) {
+    const detailsRow = document.getElementById('details-' + callsign);
+    const icon = document.getElementById('icon-' + callsign);
+    if (!detailsRow || !icon) return;
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
+
+<style>
+.expand-icon {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+}
+.standings-row:hover .expand-icon {
+    color: var(--text-primary);
+}
+.details-row table {
+    border-collapse: collapse;
+}
+.details-row th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.details-row td {
+    border-bottom: 1px solid var(--border-color);
+}
+</style>
 {% else %}
 <div class="card">
     <p>No medals have been awarded yet. Compete in matches to earn medals!</p>

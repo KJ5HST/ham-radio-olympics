@@ -800,7 +800,7 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
 
         # Get detailed medals per match for each competitor (for expandable rows)
         cursor = conn.execute("""
-            SELECT m.callsign, m.match_id, ma.target_value,
+            SELECT m.callsign, m.match_id, ma.target_value, ma.start_date, ma.end_date,
                    m.qso_race_medal, m.qso_race_claim_time,
                    m.cool_factor_medal, m.cool_factor_value,
                    m.pota_bonus, m.total_points
@@ -809,8 +809,66 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
             WHERE ma.sport_id = ?
             ORDER BY ma.start_date DESC
         """, (sport_id,))
+        medal_rows = cursor.fetchall()
+
+        # Get all confirmed QSOs for competitors with medals in this sport
+        callsigns = list(set(row["callsign"] for row in medal_rows))
+        qsos_by_callsign_match = {}
+        if callsigns:
+            from scoring import matches_target
+            placeholders = ",".join("?" * len(callsigns))
+            cursor = conn.execute(f"""
+                SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
+                       q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
+                       q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
+                FROM qsos q
+                WHERE q.competitor_callsign IN ({placeholders})
+                  AND q.is_confirmed = 1
+                ORDER BY q.qso_datetime_utc ASC
+            """, callsigns)
+            all_qsos = [dict(row) for row in cursor.fetchall()]
+
+            # Index QSOs by callsign for faster lookup
+            qsos_by_callsign = {}
+            for qso in all_qsos:
+                cs = qso["competitor_callsign"]
+                if cs not in qsos_by_callsign:
+                    qsos_by_callsign[cs] = []
+                qsos_by_callsign[cs].append(qso)
+
+            # Match QSOs to medals
+            for row in medal_rows:
+                callsign = row["callsign"]
+                match_id = row["match_id"]
+                target_value = row["target_value"]
+                start_date = row["start_date"]
+                end_date = row["end_date"]
+                key = (callsign, match_id)
+
+                matching_qsos = []
+                # Normalize dates for comparison (just the date part)
+                start_date_cmp = start_date[:10] if start_date else None
+                end_date_cmp = end_date[:10] if end_date else None
+                for qso in qsos_by_callsign.get(callsign, []):
+                    qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
+                    if qso_date and start_date_cmp and end_date_cmp and start_date_cmp <= qso_date <= end_date_cmp:
+                        # Check if QSO matches target
+                        matches_work = matches_target(qso, sport_dict["target_type"], target_value, "work")
+                        matches_activate = matches_target(qso, sport_dict["target_type"], target_value, "activate")
+                        if matches_work or matches_activate:
+                            matching_qsos.append({
+                                "dx_callsign": qso["dx_callsign"],
+                                "time": qso["qso_datetime_utc"],
+                                "mode": qso["mode"],
+                                "power": qso["tx_power_w"],
+                                "distance": qso["distance_km"],
+                                "cool_factor": qso["cool_factor"],
+                                "park": qso["dx_sig_info"] or qso["my_sig_info"]
+                            })
+                qsos_by_callsign_match[key] = matching_qsos
+
         medal_details = {}
-        for row in cursor.fetchall():
+        for row in medal_rows:
             callsign = row["callsign"]
             if callsign not in medal_details:
                 medal_details[callsign] = []
@@ -823,7 +881,8 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
                 "cf_medal": row["cool_factor_medal"],
                 "cf_value": row["cool_factor_value"],
                 "pota_bonus": row["pota_bonus"],
-                "points": row["total_points"]
+                "points": row["total_points"],
+                "qsos": qsos_by_callsign_match.get((callsign, row["match_id"]), [])
             })
 
         # Check if user has entered this sport
@@ -934,21 +993,36 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         match_dict = dict(match)
         target_display = format_target_display(match_dict["target_value"], sport["target_type"]) if sport else match_dict["target_value"]
 
-        # Get QSOs for each competitor in this match (for expandable rows)
+        # Get confirmed QSOs for each competitor in this match (for expandable rows)
+        # Include all fields needed for target matching
         cursor = conn.execute("""
-            SELECT q.contestant_callsign, q.dx_callsign, q.qso_datetime_utc,
+            SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                    q.mode, q.tx_power_w, q.distance_km, q.cool_factor, q.is_confirmed,
-                   q.dx_grid, q.dx_sig_info, q.my_sig_info
+                   q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
             FROM qsos q
-            WHERE q.contestant_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
+            WHERE q.competitor_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
               AND datetime(q.qso_datetime_utc) >= datetime(?)
               AND datetime(q.qso_datetime_utc) <= datetime(?)
+              AND q.is_confirmed = 1
             ORDER BY q.qso_datetime_utc ASC
         """, (match_id, match_dict["start_date"], match_dict["end_date"]))
 
+        # Filter QSOs to only those matching the target
+        from scoring import matches_target
+        target_type = sport["target_type"] if sport else None
+        target_value = match_dict["target_value"]
+
         qso_details = {}
         for row in cursor.fetchall():
-            callsign = row["contestant_callsign"]
+            qso = dict(row)
+            # Check if QSO matches target (try both work and activate modes)
+            if target_type and target_value:
+                matches_work = matches_target(qso, target_type, target_value, "work")
+                matches_activate = matches_target(qso, target_type, target_value, "activate")
+                if not matches_work and not matches_activate:
+                    continue
+
+            callsign = row["competitor_callsign"]
             if callsign not in qso_details:
                 qso_details[callsign] = []
             qso_details[callsign].append({
@@ -960,7 +1034,8 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                 "cool_factor": row["cool_factor"],
                 "confirmed": row["is_confirmed"],
                 "grid": row["dx_grid"],
-                "park": row["dx_sig_info"] or row["my_sig_info"]
+                "park": row["dx_sig_info"],
+                "my_park": row["my_sig_info"],  # Competitor was activating from this park
             })
 
         return templates.TemplateResponse("match.html", {
@@ -1048,6 +1123,8 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         cursor = conn.execute("""
             SELECT r.record_type, r.value, r.qso_id, r.achieved_at, r.match_id,
                    q.competitor_callsign as holder, q.dx_callsign, q.mode, q.band,
+                   q.tx_power_w, q.distance_km, q.cool_factor, q.qso_datetime_utc,
+                   q.my_sig_info,
                    c.first_name as holder_first_name,
                    m.target_value,
                    s.id as linked_sport_id, s.name as sport_name
@@ -1076,7 +1153,8 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                 -- Find QSOs from medal-holding competitors during their matches
                 -- that match the target (for parks, check sig_info)
                 SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
-                       q.qso_datetime_utc, c.first_name, m.id as match_id, m.target_value,
+                       q.qso_datetime_utc, q.tx_power_w, q.dx_callsign, q.my_sig_info,
+                       c.first_name, m.id as match_id, m.target_value,
                        s.id as sport_id, s.name as sport_name, s.target_type,
                        COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes
                 FROM medal_competitor_matches mcm
@@ -1147,6 +1225,10 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                     'sport_name': d['sport_name'],
                     'target': d['target_value'],
                     'date': d['qso_datetime_utc'],
+                    'dx_callsign': d.get('dx_callsign'),
+                    'power': d.get('tx_power_w'),
+                    'cool_factor': d.get('cool_factor'),
+                    'my_sig_info': d.get('my_sig_info'),  # Activation indicator
                 })
 
             if 'cool_factor_qso' in data and data['max_cool_factor']:
@@ -1161,6 +1243,10 @@ async def get_records(request: Request, user: User = Depends(require_user)):
                     'sport_name': cf['sport_name'],
                     'target': cf['target_value'],
                     'date': cf['qso_datetime_utc'],
+                    'dx_callsign': cf.get('dx_callsign'),
+                    'power': cf.get('tx_power_w'),
+                    'distance': cf.get('distance_km'),
+                    'my_sig_info': cf.get('my_sig_info'),  # Activation indicator
                 })
 
         # Sort each by date (newest first)
@@ -1210,10 +1296,115 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
         """)
         medal_standings = [dict(row) for row in cursor.fetchall()]
 
+        # Get detailed medal info for each competitor (for expandable rows)
+        callsigns = [s["callsign"] for s in medal_standings]
+        medal_details = {}
+        if callsigns:
+            placeholders = ",".join("?" * len(callsigns))
+            cursor = conn.execute(f"""
+                SELECT m.callsign, m.match_id, m.qso_race_medal, m.cool_factor_medal,
+                       m.cool_factor_value, m.pota_bonus, m.total_points,
+                       ma.target_value, ma.start_date, ma.end_date,
+                       s.id as sport_id, s.name as sport_name, s.target_type
+                FROM medals m
+                JOIN matches ma ON m.match_id = ma.id
+                JOIN sports s ON ma.sport_id = s.id
+                WHERE m.callsign IN ({placeholders})
+                  AND (m.qso_race_medal IS NOT NULL OR m.cool_factor_medal IS NOT NULL)
+                ORDER BY ma.start_date DESC
+            """, callsigns)
+            medal_rows = cursor.fetchall()
+
+            # Get QSOs for these competitors
+            from scoring import matches_target
+            cursor = conn.execute(f"""
+                SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
+                       q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
+                       q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
+                FROM qsos q
+                WHERE q.competitor_callsign IN ({placeholders})
+                  AND q.is_confirmed = 1
+                ORDER BY q.qso_datetime_utc ASC
+            """, callsigns)
+            all_qsos = [dict(row) for row in cursor.fetchall()]
+
+            # Index QSOs by callsign
+            qsos_by_callsign = {}
+            for qso in all_qsos:
+                cs = qso["competitor_callsign"]
+                if cs not in qsos_by_callsign:
+                    qsos_by_callsign[cs] = []
+                qsos_by_callsign[cs].append(qso)
+
+            # Build medal details with the specific QSOs that earned medals
+            for row in medal_rows:
+                callsign = row["callsign"]
+                if callsign not in medal_details:
+                    medal_details[callsign] = []
+
+                # Find QSOs matching this medal's target
+                start_date = row["start_date"][:10] if row["start_date"] else None
+                end_date = row["end_date"][:10] if row["end_date"] else None
+                target_value = row["target_value"]
+                target_type = row["target_type"]
+
+                all_matching = []
+                for qso in qsos_by_callsign.get(callsign, []):
+                    qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
+                    if qso_date and start_date and end_date and start_date <= qso_date <= end_date:
+                        matches_work = matches_target(qso, target_type, target_value, "work")
+                        matches_activate = matches_target(qso, target_type, target_value, "activate")
+                        if matches_work or matches_activate:
+                            all_matching.append(qso)
+
+                # Only show the QSO(s) that actually earned the medal
+                medal_qsos = []
+                # QSO Race medal: earliest QSO
+                if row["qso_race_medal"] and all_matching:
+                    earliest = min(all_matching, key=lambda q: q["qso_datetime_utc"] or "")
+                    medal_qsos.append({
+                        "dx_callsign": earliest["dx_callsign"],
+                        "time": earliest["qso_datetime_utc"],
+                        "mode": earliest["mode"],
+                        "power": earliest["tx_power_w"],
+                        "distance": earliest["distance_km"],
+                        "cool_factor": earliest["cool_factor"],
+                        "medal_type": "QSO Race",
+                        "my_park": earliest.get("my_sig_info"),  # Activation indicator
+                    })
+                # Cool Factor medal: highest cool_factor QSO
+                if row["cool_factor_medal"] and all_matching:
+                    best_cf = max((q for q in all_matching if q.get("cool_factor")),
+                                  key=lambda q: q["cool_factor"] or 0, default=None)
+                    if best_cf:
+                        medal_qsos.append({
+                            "dx_callsign": best_cf["dx_callsign"],
+                            "time": best_cf["qso_datetime_utc"],
+                            "mode": best_cf["mode"],
+                            "power": best_cf["tx_power_w"],
+                            "distance": best_cf["distance_km"],
+                            "cool_factor": best_cf["cool_factor"],
+                            "medal_type": "Cool Factor",
+                            "my_park": best_cf.get("my_sig_info"),  # Activation indicator
+                        })
+
+                medal_details[callsign].append({
+                    "match_id": row["match_id"],
+                    "sport_id": row["sport_id"],
+                    "sport_name": row["sport_name"],
+                    "target": format_target_display(target_value, target_type),
+                    "qso_medal": row["qso_race_medal"],
+                    "cf_medal": row["cool_factor_medal"],
+                    "cf_value": row["cool_factor_value"],
+                    "points": row["total_points"],
+                    "qsos": medal_qsos
+                })
+
     return templates.TemplateResponse("medals.html", {
         "request": request,
         "user": user,
-        "medal_standings": medal_standings
+        "medal_standings": medal_standings,
+        "medal_details": medal_details
     })
 
 
