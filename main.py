@@ -966,6 +966,7 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
             "page": page,
             "total_pages": total_pages,
             "total_matches": total_matches,
+            "display_prefs": get_display_prefs(user),
         })
 
 
