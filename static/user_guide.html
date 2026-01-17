@@ -240,9 +240,10 @@
                     <ul>
                         <li><a href="#medal-points">4.1 Medal Point Values</a></li>
                         <li><a href="#pota-bonuses">4.2 POTA Bonuses</a></li>
-                        <li><a href="#scoring-examples">4.3 Scoring Examples</a></li>
-                        <li><a href="#max-points">4.4 Maximum Points Per Match</a></li>
-                        <li><a href="#qualification">4.5 Qualification Requirements</a></li>
+                        <li><a href="#pota-activation">4.3 POTA Activation Scoring</a></li>
+                        <li><a href="#scoring-examples">4.4 Scoring Examples</a></li>
+                        <li><a href="#max-points">4.5 Maximum Points Per Match</a></li>
+                        <li><a href="#qualification">4.6 Qualification Requirements</a></li>
                     </ul>
                 </li>
                 <li><a href="#teams">5. Teams</a>
@@ -453,22 +454,107 @@
                 <tr><td>No park involvement</td><td>+0 points</td></tr>
             </tbody>
         </table>
+        <div class="note">
+            <strong>Important:</strong> The POTA bonus is awarded <em>once per competitor per match</em>, not per QSO. Making 10 park-to-park QSOs earns the same +2 bonus as making 1 park-to-park QSO.
+        </div>
 
-        <h3 id="scoring-examples">4.3 Scoring Examples</h3>
+        <h3 id="pota-activation">4.3 POTA Activation Scoring</h3>
+        <p>When a sport has "Activate" mode enabled for park targets, special rules apply:</p>
+
+        <h4>10 QSO Minimum Requirement</h4>
+        <p>To count as a valid POTA activation, you must make <strong>10 or more confirmed QSOs</strong> from the same park on the same UTC day. This matches official POTA rules.</p>
         <ul>
-            <li><strong>Example 1:</strong> Gold in QSO Race (3) + Silver in Cool Factor (2) + Park-to-Park (2) = <strong>7 points</strong></li>
-            <li><strong>Example 2:</strong> Silver in QSO Race (2) + Bronze in Cool Factor (1) + Hunt a park (1) = <strong>4 points</strong></li>
-            <li><strong>Example 3:</strong> Bronze in QSO Race (1) + Gold in Cool Factor (3) + Activate a park (1) = <strong>5 points</strong></li>
+            <li>Days with fewer than 10 QSOs from a park <strong>do not count at all</strong></li>
+            <li>Example: 8 QSOs on Monday = invalid activation day (0 points). 12 QSOs on Tuesday = valid (all 12 count)</li>
+            <li>Multiple valid activation days are allowed &mdash; QSOs from each valid day count toward scoring</li>
         </ul>
 
-        <h3 id="max-points">4.4 Maximum Points Per Match</h3>
+        <h4>Work vs. Activate: Understanding Both Sides</h4>
+        <p>In a park-to-park QSO, <strong>two things happen simultaneously</strong>:</p>
+        <table>
+            <thead>
+                <tr><th>Your Role</th><th>What You're Doing</th><th>Field Checked</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><strong>Activating</strong></td><td>Operating from YOUR park</td><td>MY_SIG_INFO (your park ID)</td></tr>
+                <tr><td><strong>Working/Hunting</strong></td><td>Contacting THEIR park</td><td>SIG_INFO (their park ID)</td></tr>
+            </tbody>
+        </table>
+        <p>If a sport has both Work and Activate enabled with <strong>separate pools</strong>, your P2P QSOs can score in <em>both</em> competitions simultaneously!</p>
+
+        <h3 id="scoring-examples">4.4 Scoring Examples</h3>
+
+        <h4>Example 1: Simple Park Hunt (Work Mode Only)</h4>
+        <p>You're at home hunting POTA stations. You work K-1234 before anyone else.</p>
         <ul>
-            <li><strong>Combined pools:</strong> 7 points maximum (Gold + Gold + P2P bonus)</li>
-            <li><strong>Separate pools:</strong> 14 points maximum (7 points per role)</li>
+            <li>QSO Race: Gold (first to work the park) = <strong>3 points</strong></li>
+            <li>Cool Factor: Your 5W contact at 500km = 100 km/W, wins Silver = <strong>2 points</strong></li>
+            <li>POTA Bonus: Target is a park = <strong>+1 point</strong></li>
+            <li><strong>Total: 6 points</strong></li>
         </ul>
 
-        <h3 id="qualification">4.5 Qualification Requirements</h3>
+        <h4>Example 2: Park Activation (Activate Mode Only)</h4>
+        <p>You activate K-5678 and make 15 QSOs. You weren't the first activator, but you had the best Cool Factor.</p>
+        <ul>
+            <li>QSO Race: Bronze (3rd earliest activation) = <strong>1 point</strong></li>
+            <li>Cool Factor: Gold (highest km/W ratio) = <strong>3 points</strong></li>
+            <li>POTA Bonus: You're at a park = <strong>+1 point</strong></li>
+            <li><strong>Total: 5 points</strong></li>
+        </ul>
+
+        <h4>Example 3: Park-to-Park with Separate Pools</h4>
+        <p>You activate K-1111 and make 11 P2P QSOs with stations at different parks. The sport has both Work and Activate enabled with separate pools.</p>
+
+        <p><strong>In the Activate Pool</strong> (for activating K-1111):</p>
+        <ul>
+            <li>QSO Race: Your earliest QSO was 2nd = Silver = <strong>2 points</strong></li>
+            <li>Cool Factor: Your best km/W was 3rd = Bronze = <strong>1 point</strong></li>
+            <li>P2P Bonus: You're at a park AND contacted parks = <strong>+2 points</strong></li>
+            <li>Activate Pool Subtotal: <strong>5 points</strong></li>
+        </ul>
+
+        <p><strong>In the Work Pool</strong> (for hunting parks):</p>
+        <ul>
+            <li>QSO Race: You were first to work K-2222 = Gold = <strong>3 points</strong></li>
+            <li>Cool Factor: Your best km/W hunting was 2nd = Silver = <strong>2 points</strong></li>
+            <li>P2P Bonus: You're at a park AND contacted parks = <strong>+2 points</strong></li>
+            <li>Work Pool Subtotal: <strong>7 points</strong></li>
+        </ul>
+
+        <p><strong>Grand Total from those 11 QSOs: 12 points</strong></p>
+
+        <h4>Example 4: Failed Activation</h4>
+        <p>You go to K-9999 but only make 8 QSOs before packing up due to weather.</p>
+        <ul>
+            <li>Activation: <strong>Invalid</strong> (fewer than 10 QSOs)</li>
+            <li>Your QSOs don't count in the Activate pool</li>
+            <li>However, if those 8 QSOs were with stations at parks, they <em>might</em> still count in the Work pool (if enabled)</li>
+        </ul>
+
+        <h4>Example 5: No Medals, Just Bonus</h4>
+        <p>You activate a park with 12 QSOs, but other activators were faster and had better Cool Factors.</p>
+        <ul>
+            <li>QSO Race: No medal (4th or later) = <strong>0 points</strong></li>
+            <li>Cool Factor: No medal (4th or later) = <strong>0 points</strong></li>
+            <li>POTA Bonus: You're at a park = <strong>+1 point</strong></li>
+            <li><strong>Total: 1 point</strong> (participation still counts!)</li>
+        </ul>
+
+        <h3 id="max-points">4.5 Maximum Points Per Match</h3>
+        <table>
+            <thead>
+                <tr><th>Configuration</th><th>Max Points</th><th>Breakdown</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Single mode (Work or Activate only)</td><td>8 points</td><td>Gold (3) + Gold (3) + P2P (2)</td></tr>
+                <tr><td>Both modes, combined pool</td><td>8 points</td><td>Gold (3) + Gold (3) + P2P (2)</td></tr>
+                <tr><td>Both modes, separate pools</td><td>16 points</td><td>8 points per pool</td></tr>
+            </tbody>
+        </table>
+
+        <h3 id="qualification">4.6 Qualification Requirements</h3>
         <p>The Olympiad administrator can set a minimum QSO threshold for medal eligibility. If you haven't met the minimum, you'll still appear in standings but won't be eligible to receive medals until you reach the threshold.</p>
+        <p>For POTA activations, remember that the 10 QSO per day minimum is <em>in addition to</em> any Olympiad-wide qualification requirements.</p>
 
         <hr>
 
@@ -724,19 +810,26 @@
                 <tr><th>Term</th><th>Definition</th></tr>
             </thead>
             <tbody>
-                <tr><td><strong>Cool Factor</strong></td><td>A scoring metric calculated as distance divided by transmit power, rewarding efficient operating.</td></tr>
+                <tr><td><strong>Activate</strong></td><td>Operating from a target location (e.g., a park). Your park is recorded in MY_SIG_INFO.</td></tr>
+                <tr><td><strong>Cool Factor</strong></td><td>A scoring metric calculated as distance divided by transmit power (km/W), rewarding efficient operating.</td></tr>
                 <tr><td><strong>DXCC</strong></td><td>DX Century Club, an ARRL award program. Also refers to the list of recognized "entities" (countries/territories) for award purposes.</td></tr>
                 <tr><td><strong>Grid Square</strong></td><td>A Maidenhead Locator System designation for geographic location (e.g., FN31).</td></tr>
+                <tr><td><strong>Hunter</strong></td><td>A station working (contacting) a target from a fixed location. See "Work."</td></tr>
                 <tr><td><strong>LoTW</strong></td><td>Logbook of The World, an ARRL-operated QSO confirmation service.</td></tr>
                 <tr><td><strong>Match</strong></td><td>A timed competition event within a sport, targeting a specific entity.</td></tr>
+                <tr><td><strong>MY_SIG_INFO</strong></td><td>ADIF field containing your park/special location ID when activating.</td></tr>
                 <tr><td><strong>Olympiad</strong></td><td>A competition season containing multiple sports.</td></tr>
-                <tr><td><strong>P2P (Park-to-Park)</strong></td><td>A contact where both stations are activating parks, earning bonus points.</td></tr>
+                <tr><td><strong>P2P (Park-to-Park)</strong></td><td>A contact where both stations are at parks. Earns +2 bonus points instead of +1.</td></tr>
                 <tr><td><strong>POTA</strong></td><td>Parks on the Air, an amateur radio program encouraging portable operations from parks.</td></tr>
                 <tr><td><strong>QRP</strong></td><td>Low-power amateur radio operation, typically 5 watts or less for CW and 10 watts or less for SSB.</td></tr>
                 <tr><td><strong>QRZ</strong></td><td>QRZ.com, a callsign lookup database and online logbook service.</td></tr>
                 <tr><td><strong>QSO</strong></td><td>A radio contact between two stations.</td></tr>
                 <tr><td><strong>QSO Race</strong></td><td>A medal event rewarding the first three confirmed contacts with a match target.</td></tr>
+                <tr><td><strong>Separate Pools</strong></td><td>When enabled, hunters and activators compete in separate leaderboards with separate medals.</td></tr>
+                <tr><td><strong>SIG_INFO</strong></td><td>ADIF field containing the other station's park/special location ID.</td></tr>
                 <tr><td><strong>Sport</strong></td><td>A category of competition within an Olympiad (e.g., DX Challenge, POTA).</td></tr>
+                <tr><td><strong>Valid Activation</strong></td><td>For POTA, 10+ confirmed QSOs from the same park on the same UTC day.</td></tr>
+                <tr><td><strong>Work (Hunt)</strong></td><td>Contacting a target station from your location. Their park is recorded in SIG_INFO.</td></tr>
             </tbody>
         </table>
 

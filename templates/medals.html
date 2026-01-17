@@ -45,7 +45,7 @@
                                 <th style="padding: 4px 8px;">Match</th>
                                 <th style="padding: 4px 8px;">Medal</th>
                                 <th style="padding: 4px 8px;">DX Call</th>
-                                <th style="padding: 4px 8px;">Time (UTC)</th>
+                                <th style="padding: 4px 8px;">Time{% if display_prefs.time_display == 'local' %} (Local){% else %} (UTC){% endif %}</th>
                                 <th style="padding: 4px 8px;">Mode</th>
                                 <th style="padding: 4px 8px;">Power</th>
                                 <th style="padding: 4px 8px;">Distance</th>
@@ -65,7 +65,7 @@
                                     {% endif %}
                                 </td>
                                 <td style="padding: 4px 8px;"><strong>{{ qso.dx_callsign }}</strong></td>
-                                <td style="padding: 4px 8px;">{{ qso.time | format_datetime }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td style="padding: 4px 8px;">{{ qso.time | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
                                 <td style="padding: 4px 8px;">{{ qso.mode or '-' }}</td>
                                 <td style="padding: 4px 8px;">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
                                 <td style="padding: 4px 8px;">{% if qso.distance %}{{ "%.0f" | format(qso.distance) }} km{% else %}-{% endif %}</td>

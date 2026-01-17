@@ -7,8 +7,8 @@
 
 <div class="card">
     <p><strong>Target:</strong> {{ target_display | pota_tooltip }}</p>
-    <p><strong>Start:</strong> {{ match.start_date | format_datetime }}</p>
-    <p><strong>End:</strong> {{ match.end_date | format_datetime }}</p>
+    <p><strong>Start:</strong> {{ match.start_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</p>
+    <p><strong>End:</strong> {{ match.end_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</p>
     {% if match.max_power_w %}
     <p><strong>Max Power:</strong> {{ match.max_power_w }}W{% if match.max_power_w <= 10 %} (QRP){% endif %}</p>
     {% endif %}
@@ -137,7 +137,7 @@
                     <table style="margin: 0; font-size: 0.9em;">
                         <thead>
                             <tr>
-                                <th>Time (UTC)</th>
+                                <th>Time{% if display_prefs.time_display == 'local' %} (Local){% else %} (UTC){% endif %}</th>
                                 <th>DX Call</th>
                                 <th>Mode</th>
                                 <th>Power</th>
@@ -149,7 +149,7 @@
                         <tbody>
                             {% for qso in qso_details[medal.callsign] %}
                             <tr>
-                                <td>{{ qso.time | format_datetime }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td>{{ qso.time | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
                                 <td><strong>{{ qso.dx_callsign }}</strong>{% if qso.park %} <span style="color: var(--text-secondary);">({{ qso.park }})</span>{% endif %}</td>
                                 <td>{{ qso.mode or '-' }}</td>
                                 <td>{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>

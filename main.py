@@ -269,23 +269,48 @@ def get_csrf_token(request: Request) -> str:
     return getattr(request.state, 'csrf_token', generate_csrf_token())
 
 
-def format_date(value: str, include_time: bool = False) -> str:
-    """Format ISO date string to readable format."""
+def format_date(value: str, include_time: bool = False, home_grid: str = None, time_display: str = "utc") -> str:
+    """Format ISO date string to readable format.
+
+    Args:
+        value: ISO date/datetime string
+        include_time: Whether to include time in output
+        home_grid: User's home grid square for timezone calculation
+        time_display: 'utc' or 'local'
+    """
     if not value:
         return "-"
     try:
         # Parse ISO format
         dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        # Remove timezone info for manipulation
+        if dt.tzinfo:
+            dt = dt.replace(tzinfo=None)
+
+        tz_str = ""
         if include_time:
-            return dt.strftime("%b %-d, %Y %-I:%M %p") + " UTC"
+            if time_display == "local" and home_grid:
+                offset = grid_to_timezone_offset(home_grid)
+                dt = dt + timedelta(hours=offset)
+                sign = "+" if offset >= 0 else ""
+                tz_str = f" (UTC{sign}{offset})"
+            else:
+                tz_str = " UTC"
+            return dt.strftime("%b %-d, %Y %-I:%M %p") + tz_str
         return dt.strftime("%b %-d, %Y")
     except (ValueError, AttributeError):
         return value
 
 
-def format_datetime(value: str) -> str:
-    """Format ISO datetime string with time."""
-    return format_date(value, include_time=True)
+def format_datetime(value: str, home_grid: str = None, time_display: str = "utc") -> str:
+    """Format ISO datetime string with time.
+
+    Args:
+        value: ISO datetime string
+        home_grid: User's home grid square for timezone calculation
+        time_display: 'utc' or 'local'
+    """
+    return format_date(value, include_time=True, home_grid=home_grid, time_display=time_display)
 
 
 templates.env.filters["format_date"] = format_date
@@ -676,6 +701,21 @@ def require_user(request: Request) -> User:
     return user
 
 
+def get_display_prefs(user: Optional[User]) -> dict:
+    """Get display preferences for a user. Returns defaults if no user or not found."""
+    if not user:
+        return {"distance_unit": "km", "time_display": "utc", "home_grid": None}
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
+            (user.callsign,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+    return {"distance_unit": "km", "time_display": "utc", "home_grid": None}
+
+
 def get_client_ip(request: Request) -> Optional[str]:
     """Get real client IP, handling proxy headers from Fly.io."""
     # Check X-Forwarded-For header (set by Fly.io proxy)
@@ -1051,6 +1091,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                 "my_park": row["my_sig_info"],  # Competitor was activating from this park
             })
 
+        display_prefs = get_display_prefs(user)
         return templates.TemplateResponse("match.html", {
             "request": request,
             "user": user,
@@ -1062,6 +1103,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
             "sport_id": sport_id,
             "medals": medals,
             "qso_details": qso_details,
+            "display_prefs": display_prefs,
         })
 
 
@@ -1266,13 +1308,7 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         distance_records.sort(key=lambda x: x.get('date') or '', reverse=True)
         cool_factor_records.sort(key=lambda x: x.get('date') or '', reverse=True)
 
-        # Get user's display preferences
-        cursor = conn.execute(
-            "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
-            (user.callsign,)
-        )
-        display_prefs = dict(cursor.fetchone()) if cursor else {}
-
+        display_prefs = get_display_prefs(user)
         return templates.TemplateResponse("records.html", {
             "request": request,
             "user": user,
@@ -1413,11 +1449,13 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                     "qsos": medal_qsos
                 })
 
+    display_prefs = get_display_prefs(user)
     return templates.TemplateResponse("medals.html", {
         "request": request,
         "user": user,
         "medal_standings": medal_standings,
-        "medal_details": medal_details
+        "medal_details": medal_details,
+        "display_prefs": display_prefs,
     })
 
 

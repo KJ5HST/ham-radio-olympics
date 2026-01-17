@@ -37,7 +37,7 @@
     <p><strong>QRZ API Key:</strong> {% if user.has_qrz_key %}Stored{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
     <p><strong>LoTW Credentials:</strong> {% if user.has_lotw_creds %}Stored{% else %}<span style="color: #718096;">Not stored</span>{% endif %}</p>
     {% endif %}
-    <p><strong>Last Sync:</strong> {{ competitor.last_sync_at | format_datetime if competitor.last_sync_at else 'Never' }}</p>
+    <p><strong>Last Sync:</strong> {{ competitor.last_sync_at | format_datetime(competitor.home_grid, competitor.time_display) if competitor.last_sync_at else 'Never' }}</p>
     {% if is_own_profile %}
     <div style="margin-top: 15px;">
         <strong>Sync QSOs:</strong>
@@ -429,7 +429,7 @@ async function rejectInvite(teamId) {
                     {{ record.value }}
                 {% endif %}
             </td>
-            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+            <td>{{ record.achieved_at | format_datetime(competitor.home_grid, competitor.time_display) if record.achieved_at else '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>
@@ -467,7 +467,7 @@ async function rejectInvite(teamId) {
                 {% endif %}
             </td>
             <td>{{ record.dx_callsign }}</td>
-            <td>{{ record.achieved_at | format_date if record.achieved_at else '-' }}</td>
+            <td>{{ record.achieved_at | format_datetime(competitor.home_grid, competitor.time_display) if record.achieved_at else '-' }}</td>
         </tr>
         {% endfor %}
     </tbody>
