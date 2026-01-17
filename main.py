@@ -1085,8 +1085,9 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         """, (match_id, match_dict["start_date"], match_dict["end_date"]))
 
         # Filter QSOs to only those matching the target
+        # Use match's target_type override if set, otherwise use sport's target_type
         from scoring import matches_target
-        target_type = sport["target_type"] if sport else None
+        target_type = match_dict.get("target_type") or (sport["target_type"] if sport else None)
         target_value = match_dict["target_value"]
 
         qso_details = {}
@@ -1121,7 +1122,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
             "user": user,
             "match": match_dict,
             "target_display": target_display,
-            "target_type": sport["target_type"] if sport else None,
+            "target_type": target_type,
             "target_value": match_dict["target_value"],
             "sport_name": sport["name"] if sport else "Unknown",
             "sport_id": sport_id,
