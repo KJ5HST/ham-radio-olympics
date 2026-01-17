@@ -122,7 +122,7 @@
             <td>
                 {% if medal.cool_factor_medal %}
                     <span class="medal-emoji {{ medal.cool_factor_medal }}"></span>
-                    <span style="color: var(--text-secondary);">({{ "%.1f" | format(medal.cool_factor_value) if medal.cool_factor_value else '-' }})</span>
+                    <span style="color: var(--text-secondary);">({% if medal.cool_factor_value %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(medal.cool_factor_value * 0.621371) }}{% else %}{{ "%.1f" | format(medal.cool_factor_value) }}{% endif %}{% else %}-{% endif %})</span>
                 {% else %}
                     -
                 {% endif %}
@@ -153,8 +153,8 @@
                                 <td><strong>{{ qso.dx_callsign }}</strong>{% if qso.park %} <span style="color: var(--text-secondary);">({{ qso.park }})</span>{% endif %}</td>
                                 <td>{{ qso.mode or '-' }}</td>
                                 <td>{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
-                                <td>{% if qso.distance %}{{ "%.0f" | format(qso.distance) }} km{% else %}-{% endif %}</td>
-                                <td>{% if qso.cool_factor %}{{ "%.1f" | format(qso.cool_factor) }}{% else %}-{% endif %}</td>
+                                <td>{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
+                                <td>{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
                                 <td>{% if qso.confirmed %}<span style="color: #22543d;">Yes</span>{% else %}<span style="color: #c53030;">No</span>{% endif %}</td>
                             </tr>
                             {% endfor %}
