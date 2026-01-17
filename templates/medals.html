@@ -68,8 +68,8 @@
                                 <td style="padding: 4px 8px;">{{ qso.time | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
                                 <td style="padding: 4px 8px;">{{ qso.mode or '-' }}</td>
                                 <td style="padding: 4px 8px;">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
-                                <td style="padding: 4px 8px;">{% if qso.distance %}{{ "%.0f" | format(qso.distance) }} km{% else %}-{% endif %}</td>
-                                <td style="padding: 4px 8px;">{% if qso.cool_factor %}{{ "%.1f" | format(qso.cool_factor) }}{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
                             </tr>
                             {% endfor %}
                             {% endfor %}
@@ -131,6 +131,6 @@ function toggleDetails(callsign) {
 <div class="card">
     <p>Medals are awarded for two events in each match:</p>
     <p><strong>QSO Race:</strong> First three competitors to log a confirmed qualifying contact with the target.</p>
-    <p><strong>Cool Factor:</strong> Three highest distance-to-power ratios (km/W) - rewards efficient, low-power contacts.</p>
+    <p><strong>Cool Factor:</strong> Three highest distance-to-power ratios ({% if display_prefs.distance_unit == 'mi' %}mi/W{% else %}km/W{% endif %}) - rewards efficient, low-power contacts.</p>
 </div>
 {% endblock %}

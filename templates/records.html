@@ -62,7 +62,7 @@
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Mode:</th><td>{{ record.mode or '-' }}{% if record.my_sig_info %} <span title="Activated from {{ record.my_sig_info }}">📡</span>{% endif %}</td></tr>
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th><td>{% if record.tx_power_w %}{{ record.tx_power_w }}W{% else %}-{% endif %}</td></tr>
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Distance:</th><td>{% if record.distance_km %}{{ record.distance_km | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td></tr>
-                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{{ "%.1f" | format(record.cool_factor) }} km/W{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(record.cool_factor * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(record.cool_factor) }} km/W{% endif %}{% else %}-{% endif %}</td></tr>
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th><td>{{ record.qso_datetime_utc | format_datetime(display_prefs.home_grid, display_prefs.time_display) if record.qso_datetime_utc else (record.achieved_at | format_datetime(display_prefs.home_grid, display_prefs.time_display) if record.achieved_at else '-') }}</td></tr>
                     </table>
                 </div>
@@ -110,7 +110,7 @@
                     <table style="margin: 0; font-size: 0.85em;">
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">QSO With:</th><td><strong>{{ record.dx_callsign or '-' }}</strong></td></tr>
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th><td>{% if record.power %}{{ record.power }}W{% else %}-{% endif %}{% if record.my_sig_info %} <span title="Activated from {{ record.my_sig_info }}">📡</span>{% endif %}</td></tr>
-                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{{ "%.1f" | format(record.cool_factor) }} km/W{% else %}-{% endif %}</td></tr>
+                        <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th><td>{% if record.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(record.cool_factor * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(record.cool_factor) }} km/W{% endif %}{% else %}-{% endif %}</td></tr>
                         <tr><th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th><td>{{ record.date | format_datetime(display_prefs.home_grid, display_prefs.time_display) if record.date else '-' }}</td></tr>
                     </table>
                 </div>
