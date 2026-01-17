@@ -154,8 +154,13 @@
                 <label for="time_display">Time Display</label>
                 <select id="time_display" name="time_display" style="width: 100%;">
                     <option value="utc" {% if account.time_display == 'utc' %}selected{% endif %}>UTC</option>
-                    <option value="local" {% if account.time_display == 'local' %}selected{% endif %}>Local Time (based on QSO grid)</option>
+                    <option value="local" {% if account.time_display == 'local' %}selected{% endif %}>Local Time (based on home grid)</option>
                 </select>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="home_grid">Home Grid Square</label>
+                <input type="text" id="home_grid" name="home_grid" value="{{ account.home_grid or '' }}" placeholder="e.g., EM12" maxlength="6" style="width: 100%; text-transform: uppercase;">
+                <small style="color: var(--text-secondary);">Used for local time calculation</small>
             </div>
         </div>
         <button type="submit" class="btn">Save Display Preferences</button>

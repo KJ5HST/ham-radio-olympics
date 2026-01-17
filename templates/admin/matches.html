@@ -39,9 +39,9 @@
         <tr>
             <td><strong>{{ match.target_display | pota_tooltip }}</strong></td>
             <td>{% if match.target_type %}<span style="color: var(--link-color);">{{ match.target_type | capitalize }}</span>{% else %}<span style="color: var(--text-secondary);">(Sport)</span>{% endif %}</td>
-            <td>{{ match.start_date | format_datetime }}</td>
-            <td>{{ match.end_date | format_datetime }}</td>
-            <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime }}{% else %}-{% endif %}</td>
+            <td>{{ match.start_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
+            <td>{{ match.end_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
+            <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}{% else %}-{% endif %}</td>
             <td>{{ match.allowed_modes or '-' }}</td>
             <td>{% if match.max_power_w %}{{ match.max_power_w }}W{% else %}-{% endif %}</td>
             <td>

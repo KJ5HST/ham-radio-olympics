@@ -2587,22 +2587,28 @@ async def update_display_preferences(
     request: Request,
     distance_unit: str = Form("km"),
     time_display: str = Form("utc"),
+    home_grid: str = Form(""),
     user: User = Depends(require_user)
 ):
-    """Update display preferences (distance units, time format)."""
+    """Update display preferences (distance units, time format, home grid)."""
     # Validate inputs
     if distance_unit not in ("km", "mi"):
         distance_unit = "km"
     if time_display not in ("utc", "local"):
         time_display = "utc"
+    # Validate and normalize home_grid
+    home_grid = home_grid.strip().upper() if home_grid else None
+    if home_grid and (len(home_grid) < 4 or len(home_grid) > 6):
+        home_grid = None  # Invalid grid, clear it
 
     with get_db() as conn:
         conn.execute(
             """UPDATE competitors SET
                distance_unit = ?,
-               time_display = ?
+               time_display = ?,
+               home_grid = ?
                WHERE callsign = ?""",
-            (distance_unit, time_display, user.callsign)
+            (distance_unit, time_display, home_grid, user.callsign)
         )
     return RedirectResponse(url="/settings?updated=display", status_code=303)
 
@@ -2937,14 +2943,16 @@ async def admin_audit_log(
     logs = get_audit_logs(limit=per_page, offset=offset, action=action)
     total = get_audit_log_count(action=action)
 
+    user = get_current_user(request)
     return templates.TemplateResponse("admin/audit_log.html", {
         "request": request,
-        "user": get_current_user(request),
+        "user": user,
         "logs": logs,
         "total": total,
         "page": page,
         "per_page": per_page,
         "action_filter": action,
+        "display_prefs": get_display_prefs(user),
     })
 
 
@@ -3287,12 +3295,14 @@ async def admin_sport_matches(request: Request, sport_id: int):
     for match in matches:
         match["target_display"] = format_target_display(match["target_value"], sport_dict["target_type"])
 
+    user = get_current_user(request)
     return templates.TemplateResponse("admin/matches.html", {
         "request": request,
-        "user": get_current_user(request),
+        "user": user,
         "sport": sport_dict,
         "matches": matches,
         "target_options": target_options,
+        "display_prefs": get_display_prefs(user),
     })
 
 
