@@ -348,6 +348,279 @@ def init_db():
                 conn.execute("PRAGMA foreign_keys = ON")
                 conn.commit()
 
+        # Migration: add 'pota' to sports target_type CHECK constraint
+        if 'sports' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='sports'"
+            ).fetchone()
+            if table_sql and "'pota'" not in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE sports RENAME TO sports_old")
+                conn.execute("""
+                    CREATE TABLE sports (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        olympiad_id INTEGER NOT NULL,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid', 'any', 'pota')),
+                        work_enabled INTEGER NOT NULL DEFAULT 1,
+                        activate_enabled INTEGER NOT NULL DEFAULT 0,
+                        separate_pools INTEGER NOT NULL DEFAULT 0,
+                        allowed_modes TEXT,
+                        FOREIGN KEY (olympiad_id) REFERENCES olympiads(id) ON DELETE CASCADE
+                    )
+                """)
+                conn.execute("INSERT INTO sports SELECT * FROM sports_old")
+                conn.execute("DROP TABLE sports_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sports_olympiad ON sports(olympiad_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: add target_type column to matches table
+        if 'matches' in tables:
+            cursor = conn.execute("PRAGMA table_info(matches)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'target_type' not in columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN target_type TEXT")
+                conn.commit()
+
+        # Migration: add confirmation_deadline column to matches table
+        if 'matches' in tables:
+            cursor = conn.execute("PRAGMA table_info(matches)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'confirmation_deadline' not in columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN confirmation_deadline TEXT")
+                conn.commit()
+
+        # Migration: add confirmed_at column to qsos table
+        if 'qsos' in tables:
+            cursor = conn.execute("PRAGMA table_info(qsos)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'confirmed_at' not in columns:
+                conn.execute("ALTER TABLE qsos ADD COLUMN confirmed_at TEXT")
+                conn.commit()
+
+        # Migration: fix team_medals FK pointing to sports_old instead of sports
+        if 'team_medals' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='team_medals'"
+            ).fetchone()
+            if table_sql and 'sports_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE team_medals RENAME TO team_medals_old")
+                conn.execute("""
+                    CREATE TABLE team_medals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        team_id INTEGER NOT NULL,
+                        match_id INTEGER,
+                        sport_id INTEGER NOT NULL,
+                        calculation_method TEXT NOT NULL CHECK (calculation_method IN ('normalized', 'top_n', 'average', 'sum')),
+                        total_points REAL NOT NULL,
+                        member_count INTEGER NOT NULL,
+                        gold_count INTEGER NOT NULL DEFAULT 0,
+                        silver_count INTEGER NOT NULL DEFAULT 0,
+                        bronze_count INTEGER NOT NULL DEFAULT 0,
+                        medal TEXT CHECK (medal IN ('gold', 'silver', 'bronze', NULL)),
+                        computed_at TEXT NOT NULL,
+                        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                        FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE(team_id, match_id, sport_id, calculation_method)
+                    )
+                """)
+                conn.execute("INSERT INTO team_medals SELECT * FROM team_medals_old")
+                conn.execute("DROP TABLE team_medals_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_team ON team_medals(team_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_sport ON team_medals(sport_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_match ON team_medals(match_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix referee_assignments FK pointing to sports_old
+        if 'referee_assignments' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='referee_assignments'"
+            ).fetchone()
+            if table_sql and 'sports_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE referee_assignments RENAME TO referee_assignments_old")
+                conn.execute("""
+                    CREATE TABLE referee_assignments (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        callsign TEXT NOT NULL,
+                        sport_id INTEGER NOT NULL,
+                        assigned_at TEXT NOT NULL,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE (callsign, sport_id)
+                    )
+                """)
+                conn.execute("INSERT INTO referee_assignments SELECT * FROM referee_assignments_old")
+                conn.execute("DROP TABLE referee_assignments_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_referee_assignments_callsign ON referee_assignments(callsign)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_referee_assignments_sport ON referee_assignments(sport_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix matches FK pointing to sports_old
+        if 'matches' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='matches'"
+            ).fetchone()
+            if table_sql and 'sports_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE matches RENAME TO matches_old")
+                conn.execute("""
+                    CREATE TABLE matches (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sport_id INTEGER NOT NULL,
+                        start_date TEXT NOT NULL,
+                        end_date TEXT NOT NULL,
+                        target_value TEXT NOT NULL,
+                        allowed_modes TEXT,
+                        max_power_w INTEGER,
+                        target_type TEXT,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
+                    )
+                """)
+                conn.execute("INSERT INTO matches SELECT * FROM matches_old")
+                conn.execute("DROP TABLE matches_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_matches_sport ON matches(sport_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix sport_entries FK pointing to sports_old
+        if 'sport_entries' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='sport_entries'"
+            ).fetchone()
+            if table_sql and 'sports_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE sport_entries RENAME TO sport_entries_old")
+                conn.execute("""
+                    CREATE TABLE sport_entries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        callsign TEXT NOT NULL,
+                        sport_id INTEGER NOT NULL,
+                        entered_at TEXT NOT NULL,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE (callsign, sport_id)
+                    )
+                """)
+                conn.execute("INSERT INTO sport_entries SELECT * FROM sport_entries_old")
+                conn.execute("DROP TABLE sport_entries_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sport_entries_callsign ON sport_entries(callsign)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sport_entries_sport ON sport_entries(sport_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix records FK pointing to sports_old
+        if 'records' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='records'"
+            ).fetchone()
+            if table_sql and 'sports_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE records RENAME TO records_old")
+                conn.execute("""
+                    CREATE TABLE records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sport_id INTEGER,
+                        callsign TEXT,
+                        record_type TEXT NOT NULL,
+                        value REAL NOT NULL,
+                        qso_id INTEGER,
+                        achieved_at TEXT NOT NULL,
+                        match_id INTEGER REFERENCES matches(id) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE SET NULL
+                    )
+                """)
+                conn.execute("INSERT INTO records SELECT * FROM records_old")
+                conn.execute("DROP TABLE records_old")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix medals FK pointing to matches_old
+        if 'medals' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='medals'"
+            ).fetchone()
+            if table_sql and 'matches_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE medals RENAME TO medals_old")
+                conn.execute("""
+                    CREATE TABLE medals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        match_id INTEGER NOT NULL,
+                        callsign TEXT NOT NULL,
+                        role TEXT NOT NULL CHECK (role IN ('work', 'activate', 'combined')),
+                        qualified INTEGER NOT NULL DEFAULT 1,
+                        qso_race_medal TEXT CHECK (qso_race_medal IN ('gold', 'silver', 'bronze', NULL)),
+                        qso_race_claim_time TEXT,
+                        cool_factor_medal TEXT CHECK (cool_factor_medal IN ('gold', 'silver', 'bronze', NULL)),
+                        cool_factor_value REAL,
+                        cool_factor_claim_time TEXT,
+                        pota_bonus INTEGER NOT NULL DEFAULT 0,
+                        total_points INTEGER NOT NULL DEFAULT 0,
+                        notified_at TEXT,
+                        FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                        FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE,
+                        UNIQUE (match_id, callsign, role)
+                    )
+                """)
+                conn.execute("INSERT INTO medals SELECT * FROM medals_old")
+                conn.execute("DROP TABLE medals_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_medals_match ON medals(match_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_medals_callsign ON medals(callsign)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: fix team_medals FK pointing to matches_old (if broken by matches migration)
+        if 'team_medals' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='team_medals'"
+            ).fetchone()
+            if table_sql and 'matches_old' in table_sql[0]:
+                conn.execute("PRAGMA foreign_keys = OFF")
+                conn.execute("ALTER TABLE team_medals RENAME TO team_medals_old2")
+                conn.execute("""
+                    CREATE TABLE team_medals (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        team_id INTEGER NOT NULL,
+                        match_id INTEGER,
+                        sport_id INTEGER NOT NULL,
+                        calculation_method TEXT NOT NULL CHECK (calculation_method IN ('normalized', 'top_n', 'average', 'sum')),
+                        total_points REAL NOT NULL,
+                        member_count INTEGER NOT NULL,
+                        gold_count INTEGER NOT NULL DEFAULT 0,
+                        silver_count INTEGER NOT NULL DEFAULT 0,
+                        bronze_count INTEGER NOT NULL DEFAULT 0,
+                        medal TEXT CHECK (medal IN ('gold', 'silver', 'bronze', NULL)),
+                        computed_at TEXT NOT NULL,
+                        FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+                        FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
+                        FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                        UNIQUE(team_id, match_id, sport_id, calculation_method)
+                    )
+                """)
+                conn.execute("INSERT INTO team_medals SELECT * FROM team_medals_old2")
+                conn.execute("DROP TABLE team_medals_old2")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_team ON team_medals(team_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_sport ON team_medals(sport_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_team_medals_match ON team_medals(match_id)")
+                conn.execute("PRAGMA foreign_keys = ON")
+                conn.commit()
+
+        # Migration: clean up leftover _old tables from previous migrations
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        for leftover in ['qsos_old', 'sports_old', 'matches_old', 'medals_old', 'team_medals_old', 'team_medals_old2']:
+            if leftover in tables:
+                conn.execute(f"DROP TABLE {leftover}")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -422,7 +695,7 @@ def init_db():
                 olympiad_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 description TEXT,
-                target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid', 'any')),
+                target_type TEXT NOT NULL CHECK (target_type IN ('continent', 'country', 'park', 'call', 'grid', 'any', 'pota')),
                 work_enabled INTEGER NOT NULL DEFAULT 1,
                 activate_enabled INTEGER NOT NULL DEFAULT 0,
                 separate_pools INTEGER NOT NULL DEFAULT 0,
@@ -437,8 +710,10 @@ def init_db():
                 start_date TEXT NOT NULL,
                 end_date TEXT NOT NULL,
                 target_value TEXT NOT NULL,
+                target_type TEXT,
                 allowed_modes TEXT,
                 max_power_w INTEGER,
+                confirmation_deadline TEXT,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
             );
 
@@ -460,6 +735,7 @@ def init_db():
                 tx_power_w REAL,
                 cool_factor REAL,
                 is_confirmed INTEGER NOT NULL DEFAULT 0,
+                confirmed_at TEXT,
                 qrz_logid TEXT,
                 FOREIGN KEY (competitor_callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
             );

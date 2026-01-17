@@ -25,8 +25,10 @@
     <thead>
         <tr>
             <th scope="col">Target</th>
+            <th scope="col">Target Type</th>
             <th scope="col">Start Date</th>
             <th scope="col">End Date</th>
+            <th scope="col">Confirm Deadline</th>
             <th scope="col">Mode Override</th>
             <th scope="col">Max Power</th>
             <th scope="col">Actions</th>
@@ -36,13 +38,15 @@
         {% for match in matches %}
         <tr>
             <td><strong>{{ match.target_display | pota_tooltip }}</strong></td>
+            <td>{% if match.target_type %}<span style="color: var(--link-color);">{{ match.target_type | capitalize }}</span>{% else %}<span style="color: var(--text-secondary);">(Sport)</span>{% endif %}</td>
             <td>{{ match.start_date | format_datetime }}</td>
             <td>{{ match.end_date | format_datetime }}</td>
+            <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime }}{% else %}-{% endif %}</td>
             <td>{{ match.allowed_modes or '-' }}</td>
             <td>{% if match.max_power_w %}{{ match.max_power_w }}W{% else %}-{% endif %}</td>
             <td>
                 <div class="btn-group">
-                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}', {{ match.max_power_w or 'null' }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}', {{ match.max_power_w or 'null' }}, '{{ match.target_type or '' }}', '{{ (match.confirmation_deadline or '')[:16] }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     <button type="button" onclick="deleteMatch({{ match.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -72,6 +76,20 @@
             {% endif %}
         </div>
         <div class="form-group">
+            <label for="target_type">Target Type Override</label>
+            <select id="target_type">
+                <option value="">(Use Sport's: {{ sport.target_type | capitalize }})</option>
+                <option value="continent">Continent</option>
+                <option value="country">Country</option>
+                <option value="park">Specific Park</option>
+                <option value="pota">Any POTA Park</option>
+                <option value="call">Callsign</option>
+                <option value="grid">Grid Square</option>
+                <option value="any">Any QSO</option>
+            </select>
+            <small style="color: #718096;">Override sport-level target type for this match only. "Any POTA Park" matches contacts with any park.</small>
+        </div>
+        <div class="form-group">
             <label for="start_date">Start Date/Time (UTC)</label>
             <input type="datetime-local" id="start_date" required>
         </div>
@@ -98,6 +116,11 @@
             <label for="max_power_w">Max Power (watts)</label>
             <input type="number" id="max_power_w" min="1" placeholder="Leave blank for no limit">
             <small style="color: #718096;">Limit this match to QRP contacts. Only QSOs at or below this power will qualify.</small>
+        </div>
+        <div class="form-group">
+            <label for="confirmation_deadline">Confirmation Deadline (UTC)</label>
+            <input type="datetime-local" id="confirmation_deadline">
+            <small style="color: #718096;">QSOs confirmed after this deadline will not count. Leave blank for no deadline.</small>
         </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Match</button>
@@ -139,14 +162,16 @@ function setDefaultTimes() {
 }
 setDefaultTimes();
 
-function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW) {
+function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW, targetType, confirmationDeadline) {
     editingId = id;
     document.getElementById('match_id').value = id;
     document.getElementById('target_value').value = targetValue;
+    document.getElementById('target_type').value = targetType || '';
     document.getElementById('start_date').value = startDate;
     document.getElementById('end_date').value = endDate;
     setSelectedModes(allowedModes);
     document.getElementById('max_power_w').value = maxPowerW || '';
+    document.getElementById('confirmation_deadline').value = confirmationDeadline || '';
     document.getElementById('form-title').textContent = 'Edit Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
     document.getElementById('cancel-btn').style.display = 'inline-flex';
@@ -156,9 +181,11 @@ function cancelEdit() {
     editingId = null;
     document.getElementById('match_id').value = '';
     document.getElementById('target_value').value = '';
+    document.getElementById('target_type').value = '';
     setDefaultTimes();
     setSelectedModes(null);
     document.getElementById('max_power_w').value = '';
+    document.getElementById('confirmation_deadline').value = '';
     document.getElementById('form-title').textContent = 'Create Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Match';
     document.getElementById('cancel-btn').style.display = 'none';
@@ -168,12 +195,16 @@ document.getElementById('match-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const result = document.getElementById('match-result');
     const maxPowerVal = document.getElementById('max_power_w').value;
+    const targetTypeVal = document.getElementById('target_type').value;
+    const confirmDeadlineVal = document.getElementById('confirmation_deadline').value;
     const data = {
         target_value: document.getElementById('target_value').value,
         start_date: document.getElementById('start_date').value + ':00',
         end_date: document.getElementById('end_date').value + ':00',
         allowed_modes: getSelectedModes(),
-        max_power_w: maxPowerVal ? parseInt(maxPowerVal, 10) : null
+        max_power_w: maxPowerVal ? parseInt(maxPowerVal, 10) : null,
+        target_type: targetTypeVal || null,
+        confirmation_deadline: confirmDeadlineVal ? confirmDeadlineVal + ':00' : null
     };
     try {
         let resp;

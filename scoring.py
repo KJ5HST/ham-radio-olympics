@@ -100,7 +100,7 @@ def matches_target(
 
     Args:
         qso: QSO dictionary from database
-        target_type: 'continent', 'country', 'park', 'call', 'grid', 'any'
+        target_type: 'continent', 'country', 'park', 'call', 'grid', 'any', 'pota'
         target_value: The target value to match
         mode: 'work' (check DX fields) or 'activate' (check MY_ fields)
 
@@ -112,6 +112,17 @@ def matches_target(
     # 'any' target type matches all QSOs (useful for general activity periods)
     if target_type == "any":
         return True
+
+    # 'pota' target type: ANY park contact (not a specific park)
+    # Work mode: DX station is at any park
+    # Activate mode: Competitor is at any park
+    if target_type == "pota":
+        if mode == "work":
+            sig_info = (qso.get("dx_sig_info") or "").strip()
+            return bool(sig_info)  # True if DX is at any park
+        else:
+            sig_info = (qso.get("my_sig_info") or "").strip()
+            return bool(sig_info)  # True if competitor is at any park
 
     if target_type == "continent":
         if mode == "work":
@@ -201,6 +212,8 @@ def get_matching_qsos(
     sport_id: int = None,
     match_allowed_modes: str = None,
     max_power_w: int = None,
+    match_target_type: str = None,
+    confirmation_deadline: datetime = None,
 ) -> List[MatchingQSO]:
     """
     Find all QSOs that match a specific Match.
@@ -214,13 +227,16 @@ def get_matching_qsos(
         sport_id: Sport ID (only competitors who opted in are included)
         match_allowed_modes: Match-level mode restriction (overrides sport if set)
         max_power_w: Maximum allowed TX power in watts (None means no limit)
+        match_target_type: Match-level target_type override (None = use sport's)
+        confirmation_deadline: QSOs confirmed after this time are excluded (None = no limit)
 
     Returns:
         List of MatchingQSO objects
     """
     matching = []
 
-    target_type = sport_config["target_type"]
+    # Match-level target_type overrides sport-level if specified
+    target_type = match_target_type if match_target_type else sport_config["target_type"]
     work_enabled = sport_config["work_enabled"]
     activate_enabled = sport_config["activate_enabled"]
     separate_pools = sport_config["separate_pools"]
@@ -232,30 +248,48 @@ def get_matching_qsos(
 
     with get_db() as conn:
         # Get all confirmed QSOs in the time window from competitors who opted in
-        cursor = conn.execute("""
-            SELECT q.*, c.registered_at
-            FROM qsos q
-            JOIN competitors c ON q.competitor_callsign = c.callsign
-            JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
-            WHERE q.is_confirmed = 1
-            AND q.qso_datetime_utc >= ?
-            AND q.qso_datetime_utc <= ?
-        """, (sport_id, start_date.isoformat(), end_date.isoformat()))
+        # If confirmation_deadline is set, only include QSOs confirmed before the deadline
+        if confirmation_deadline:
+            cursor = conn.execute("""
+                SELECT q.*, c.registered_at
+                FROM qsos q
+                JOIN competitors c ON q.competitor_callsign = c.callsign
+                JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
+                WHERE q.is_confirmed = 1
+                AND q.qso_datetime_utc >= ?
+                AND q.qso_datetime_utc <= ?
+                AND (q.confirmed_at IS NULL OR q.confirmed_at <= ?)
+            """, (sport_id, start_date.isoformat(), end_date.isoformat(), confirmation_deadline.isoformat()))
+        else:
+            cursor = conn.execute("""
+                SELECT q.*, c.registered_at
+                FROM qsos q
+                JOIN competitors c ON q.competitor_callsign = c.callsign
+                JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
+                WHERE q.is_confirmed = 1
+                AND q.qso_datetime_utc >= ?
+                AND q.qso_datetime_utc <= ?
+            """, (sport_id, start_date.isoformat(), end_date.isoformat()))
 
         all_qsos = [dict(row) for row in cursor.fetchall()]
 
-        # For park activations, pre-compute valid activation days (10+ QSOs per day)
+        # For park/pota activations, pre-compute valid activation days (10+ QSOs per day)
         valid_activation_days = set()  # (callsign, park, date) tuples
-        if activate_enabled and target_type == "park":
+        if activate_enabled and target_type in ("park", "pota"):
             # Count QSOs per (callsign, park, date)
             activation_counts: Dict[Tuple[str, str, str], int] = {}
             for qso in all_qsos:
                 park = (qso.get("my_sig_info") or "").upper().strip()
-                if park == target_value.upper().strip():
-                    callsign = qso["competitor_callsign"]
-                    qso_date = qso["qso_datetime_utc"][:10]  # UTC date
-                    key = (callsign, park, qso_date)
-                    activation_counts[key] = activation_counts.get(key, 0) + 1
+                if not park:
+                    continue  # No park info
+                # For 'park' target: must match specific park
+                # For 'pota' target: any park counts
+                if target_type == "park" and park != target_value.upper().strip():
+                    continue
+                callsign = qso["competitor_callsign"]
+                qso_date = qso["qso_datetime_utc"][:10]  # UTC date
+                key = (callsign, park, qso_date)
+                activation_counts[key] = activation_counts.get(key, 0) + 1
 
             # Only days with 10+ QSOs count as valid activations
             for key, count in activation_counts.items():
@@ -296,8 +330,8 @@ def get_matching_qsos(
             if activate_enabled:
                 valid, _ = validate_qso_for_mode(qso, "activate")
                 if valid and matches_target(qso, target_type, target_value, "activate"):
-                    # For park activations, require 10+ QSOs on that day
-                    if target_type == "park":
+                    # For park/pota activations, require 10+ QSOs on that day
+                    if target_type in ("park", "pota"):
                         park = (qso.get("my_sig_info") or "").upper().strip()
                         qso_date = qso["qso_datetime_utc"][:10]
                         if (qso["competitor_callsign"], park, qso_date) not in valid_activation_days:
@@ -464,7 +498,7 @@ def recompute_match_medals(match_id: int):
     with get_db_exclusive() as conn:
         # Get match and sport config
         cursor = conn.execute("""
-            SELECT m.*, s.target_type, s.work_enabled, s.activate_enabled,
+            SELECT m.*, s.target_type as sport_target_type, s.work_enabled, s.activate_enabled,
                    s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
             FROM matches m
             JOIN sports s ON m.sport_id = s.id
@@ -478,9 +512,12 @@ def recompute_match_medals(match_id: int):
         match_data = dict(row)
         start_date = datetime.fromisoformat(match_data["start_date"])
         end_date = datetime.fromisoformat(match_data["end_date"])
+        confirmation_deadline = None
+        if match_data.get("confirmation_deadline"):
+            confirmation_deadline = datetime.fromisoformat(match_data["confirmation_deadline"])
 
         sport_config = {
-            "target_type": match_data["target_type"],
+            "target_type": match_data["sport_target_type"],
             "work_enabled": bool(match_data["work_enabled"]),
             "activate_enabled": bool(match_data["activate_enabled"]),
             "separate_pools": bool(match_data["separate_pools"]),
@@ -488,7 +525,7 @@ def recompute_match_medals(match_id: int):
         }
 
         # Get matching QSOs (only from competitors who opted into this sport)
-        # Match-level allowed_modes overrides sport-level if set
+        # Match-level allowed_modes and target_type override sport-level if set
         matching = get_matching_qsos(
             match_id,
             sport_config,
@@ -498,6 +535,8 @@ def recompute_match_medals(match_id: int):
             sport_id=match_data["sport_id"],
             match_allowed_modes=match_data.get("allowed_modes"),
             max_power_w=match_data.get("max_power_w"),
+            match_target_type=match_data.get("target_type"),  # Match-level override
+            confirmation_deadline=confirmation_deadline,
         )
 
         # Collect QSO info for record updates
@@ -885,8 +924,10 @@ def recompute_all_records():
         # Get all matches with their sport config
         cursor = conn.execute("""
             SELECT m.id as match_id, m.start_date, m.end_date, m.target_value,
+                   m.target_type as match_target_type,
                    m.allowed_modes as match_allowed_modes, m.max_power_w,
-                   s.id as sport_id, s.target_type, s.work_enabled, s.activate_enabled,
+                   m.confirmation_deadline,
+                   s.id as sport_id, s.target_type as sport_target_type, s.work_enabled, s.activate_enabled,
                    s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
             FROM matches m
             JOIN sports s ON m.sport_id = s.id
@@ -900,9 +941,12 @@ def recompute_all_records():
     for match_data in matches:
         start_date = datetime.fromisoformat(match_data["start_date"])
         end_date = datetime.fromisoformat(match_data["end_date"])
+        confirmation_deadline = None
+        if match_data.get("confirmation_deadline"):
+            confirmation_deadline = datetime.fromisoformat(match_data["confirmation_deadline"])
 
         sport_config = {
-            "target_type": match_data["target_type"],
+            "target_type": match_data["sport_target_type"],
             "work_enabled": bool(match_data["work_enabled"]),
             "activate_enabled": bool(match_data["activate_enabled"]),
             "separate_pools": bool(match_data["separate_pools"]),
@@ -919,6 +963,8 @@ def recompute_all_records():
             sport_id=match_data["sport_id"],
             match_allowed_modes=match_data.get("match_allowed_modes"),
             max_power_w=match_data.get("max_power_w"),
+            match_target_type=match_data.get("match_target_type"),  # Match-level override
+            confirmation_deadline=confirmation_deadline,
         )
 
         # Update records for each matching QSO (only once per QSO)

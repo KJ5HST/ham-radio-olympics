@@ -63,11 +63,13 @@
             <select id="target_type" required>
                 <option value="continent">Continent</option>
                 <option value="country">Country (DXCC)</option>
-                <option value="park">POTA Park</option>
+                <option value="park">Specific POTA Park</option>
+                <option value="pota">Any POTA Park</option>
                 <option value="call">Callsign</option>
                 <option value="grid">Grid Square</option>
                 <option value="any">Any Contact</option>
             </select>
+            <small style="color: #718096;">"Any POTA Park" matches contacts where either party is at any park.</small>
         </div>
         <div class="form-group">
             <label><input type="checkbox" id="work_enabled" checked> Work Mode (hunters)</label>

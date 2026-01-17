@@ -295,9 +295,11 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
     if existing:
         # Merge fields - use COALESCE to keep existing values if new value is NULL
         # This allows QRZ (with tx_power) and LoTW (with confirmation) to complement each other
+        # Set confirmed_at timestamp when QSO becomes confirmed for the first time
         conn.execute("""
             UPDATE qsos SET
                 is_confirmed = CASE WHEN ? = 1 THEN 1 ELSE is_confirmed END,
+                confirmed_at = CASE WHEN ? = 1 AND is_confirmed = 0 AND confirmed_at IS NULL THEN ? ELSE confirmed_at END,
                 band = COALESCE(?, band),
                 mode = COALESCE(?, mode),
                 tx_power_w = COALESCE(?, tx_power_w),
@@ -312,6 +314,8 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             WHERE id = ?
         """, (
             1 if qso.is_confirmed else 0,
+            1 if qso.is_confirmed else 0,
+            datetime.utcnow().isoformat(),
             qso.band,
             qso.mode,
             qso.tx_power,
@@ -336,8 +340,8 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                     band, mode, tx_power_w,
                     my_dxcc, my_grid, my_sig_info,
                     dx_dxcc, dx_grid, dx_sig_info,
-                    distance_km, cool_factor, is_confirmed, qrz_logid
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    distance_km, cool_factor, is_confirmed, confirmed_at, qrz_logid
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 competitor_callsign,
                 qso.dx_callsign,
@@ -354,6 +358,7 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                 distance_km,
                 cool_factor,
                 1 if qso.is_confirmed else 0,
+                datetime.utcnow().isoformat() if qso.is_confirmed else None,
                 qso.qrz_logid,
             ))
         except sqlite3.IntegrityError:
@@ -371,6 +376,7 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                 conn.execute("""
                     UPDATE qsos SET
                         is_confirmed = CASE WHEN ? = 1 THEN 1 ELSE is_confirmed END,
+                        confirmed_at = CASE WHEN ? = 1 AND is_confirmed = 0 AND confirmed_at IS NULL THEN ? ELSE confirmed_at END,
                         band = COALESCE(?, band),
                         mode = COALESCE(?, mode),
                         tx_power_w = COALESCE(?, tx_power_w),
@@ -386,6 +392,8 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                     WHERE id = ?
                 """, (
                     1 if qso.is_confirmed else 0,
+                    1 if qso.is_confirmed else 0,
+                    datetime.utcnow().isoformat(),
                     qso.band,
                     qso.mode,
                     qso.tx_power,
@@ -481,9 +489,16 @@ def merge_duplicate_qsos() -> dict:
 
             for other in qsos[1:]:
                 # Merge each field - take non-NULL value, prefer confirmed
+                # For confirmed_at, take the earliest timestamp if both are confirmed
                 conn.execute("""
                     UPDATE qsos SET
                         is_confirmed = CASE WHEN ? = 1 OR is_confirmed = 1 THEN 1 ELSE 0 END,
+                        confirmed_at = CASE
+                            WHEN confirmed_at IS NULL THEN ?
+                            WHEN ? IS NULL THEN confirmed_at
+                            WHEN ? < confirmed_at THEN ?
+                            ELSE confirmed_at
+                        END,
                         band = COALESCE(band, ?),
                         mode = COALESCE(mode, ?),
                         tx_power_w = COALESCE(tx_power_w, ?),
@@ -499,6 +514,10 @@ def merge_duplicate_qsos() -> dict:
                     WHERE id = ?
                 """, (
                     other["is_confirmed"],
+                    other.get("confirmed_at"),
+                    other.get("confirmed_at"),
+                    other.get("confirmed_at"),
+                    other.get("confirmed_at"),
                     other["band"],
                     other["mode"],
                     other["tx_power_w"],

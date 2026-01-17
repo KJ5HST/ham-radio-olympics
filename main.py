@@ -524,7 +524,7 @@ class SportCreate(BaseModel):
     @field_validator('target_type')
     @classmethod
     def validate_target_type(cls, v):
-        valid_types = {'continent', 'country', 'park', 'call', 'grid', 'any'}
+        valid_types = {'continent', 'country', 'park', 'call', 'grid', 'any', 'pota'}
         if v not in valid_types:
             raise ValueError(f'target_type must be one of: {", ".join(valid_types)}')
         return v
@@ -534,17 +534,30 @@ class MatchCreate(BaseModel):
     start_date: str
     end_date: str
     target_value: str
+    target_type: Optional[str] = None  # Override sport's target_type if set
     allowed_modes: Optional[str] = None
     max_power_w: Optional[int] = None
+    confirmation_deadline: Optional[str] = None  # Deadline for QSO confirmations
 
-    @field_validator('start_date', 'end_date')
+    @field_validator('start_date', 'end_date', 'confirmation_deadline')
     @classmethod
     def validate_date_format(cls, v):
+        if v is None:
+            return v
         from datetime import datetime
         try:
             datetime.fromisoformat(v.replace('Z', '+00:00'))
         except ValueError:
             raise ValueError('Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)')
+        return v
+
+    @field_validator('target_type')
+    @classmethod
+    def validate_target_type(cls, v):
+        if v is not None:
+            valid_types = {'continent', 'country', 'park', 'call', 'grid', 'any', 'pota'}
+            if v not in valid_types:
+                raise ValueError(f'Invalid target_type. Must be one of: {", ".join(sorted(valid_types))}')
         return v
 
     @field_validator('max_power_w')
@@ -3197,9 +3210,9 @@ async def create_match(request: Request, sport_id: int, match: MatchCreate):
             )
 
         cursor = conn.execute("""
-            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w))
+            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w, target_type, confirmation_deadline)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline))
 
         return {"id": cursor.lastrowid, "message": "Match created"}
 
@@ -3256,9 +3269,9 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
 
         conn.execute("""
             UPDATE matches
-            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?, max_power_w = ?
+            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?, max_power_w = ?, target_type = ?, confirmation_deadline = ?
             WHERE id = ?
-        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match_id))
+        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, match_id))
 
     # Recompute medals for this match (outside connection to avoid lock)
     recompute_match_medals(match_id)
