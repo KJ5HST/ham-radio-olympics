@@ -175,6 +175,10 @@ def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
     """
     Validate that a QSO has required fields for the given mode.
 
+    Note: TX power is NOT required for QSO validity. QSOs without valid power
+    (missing, zero, or negative) are still valid for the QSO Race competition
+    but are excluded from Cool Factor competition since cool_factor cannot be calculated.
+
     Args:
         qso: QSO dictionary
         mode: 'work' or 'activate'
@@ -182,9 +186,6 @@ def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # TX power is optional - QSOs without power still count for QSO Race
-    # but are excluded from Cool Factor competition
-
     # Must be confirmed
     if not qso.get("is_confirmed"):
         return False, "QSO not confirmed"
@@ -243,7 +244,9 @@ def get_matching_qsos(
     # Match-level modes override sport-level if specified
     allowed_modes = match_allowed_modes if match_allowed_modes else sport_config.get("allowed_modes")
 
-    # POTA activation requires 10+ QSOs per day from the park
+    # POTA activation requires 10+ QSOs per day from the same park.
+    # This is separate from the olympiad's qualifying_qsos (minimum to medal).
+    # A valid POTA activation day = 10+ confirmed QSOs from that park on that UTC date.
     POTA_MIN_QSOS = 10
 
     with get_db() as conn:
@@ -273,7 +276,7 @@ def get_matching_qsos(
 
         all_qsos = [dict(row) for row in cursor.fetchall()]
 
-        # For park/pota activations, pre-compute valid activation days (10+ QSOs per day)
+        # For park/pota activations, pre-compute valid activation days (10+ QSOs per day from same park)
         valid_activation_days = set()  # (callsign, park, date) tuples
         if activate_enabled and target_type in ("park", "pota"):
             # Count QSOs per (callsign, park, date)
@@ -330,7 +333,7 @@ def get_matching_qsos(
             if activate_enabled:
                 valid, _ = validate_qso_for_mode(qso, "activate")
                 if valid and matches_target(qso, target_type, target_value, "activate"):
-                    # For park/pota activations, require 10+ QSOs on that day
+                    # For park/pota activations, require 10+ QSOs on that day from that park
                     if target_type in ("park", "pota"):
                         park = (qso.get("my_sig_info") or "").upper().strip()
                         qso_date = qso["qso_datetime_utc"][:10]
@@ -543,11 +546,12 @@ def recompute_match_medals(match_id: int):
         for qso in matching:
             qsos_for_records.append((qso.qso_id, qso.callsign))
 
-        # Compute medals
+        # Compute medals - use match target_type if set, otherwise sport's target_type
+        effective_target_type = match_data.get("target_type") or match_data["sport_target_type"]
         results = compute_medals(
             matching,
             match_data["qualifying_qsos"],
-            match_data["target_type"],
+            effective_target_type,
         )
 
         # Clear existing medals for this match

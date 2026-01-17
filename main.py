@@ -2660,6 +2660,160 @@ async def export_medals(request: Request, user: User = Depends(require_user)):
 
 
 # ============================================================
+# PDF EXPORT ENDPOINTS
+# ============================================================
+
+@app.get("/olympiad.pdf", tags=["public"])
+async def get_olympiad_pdf(request: Request, refresh: bool = False):
+    """
+    Download the cached olympiad standings PDF.
+
+    This PDF is automatically regenerated when medals or records change.
+    No authentication required - this is public standings data.
+
+    Query params:
+        refresh: If true, force regeneration of the PDF
+    """
+    from starlette.responses import Response
+    from pdf_export import get_cached_pdf, regenerate_active_olympiad_pdf
+
+    # Get active olympiad
+    with get_db() as conn:
+        cursor = conn.execute("SELECT id, name FROM olympiads WHERE is_active = 1")
+        olympiad = cursor.fetchone()
+
+    if not olympiad:
+        raise HTTPException(status_code=404, detail="No active olympiad found")
+
+    # Force regeneration if requested
+    if refresh:
+        regenerate_active_olympiad_pdf()
+
+    # Try to get cached PDF, regenerate if not exists
+    pdf_bytes = get_cached_pdf(olympiad["id"])
+    if not pdf_bytes:
+        # Generate it now
+        regenerate_active_olympiad_pdf()
+        pdf_bytes = get_cached_pdf(olympiad["id"])
+
+    if not pdf_bytes:
+        raise HTTPException(status_code=500, detail="Failed to generate PDF")
+
+    filename = f"{olympiad['name'].replace(' ', '_')}_Standings.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/export/pdf/olympiad")
+async def export_pdf_olympiad(
+    request: Request,
+    user: User = Depends(require_user),
+    top_n: int = 10,
+    include_qsos: bool = False,
+    include_records: bool = False
+):
+    """Export active olympiad as PDF for offline reference."""
+    from starlette.responses import Response
+    from pdf_export import generate_olympiad_pdf
+
+    # Get active olympiad
+    with get_db() as conn:
+        cursor = conn.execute("SELECT id, name FROM olympiads WHERE is_active = 1")
+        olympiad = cursor.fetchone()
+
+    if not olympiad:
+        raise HTTPException(status_code=404, detail="No active olympiad found")
+
+    try:
+        pdf_bytes = generate_olympiad_pdf(
+            olympiad_id=olympiad["id"],
+            callsign=user.callsign,
+            top_n=top_n,
+            include_qsos=include_qsos,
+            include_records=include_records
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    filename = f"{user.callsign}_olympiad_{olympiad['name'].replace(' ', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/export/pdf/sport/{sport_id}")
+async def export_pdf_sport(
+    request: Request,
+    sport_id: int,
+    user: User = Depends(require_user),
+    top_n: int = 10,
+    include_qsos: bool = False,
+    include_records: bool = False
+):
+    """Export single sport as PDF for offline reference."""
+    from starlette.responses import Response
+    from pdf_export import generate_sport_pdf
+
+    # Verify sport exists
+    with get_db() as conn:
+        cursor = conn.execute("SELECT id, name FROM sports WHERE id = ?", (sport_id,))
+        sport = cursor.fetchone()
+
+    if not sport:
+        raise HTTPException(status_code=404, detail="Sport not found")
+
+    try:
+        pdf_bytes = generate_sport_pdf(
+            sport_id=sport_id,
+            callsign=user.callsign,
+            top_n=top_n,
+            include_qsos=include_qsos,
+            include_records=include_records
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    filename = f"{user.callsign}_sport_{sport['name'].replace(' ', '_')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.get("/export/pdf/my-sports")
+async def export_pdf_my_sports(
+    request: Request,
+    user: User = Depends(require_user),
+    top_n: int = 10,
+    include_qsos: bool = False,
+    include_records: bool = False
+):
+    """Export competitor's entered sports as PDF for offline reference."""
+    from starlette.responses import Response
+    from pdf_export import generate_my_sports_pdf
+
+    pdf_bytes = generate_my_sports_pdf(
+        callsign=user.callsign,
+        top_n=top_n,
+        include_qsos=include_qsos,
+        include_records=include_records
+    )
+
+    filename = f"{user.callsign}_my_sports.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ============================================================
 # REFEREE ENDPOINTS
 # ============================================================
 

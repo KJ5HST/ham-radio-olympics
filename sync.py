@@ -604,6 +604,10 @@ def recompute_all_active_matches():
         for match_id in sport_matches:
             compute_team_standings(sport_id, match_id)
 
+    # Regenerate cached PDF once after all medals/records are updated
+    from pdf_export import regenerate_active_olympiad_pdf
+    regenerate_active_olympiad_pdf()
+
 
 def recompute_sport_matches(sport_id: int):
     """Recompute medals for all matches in a specific sport."""
@@ -621,3 +625,7 @@ def recompute_sport_matches(sport_id: int):
     compute_team_standings(sport_id)
     for match_id in match_ids:
         compute_team_standings(sport_id, match_id)
+
+    # Regenerate cached PDF once after all medals/records are updated
+    from pdf_export import regenerate_active_olympiad_pdf
+    regenerate_active_olympiad_pdf()

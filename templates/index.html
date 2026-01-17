@@ -6,6 +6,8 @@
 <p><strong>Period:</strong> {{ olympiad.start_date | format_date }} to {{ olympiad.end_date | format_date }}</p>
 <p><strong>Minimum QSOs to Qualify:</strong> {% if olympiad.qualifying_qsos == 0 %}None (any confirmed QSO qualifies){% else %}{{ olympiad.qualifying_qsos }}{% endif %}</p>
 
+<p><a href="/olympiad.pdf" class="btn"><span class="icon">📄</span> Download</a></p>
+
 <h3>Sports</h3>
 {% if sports %}
 <div class="table-responsive"><table>

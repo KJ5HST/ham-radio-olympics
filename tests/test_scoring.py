@@ -133,20 +133,21 @@ class TestQSOValidation:
         valid, error = validate_qso_for_mode(qso, "activate")
         assert valid == True
 
-    def test_missing_power_rejected(self):
-        """Test QSO with missing power is rejected."""
+    def test_missing_power_valid_for_qso_race(self):
+        """Test QSO with missing power is still valid (for QSO Race, not Cool Factor)."""
         qso = {
             "is_confirmed": True,
             "dx_dxcc": 230,
             "dx_grid": "JN58",
         }
 
+        # QSOs without power are valid for QSO Race
         valid, error = validate_qso_for_mode(qso, "work")
-        assert valid == False
-        assert "power" in error.lower()
+        assert valid == True
+        assert error is None
 
-    def test_zero_power_rejected(self):
-        """Test QSO with zero power is rejected."""
+    def test_zero_power_valid_for_qso_race(self):
+        """Test QSO with zero power is still valid (for QSO Race, not Cool Factor)."""
         qso = {
             "tx_power_w": 0,
             "is_confirmed": True,
@@ -154,11 +155,13 @@ class TestQSOValidation:
             "dx_grid": "JN58",
         }
 
+        # QSOs with zero power are valid for QSO Race
         valid, error = validate_qso_for_mode(qso, "work")
-        assert valid == False
+        assert valid == True
+        assert error is None
 
-    def test_negative_power_rejected(self):
-        """Test QSO with negative power is rejected."""
+    def test_negative_power_valid_for_qso_race(self):
+        """Test QSO with negative power is still valid (for QSO Race, not Cool Factor)."""
         qso = {
             "tx_power_w": -5,
             "is_confirmed": True,
@@ -166,8 +169,10 @@ class TestQSOValidation:
             "dx_grid": "JN58",
         }
 
+        # QSOs with negative power are valid for QSO Race
         valid, error = validate_qso_for_mode(qso, "work")
-        assert valid == False
+        assert valid == True
+        assert error is None
 
     def test_unconfirmed_rejected(self):
         """Test unconfirmed QSO is rejected."""

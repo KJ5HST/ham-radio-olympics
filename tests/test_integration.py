@@ -431,14 +431,15 @@ class TestSeparatePools:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1000.0, 200.0)
             """, ("W1ABC", "N1POTA", "2026-01-05T12:01:00", 5.0, "EM12", "FN31", 291, "K-0001"))
 
-            # K2DEF activates from K-0001
-            conn.execute("""
-                INSERT INTO qsos (
-                    competitor_callsign, dx_callsign, qso_datetime_utc,
-                    tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, is_confirmed,
-                    distance_km, cool_factor
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 500.0, 100.0)
-            """, ("K2DEF", "W6XYZ", "2026-01-05T12:05:00", 5.0, "FN31", "K-0001", "CM87", 291))
+            # K2DEF activates from K-0001 - needs 10+ QSOs on same day for valid POTA activation
+            for i in range(10):
+                conn.execute("""
+                    INSERT INTO qsos (
+                        competitor_callsign, dx_callsign, qso_datetime_utc,
+                        tx_power_w, my_grid, my_sig_info, dx_grid, dx_dxcc, is_confirmed,
+                        distance_km, cool_factor
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 500.0, 100.0)
+                """, ("K2DEF", f"W{i}XYZ", f"2026-01-05T12:{i+5:02d}:00", 5.0, "FN31", "K-0001", "CM87", 291))
 
         recompute_match_medals(1)
 
