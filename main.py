@@ -78,27 +78,31 @@ async def lifespan(app: FastAPI):
     seed_example_olympiad()  # Seeds example data on fresh deployments
     backfill_records()  # Backfill records for existing QSOs if needed
 
-    # Sync on wake if it's been more than an hour since the last sync
-    try:
-        with get_db() as conn:
-            cursor = conn.execute(
-                "SELECT MAX(last_sync_at) as last_sync FROM competitors WHERE last_sync_at IS NOT NULL"
-            )
-            row = cursor.fetchone()
-            if row and row["last_sync"]:
-                last_sync = datetime.fromisoformat(row["last_sync"].replace("Z", "+00:00"))
-                if last_sync.tzinfo:
-                    last_sync = last_sync.replace(tzinfo=None)
-                hours_since_sync = (datetime.utcnow() - last_sync).total_seconds() / 3600
-                if hours_since_sync >= 1:
-                    logger.info(f"Last sync was {hours_since_sync:.1f} hours ago, triggering startup sync")
+    # Sync on wake if it's been more than an hour since the last sync (non-blocking)
+    async def startup_sync_if_needed():
+        try:
+            with get_db() as conn:
+                cursor = conn.execute(
+                    "SELECT MAX(last_sync_at) as last_sync FROM competitors WHERE last_sync_at IS NOT NULL"
+                )
+                row = cursor.fetchone()
+                if row and row["last_sync"]:
+                    last_sync = datetime.fromisoformat(row["last_sync"].replace("Z", "+00:00"))
+                    if last_sync.tzinfo:
+                        last_sync = last_sync.replace(tzinfo=None)
+                    hours_since_sync = (datetime.utcnow() - last_sync).total_seconds() / 3600
+                    if hours_since_sync >= 1:
+                        logger.info(f"Last sync was {hours_since_sync:.1f} hours ago, triggering startup sync")
+                        await sync_all_competitors()
+                else:
+                    # No syncs yet, trigger one
+                    logger.info("No previous sync found, triggering startup sync")
                     await sync_all_competitors()
-            else:
-                # No syncs yet, trigger one
-                logger.info("No previous sync found, triggering startup sync")
-                await sync_all_competitors()
-    except Exception as e:
-        logger.exception(f"Startup sync check failed: {e}")
+        except Exception as e:
+            logger.exception(f"Startup sync check failed: {e}")
+
+    # Run startup sync in background (non-blocking)
+    asyncio.create_task(startup_sync_if_needed())
 
     # Start background sync task
     _sync_task = asyncio.create_task(background_sync())
