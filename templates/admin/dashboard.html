@@ -95,17 +95,19 @@
             <label for="name">Name</label>
             <input type="text" id="name" required placeholder="2026 Ham Radio Olympics">
         </div>
-        <div class="form-group">
-            <label for="start_date">Start Date</label>
-            <input type="date" id="start_date" required>
-        </div>
-        <div class="form-group">
-            <label for="end_date">End Date</label>
-            <input type="date" id="end_date" required>
-        </div>
-        <div class="form-group">
-            <label for="qualifying_qsos">Qualifying QSOs (0 = no minimum)</label>
-            <input type="number" id="qualifying_qsos" value="0" min="0">
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 150px;">
+                <label for="start_date">Start</label>
+                <input type="date" id="start_date" required>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 150px;">
+                <label for="end_date">End</label>
+                <input type="date" id="end_date" required>
+            </div>
+            <div class="form-group" style="flex: 0 0 120px;">
+                <label for="qualifying_qsos" title="Minimum confirmed QSOs to earn medals (0 = no minimum)">Min QSOs</label>
+                <input type="number" id="qualifying_qsos" value="0" min="0">
+            </div>
         </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Olympiad</button>

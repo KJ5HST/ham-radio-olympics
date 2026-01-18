@@ -39,9 +39,9 @@
         <tr>
             <td><strong>{{ match.target_display | pota_tooltip }}</strong></td>
             <td>{% if match.target_type %}<span style="color: var(--link-color);">{{ match.target_type | capitalize }}</span>{% else %}<span style="color: var(--text-secondary);">(Sport)</span>{% endif %}</td>
-            <td>{{ match.start_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
-            <td>{{ match.end_date | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
-            <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}{% else %}-{% endif %}</td>
+            <td>{{ match.start_date | format_datetime_short }}</td>
+            <td>{{ match.end_date | format_datetime_short }}</td>
+            <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime_short }}{% else %}-{% endif %}</td>
             <td>{{ match.allowed_modes or '-' }}</td>
             <td>{% if match.max_power_w %}{{ match.max_power_w }}W{% else %}-{% endif %}</td>
             <td>
@@ -62,40 +62,51 @@
 <div class="card">
     <form id="match-form">
         <input type="hidden" id="match_id">
-        <div class="form-group">
-            <label for="target_value">Target Value</label>
-            {% if target_options %}
-            <select id="target_value" required>
-                <option value="">-- Select --</option>
-                {% for code, name in target_options %}
-                <option value="{{ code }}">{{ name }} ({{ code }})</option>
-                {% endfor %}
-            </select>
-            {% else %}
-            <input type="text" id="target_value" required placeholder="{% if sport.target_type == 'park' %}K-0001{% elif sport.target_type == 'grid' %}FN31{% elif sport.target_type == 'call' %}W1AW{% else %}Target{% endif %}">
-            {% endif %}
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="target_value">Target Value</label>
+                {% if target_options %}
+                <select id="target_value" required>
+                    <option value="">-- Select --</option>
+                    {% for code, name in target_options %}
+                    <option value="{{ code }}">{{ name }} ({{ code }})</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <input type="text" id="target_value" required placeholder="{% if sport.target_type == 'park' %}K-0001{% elif sport.target_type == 'grid' %}FN31{% elif sport.target_type == 'call' %}W1AW{% else %}Target{% endif %}">
+                {% endif %}
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="target_type">Type Override</label>
+                <select id="target_type">
+                    <option value="">(Sport: {{ sport.target_type | capitalize }})</option>
+                    <option value="continent">Continent</option>
+                    <option value="country">Country</option>
+                    <option value="park">Specific Park</option>
+                    <option value="pota">Any POTA Park</option>
+                    <option value="call">Callsign</option>
+                    <option value="grid">Grid Square</option>
+                    <option value="any">Any QSO</option>
+                </select>
+            </div>
+            <div class="form-group" style="flex: 0 0 120px;">
+                <label for="max_power_w">Max Power</label>
+                <input type="number" id="max_power_w" min="1" placeholder="No limit">
+            </div>
         </div>
-        <div class="form-group">
-            <label for="target_type">Target Type Override</label>
-            <select id="target_type">
-                <option value="">(Use Sport's: {{ sport.target_type | capitalize }})</option>
-                <option value="continent">Continent</option>
-                <option value="country">Country</option>
-                <option value="park">Specific Park</option>
-                <option value="pota">Any POTA Park</option>
-                <option value="call">Callsign</option>
-                <option value="grid">Grid Square</option>
-                <option value="any">Any QSO</option>
-            </select>
-            <small style="color: #718096;">Override sport-level target type for this match only. "Any POTA Park" matches contacts with any park.</small>
-        </div>
-        <div class="form-group">
-            <label for="start_date">Start Date/Time (UTC)</label>
-            <input type="datetime-local" id="start_date" required>
-        </div>
-        <div class="form-group">
-            <label for="end_date">End Date/Time (UTC)</label>
-            <input type="datetime-local" id="end_date" required>
+        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="start_date">Start (UTC)</label>
+                <input type="datetime-local" id="start_date" required>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="end_date">End (UTC)</label>
+                <input type="datetime-local" id="end_date" required>
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 200px;">
+                <label for="confirmation_deadline">Confirm Deadline (UTC)</label>
+                <input type="datetime-local" id="confirmation_deadline">
+            </div>
         </div>
         <div class="form-group">
             <label>Mode Override (leave unchecked to use sport's modes)</label>
@@ -111,16 +122,6 @@
                 <label><input type="checkbox" class="mode-checkbox" value="JS8"> JS8</label>
             </div>
             <small style="color: #718096;">If checked, overrides sport-level mode restrictions for this match only.</small>
-        </div>
-        <div class="form-group">
-            <label for="max_power_w">Max Power (watts)</label>
-            <input type="number" id="max_power_w" min="1" placeholder="Leave blank for no limit">
-            <small style="color: #718096;">Limit this match to QRP contacts. Only QSOs at or below this power will qualify.</small>
-        </div>
-        <div class="form-group">
-            <label for="confirmation_deadline">Confirmation Deadline (UTC)</label>
-            <input type="datetime-local" id="confirmation_deadline">
-            <small style="color: #718096;">QSOs confirmed after this deadline will not count. Leave blank for no deadline.</small>
         </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Match</button>
@@ -159,8 +160,23 @@ function setDefaultTimes() {
     const day = String(today.getDate()).padStart(2, '0');
     document.getElementById('start_date').value = `${year}-${month}-${day}T00:00`;
     document.getElementById('end_date').value = `${year}-${month}-${day}T23:59`;
+    document.getElementById('confirmation_deadline').value = `${year}-${month}-${day}T23:59`;
 }
 setDefaultTimes();
+
+// Sync confirmation deadline to end date when end date changes
+document.getElementById('end_date').addEventListener('change', function() {
+    const confirmField = document.getElementById('confirmation_deadline');
+    // Only auto-update if confirmation is empty or matches the previous end date
+    if (!confirmField.dataset.userModified) {
+        confirmField.value = this.value;
+    }
+});
+
+// Track if user manually changed confirmation deadline
+document.getElementById('confirmation_deadline').addEventListener('change', function() {
+    this.dataset.userModified = 'true';
+});
 
 function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW, targetType, confirmationDeadline) {
     editingId = id;
@@ -171,7 +187,10 @@ function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW,
     document.getElementById('end_date').value = endDate;
     setSelectedModes(allowedModes);
     document.getElementById('max_power_w').value = maxPowerW || '';
-    document.getElementById('confirmation_deadline').value = confirmationDeadline || '';
+    const confirmField = document.getElementById('confirmation_deadline');
+    confirmField.value = confirmationDeadline || endDate;
+    // Mark as user-modified if different from end date
+    confirmField.dataset.userModified = (confirmationDeadline && confirmationDeadline !== endDate) ? 'true' : '';
     document.getElementById('form-title').textContent = 'Edit Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
     document.getElementById('cancel-btn').style.display = 'inline-flex';
@@ -185,7 +204,7 @@ function cancelEdit() {
     setDefaultTimes();
     setSelectedModes(null);
     document.getElementById('max_power_w').value = '';
-    document.getElementById('confirmation_deadline').value = '';
+    document.getElementById('confirmation_deadline').dataset.userModified = '';
     document.getElementById('form-title').textContent = 'Create Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Match';
     document.getElementById('cancel-btn').style.display = 'none';

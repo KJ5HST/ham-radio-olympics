@@ -344,6 +344,22 @@ templates.env.filters["format_date"] = format_date
 templates.env.filters["format_datetime"] = format_datetime
 
 
+def format_datetime_short(value: str) -> str:
+    """Format datetime as mm/dd/yy hh:mm UTC for compact display."""
+    if not value:
+        return "-"
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if dt.tzinfo:
+            dt = dt.replace(tzinfo=None)
+        return dt.strftime("%m/%d/%y %H:%M") + "z"
+    except (ValueError, AttributeError):
+        return value[:16] if len(value) >= 16 else value
+
+
+templates.env.filters["format_datetime_short"] = format_datetime_short
+
+
 def get_country_flag(dxcc_code) -> str:
     """Get country flag emoji from DXCC code, wrapped in a span with country name tooltip."""
     from markupsafe import Markup
@@ -2052,7 +2068,8 @@ async def login(request: Request, login_data: UserLogin, background_tasks: Backg
     log_action(
         actor_callsign=login_data.callsign.upper(),
         action="login",
-        details="Successful login",
+        target_type="session",
+        target_id=login_data.callsign.upper(),
         ip_address=get_client_ip(request)
     )
 
@@ -2099,7 +2116,8 @@ async def logout(request: Request):
         log_action(
             actor_callsign=user.callsign,
             action="logout",
-            details="User logged out",
+            target_type="session",
+            target_id=user.callsign,
             ip_address=get_client_ip(request)
         )
 
@@ -2592,7 +2610,8 @@ async def change_password(
     log_action(
         actor_callsign=user.callsign,
         action="password_change",
-        details="Password changed via settings",
+        target_type="competitor",
+        target_id=user.callsign,
         ip_address=get_client_ip(request)
     )
 
@@ -3803,61 +3822,113 @@ async def disable_competitor(request: Request, callsign: str, _: bool = Depends(
 
 
 @app.post("/admin/competitor/{callsign}/enable")
-async def enable_competitor(callsign: str, _: bool = Depends(verify_admin)):
+async def enable_competitor(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Enable a competitor's account."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
         conn.execute("UPDATE competitors SET is_disabled = 0 WHERE callsign = ?", (callsign,))
 
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="competitor_enabled",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} enabled"}
 
 
 @app.post("/admin/competitor/{callsign}/set-admin")
-async def set_admin_role(callsign: str, _: bool = Depends(verify_admin)):
+async def set_admin_role(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Grant admin role to a competitor."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
         conn.execute("UPDATE competitors SET is_admin = 1 WHERE callsign = ?", (callsign,))
 
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="admin_role_granted",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} is now an admin"}
 
 
 @app.post("/admin/competitor/{callsign}/remove-admin")
-async def remove_admin_role(callsign: str, _: bool = Depends(verify_admin)):
+async def remove_admin_role(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Remove admin role from a competitor."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
         conn.execute("UPDATE competitors SET is_admin = 0 WHERE callsign = ?", (callsign,))
 
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="admin_role_revoked",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} is no longer an admin"}
 
 
 @app.post("/admin/competitor/{callsign}/set-referee")
-async def set_referee_role(callsign: str, _: bool = Depends(verify_admin)):
+async def set_referee_role(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Grant referee role to a competitor."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
             raise HTTPException(status_code=404, detail="Competitor not found")
         conn.execute("UPDATE competitors SET is_referee = 1 WHERE callsign = ?", (callsign,))
 
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="referee_role_granted",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} is now a referee"}
 
 
 @app.post("/admin/competitor/{callsign}/remove-referee")
-async def remove_referee_role(callsign: str, _: bool = Depends(verify_admin)):
+async def remove_referee_role(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Remove referee role from a competitor."""
+    from audit import log_action
+
     callsign = callsign.upper()
+    user = get_current_user(request)
+
     with get_db() as conn:
         cursor = conn.execute("SELECT 1 FROM competitors WHERE callsign = ?", (callsign,))
         if not cursor.fetchone():
@@ -3865,6 +3936,14 @@ async def remove_referee_role(callsign: str, _: bool = Depends(verify_admin)):
         conn.execute("UPDATE competitors SET is_referee = 0 WHERE callsign = ?", (callsign,))
         # Also remove all referee assignments
         conn.execute("DELETE FROM referee_assignments WHERE callsign = ?", (callsign,))
+
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="referee_role_revoked",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": f"Competitor {callsign} is no longer a referee"}
 

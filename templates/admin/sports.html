@@ -58,27 +58,22 @@
             <label for="description">Description</label>
             <input type="text" id="description" placeholder="Work DX stations on target continent">
         </div>
-        <div class="form-group">
-            <label for="target_type">Target Type</label>
-            <select id="target_type" required>
-                <option value="continent">Continent</option>
-                <option value="country">Country (DXCC)</option>
-                <option value="park">Specific POTA Park</option>
-                <option value="pota">Any POTA Park</option>
-                <option value="call">Callsign</option>
-                <option value="grid">Grid Square</option>
-                <option value="any">Any Contact</option>
-            </select>
-            <small style="color: #718096;">"Any POTA Park" matches contacts where either party is at any park.</small>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" id="work_enabled" checked> Work Mode (hunters)</label>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" id="activate_enabled"> Activate Mode (activators)</label>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" id="separate_pools"> Separate Pools (per-role medals)</label>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
+            <div>
+                <label for="target_type" style="font-size: 0.85em; color: var(--text-secondary);">Target</label>
+                <select id="target_type" required style="margin-top: 2px;">
+                    <option value="continent">Continent</option>
+                    <option value="country">Country</option>
+                    <option value="park">Park</option>
+                    <option value="pota" title="Any POTA Park">Any POTA</option>
+                    <option value="call">Callsign</option>
+                    <option value="grid">Grid</option>
+                    <option value="any">Any</option>
+                </select>
+            </div>
+            <label title="Hunters working DX stations score points" style="cursor: help;"><input type="checkbox" id="work_enabled" checked> Work</label>
+            <label title="Activators making contacts from target location score points" style="cursor: help;"><input type="checkbox" id="activate_enabled"> Activate</label>
+            <label title="Work and Activate have separate leaderboards (14 max pts vs 7)" style="cursor: help;"><input type="checkbox" id="separate_pools"> Separate</label>
         </div>
         <div class="form-group">
             <label>Allowed Modes (leave unchecked for all modes)</label>
