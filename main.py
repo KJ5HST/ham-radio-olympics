@@ -5218,6 +5218,18 @@ async def api_park_lookup(request: Request, reference: str):
     reference = _normalize_park_reference(reference)
     was_normalized = (original_reference != reference)
 
+    # Also detect if the park ID was likely normalized previously (zero-padded to 4 digits)
+    # Only for 3-digit numbers (100-999) that were padded - e.g., US-0303 was probably US-303
+    # Don't flag US-0001 through US-0099 since those are legitimate canonical IDs
+    import re
+    likely_normalized_match = re.match(r'^([A-Z]{1,3})-0([1-9]\d{2})$', reference)
+    if likely_normalized_match and not was_normalized:
+        # Show what the original likely was (e.g., US-303 for US-0303)
+        prefix = likely_normalized_match.group(1)
+        number = likely_normalized_match.group(2)
+        original_reference = f"{prefix}-{number}"
+        was_normalized = True
+
     # Check cache first (valid for 30 days)
     with get_db() as conn:
         cursor = conn.execute(
