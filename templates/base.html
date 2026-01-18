@@ -209,6 +209,14 @@
             cursor: help;
             border-bottom: 1px dotted var(--accent-color);
         }
+        .pota-ref.pota-normalized {
+            border-bottom-color: #f59e0b;
+            border-bottom-style: dashed;
+        }
+        .pota-ref.pota-normalized::after {
+            content: " ⚠️";
+            font-size: 0.8em;
+        }
         .pota-tooltip {
             position: absolute;
             bottom: 100%;
@@ -959,6 +967,10 @@
             var data = await fetchParkInfo(reference);
             if (target.querySelector('.pota-tooltip')) {
                 target.querySelector('.pota-tooltip').innerHTML = formatParkTooltip(data);
+            }
+            // Mark normalized references with warning indicator
+            if (data && data.original) {
+                target.classList.add('pota-normalized');
             }
         }, true);
 
