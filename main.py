@@ -1567,12 +1567,13 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                     "qsos": medal_qsos
                 })
 
-        # Get medal standings by sport
+        # Get medal standings by sport (grouped by role to match sport page)
         cursor = conn.execute("""
             SELECT
                 s.id as sport_id,
                 s.name as sport_name,
                 m.callsign,
+                m.role,
                 c.first_name,
                 SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END) +
                 SUM(CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
@@ -1588,9 +1589,9 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
             JOIN matches ma ON m.match_id = ma.id
             JOIN sports s ON ma.sport_id = s.id
             WHERE m.qualified = 1
-            GROUP BY s.id, m.callsign
+            GROUP BY s.id, m.callsign, m.role
             HAVING total_medals > 0
-            ORDER BY s.name, total_medals DESC, gold_count DESC, silver_count DESC, bronze_count DESC
+            ORDER BY s.name, total_points DESC, gold_count DESC, silver_count DESC, bronze_count DESC
         """)
         sport_standings_raw = [dict(row) for row in cursor.fetchall()]
 

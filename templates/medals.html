@@ -140,10 +140,9 @@ function toggleDetails(callsign) {
         <tr>
             <th scope="col">Rank</th>
             <th scope="col">Competitor</th>
-            <th scope="col"><span class="medal-emoji gold"></span></th>
-            <th scope="col"><span class="medal-emoji silver"></span></th>
-            <th scope="col"><span class="medal-emoji bronze"></span></th>
-            <th scope="col">Total</th>
+            <th scope="col">🥇</th>
+            <th scope="col">🥈</th>
+            <th scope="col">🥉</th>
             <th scope="col">Points</th>
         </tr>
     </thead>
@@ -151,12 +150,11 @@ function toggleDetails(callsign) {
         {% for competitor in sport.competitors %}
         <tr>
             <td>{{ loop.index }}</td>
-            <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a></td>
-            <td>{{ competitor.gold_count }}</td>
-            <td>{{ competitor.silver_count }}</td>
-            <td>{{ competitor.bronze_count }}</td>
-            <td><strong>{{ competitor.total_medals }}</strong></td>
-            <td>{{ competitor.total_points }}</td>
+            <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a>{% if competitor.role and competitor.role != 'combined' %} <span style="color: var(--text-secondary); font-size: 0.85em;">({{ competitor.role }})</span>{% endif %}</td>
+            <td>{{ competitor.gold_count or '-' }}</td>
+            <td>{{ competitor.silver_count or '-' }}</td>
+            <td>{{ competitor.bronze_count or '-' }}</td>
+            <td><strong>{{ competitor.total_points }}</strong></td>
         </tr>
         {% endfor %}
     </tbody>
