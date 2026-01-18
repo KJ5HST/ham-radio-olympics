@@ -4680,14 +4680,52 @@ async def team_profile_page(request: Request, team_id: int, user: User = Depends
         captain = cursor.fetchone()
 
         # Get team standings per sport (using normalized calculation)
+        # Only include sports where the team has at least one medal
         cursor = conn.execute("""
-            SELECT tm.*, s.name as sport_name
+            SELECT tm.*, s.name as sport_name, s.id as sport_id
             FROM team_medals tm
             JOIN sports s ON tm.sport_id = s.id
             WHERE tm.team_id = ? AND tm.match_id IS NULL AND tm.calculation_method = 'normalized'
+              AND (tm.gold_count > 0 OR tm.silver_count > 0 OR tm.bronze_count > 0)
             ORDER BY tm.total_points DESC
         """, (team_id,))
-        sport_standings = cursor.fetchall()
+        sport_standings = [dict(row) for row in cursor.fetchall()]
+
+        # Get member medal details per sport for collapsible sections
+        member_callsigns = [m["callsign"] for m in members]
+        sport_member_medals = {}
+        if member_callsigns and sport_standings:
+            sport_ids = [s["sport_id"] for s in sport_standings]
+            placeholders_calls = ",".join("?" * len(member_callsigns))
+            placeholders_sports = ",".join("?" * len(sport_ids))
+            cursor = conn.execute(f"""
+                SELECT
+                    s.id as sport_id,
+                    m.callsign,
+                    m.role,
+                    c.first_name,
+                    SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END +
+                        CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold,
+                    SUM(CASE WHEN m.qso_race_medal = 'silver' THEN 1 ELSE 0 END +
+                        CASE WHEN m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver,
+                    SUM(CASE WHEN m.qso_race_medal = 'bronze' THEN 1 ELSE 0 END +
+                        CASE WHEN m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze,
+                    SUM(m.total_points) as total_points
+                FROM medals m
+                JOIN matches ma ON m.match_id = ma.id
+                JOIN sports s ON ma.sport_id = s.id
+                LEFT JOIN competitors c ON m.callsign = c.callsign
+                WHERE m.callsign IN ({placeholders_calls})
+                  AND s.id IN ({placeholders_sports})
+                GROUP BY s.id, m.callsign, m.role, c.first_name
+                ORDER BY total_points DESC
+            """, member_callsigns + sport_ids)
+
+            for row in cursor.fetchall():
+                sport_id = row["sport_id"]
+                if sport_id not in sport_member_medals:
+                    sport_member_medals[sport_id] = []
+                sport_member_medals[sport_id].append(dict(row))
 
         # Check if current user is a member or captain
         is_member = False
@@ -4749,6 +4787,7 @@ async def team_profile_page(request: Request, team_id: int, user: User = Depends
             "captain": captain,
             "members": members,
             "sport_standings": sport_standings,
+            "sport_member_medals": sport_member_medals,
             "is_member": is_member,
             "is_captain": is_captain,
             "has_pending_request": has_pending_request,
