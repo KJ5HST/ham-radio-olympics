@@ -5193,6 +5193,20 @@ async def api_health(request: Request):
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 
+def _normalize_park_reference(ref: str) -> str:
+    """Normalize a POTA park reference to standard format (zero-padded to 4 digits)."""
+    import re
+    if not ref:
+        return ref
+    ref = ref.upper().strip()
+    match = re.match(r'^([A-Z]{1,3})-(\d+)$', ref)
+    if match:
+        prefix = match.group(1)
+        number = match.group(2).zfill(4)
+        return f"{prefix}-{number}"
+    return ref
+
+
 @app.get("/api/v1/park/{reference}")
 @limiter.limit("100/minute")
 async def api_park_lookup(request: Request, reference: str):
@@ -5200,7 +5214,7 @@ async def api_park_lookup(request: Request, reference: str):
     import httpx
     from datetime import timedelta
 
-    reference = reference.upper().strip()
+    reference = _normalize_park_reference(reference)
 
     # Check cache first (valid for 30 days)
     with get_db() as conn:
