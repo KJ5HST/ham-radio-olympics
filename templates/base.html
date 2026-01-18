@@ -936,6 +936,9 @@
             if (data.location) {
                 html += '<div class="park-location">' + escapeHtml(data.location) + '</div>';
             }
+            if (data.original) {
+                html += '<div class="park-warning" style="color: #f59e0b; font-size: 0.85em; margin-top: 4px;">⚠️ Matched ' + escapeHtml(data.original) + ' → ' + escapeHtml(data.reference) + '</div>';
+            }
             return html;
         }
 

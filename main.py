@@ -5214,7 +5214,9 @@ async def api_park_lookup(request: Request, reference: str):
     import httpx
     from datetime import timedelta
 
+    original_reference = reference.upper().strip()
     reference = _normalize_park_reference(reference)
+    was_normalized = (original_reference != reference)
 
     # Check cache first (valid for 30 days)
     with get_db() as conn:
@@ -5229,6 +5231,7 @@ async def api_park_lookup(request: Request, reference: str):
             if datetime.utcnow() - cached_at < timedelta(days=30):
                 return {
                     "reference": reference,
+                    "original": original_reference if was_normalized else None,
                     "name": cached["name"],
                     "location": cached["location"],
                     "grid": cached["grid"],
@@ -5260,6 +5263,7 @@ async def api_park_lookup(request: Request, reference: str):
 
                 return {
                     "reference": reference,
+                    "original": original_reference if was_normalized else None,
                     "name": name,
                     "location": location,
                     "grid": grid,
