@@ -25,31 +25,40 @@
 {% if teams %}
 <div class="card">
     <table class="teams-table">
+        <colgroup>
+            <col style="width: 30px;">
+            <col style="width: 50px;">
+            <col>
+            <col>
+            <col style="width: 70px;">
+            <col style="width: 60px;">
+            <col style="width: 140px;">
+        </colgroup>
         <thead>
             <tr>
-                <th class="col-expand"></th>
-                <th class="col-rank">Rank</th>
-                <th class="col-team">Team</th>
-                <th class="col-captain">Captain</th>
-                <th class="col-members">Members</th>
-                <th class="col-points">Points</th>
-                <th class="col-medals">Medals</th>
+                <th></th>
+                <th>Rank</th>
+                <th>Team</th>
+                <th>Captain</th>
+                <th>Members</th>
+                <th>Points</th>
+                <th>Medals</th>
             </tr>
         </thead>
         <tbody>
             {% for team in teams %}
-            <tr class="team-row" data-team-id="{{ team.id }}">
-                <td class="col-expand" style="cursor: pointer; text-align: center;" onclick="toggleTeamDetails({{ team.id }})">
+            <tr class="team-row">
+                <td style="cursor: pointer; text-align: center;" onclick="toggleTeamDetails({{ team.id }})">
                     {% if team_sport_medals.get(team.id) %}
                     <span class="expand-icon" id="icon-team-{{ team.id }}">▶</span>
                     {% endif %}
                 </td>
-                <td class="col-rank">{{ loop.index + (pagination.page - 1) * pagination.per_page }}</td>
-                <td class="col-team"><a href="/team/{{ team.id }}">{{ team.name }}</a></td>
-                <td class="col-captain"><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_first_name | competitor_display(team.captain_callsign) }}</a></td>
-                <td class="col-members">{{ team.member_count }}</td>
-                <td class="col-points">{{ team.total_points | int }}</td>
-                <td class="col-medals">
+                <td>{{ loop.index + (pagination.page - 1) * pagination.per_page }}</td>
+                <td><a href="/team/{{ team.id }}">{{ team.name }}</a></td>
+                <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_first_name | competitor_display(team.captain_callsign) }}</a></td>
+                <td>{{ team.member_count }}</td>
+                <td>{{ team.total_points | int }}</td>
+                <td>
                     {% if team.gold > 0 %}<span class="medal-count">🥇{{ team.gold }}</span> {% endif %}
                     {% if team.silver > 0 %}<span class="medal-count">🥈{{ team.silver }}</span> {% endif %}
                     {% if team.bronze > 0 %}<span class="medal-count">🥉{{ team.bronze }}</span> {% endif %}
@@ -58,14 +67,18 @@
             </tr>
             {% if team_sport_medals.get(team.id) %}
             {% for sport in team_sport_medals[team.id] %}
-            <tr class="details-row" id="details-team-{{ team.id }}-{{ loop.index }}" style="display: none; background: var(--bg-primary);">
-                <td class="col-expand"></td>
-                <td class="col-rank"></td>
-                <td class="col-team" style="padding-left: 20px; font-size: 0.9em;"><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
-                <td class="col-captain" style="font-size: 0.9em;">{% if sport.medal == 'gold' %}🥇 Team{% elif sport.medal == 'silver' %}🥈 Team{% elif sport.medal == 'bronze' %}🥉 Team{% endif %}</td>
-                <td class="col-members"></td>
-                <td class="col-points" style="font-size: 0.9em;">{{ sport.total_points | round(1) }}</td>
-                <td class="col-medals" style="font-size: 0.9em;">
+            <tr class="details-row" id="details-team-{{ team.id }}-{{ loop.index }}" style="display: none;">
+                <td></td>
+                <td></td>
+                <td colspan="2" style="padding-left: 20px; font-size: 0.9em;">
+                    <a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a>
+                    {% if sport.medal == 'gold' %} <span style="color: var(--text-secondary);">🥇 Team</span>
+                    {% elif sport.medal == 'silver' %} <span style="color: var(--text-secondary);">🥈 Team</span>
+                    {% elif sport.medal == 'bronze' %} <span style="color: var(--text-secondary);">🥉 Team</span>{% endif %}
+                </td>
+                <td></td>
+                <td style="font-size: 0.9em;">{{ sport.total_points | round(1) }}</td>
+                <td style="font-size: 0.9em;">
                     {% if sport.gold_count %}<span class="medal-count">🥇{{ sport.gold_count }}</span> {% endif %}
                     {% if sport.silver_count %}<span class="medal-count">🥈{{ sport.silver_count }}</span> {% endif %}
                     {% if sport.bronze_count %}<span class="medal-count">🥉{{ sport.bronze_count }}</span> {% endif %}
@@ -80,13 +93,7 @@
 
 <style>
 .teams-table { table-layout: fixed; width: 100%; }
-.teams-table .col-expand { width: 30px; }
-.teams-table .col-rank { width: 50px; }
-.teams-table .col-team { width: 25%; }
-.teams-table .col-captain { width: 20%; }
-.teams-table .col-members { width: 70px; }
-.teams-table .col-points { width: 70px; }
-.teams-table .col-medals { width: auto; }
+.details-row { background: var(--bg-primary); }
 </style>
 
 <script>
