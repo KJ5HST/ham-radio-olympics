@@ -131,8 +131,11 @@ function toggleDetails(callsign) {
 <h2 style="margin-top: 30px;">Standings by Sport</h2>
 
 {% for sport_id, sport in sport_standings.items() %}
-<h3 style="margin-top: 20px;"><a href="/olympiad/sport/{{ sport_id }}">{{ sport.name }}</a></h3>
-<div class="table-responsive"><table>
+<h3 style="margin-top: 20px; cursor: pointer;" onclick="toggleSport('sport-{{ sport_id }}')">
+    <span class="expand-icon" id="icon-sport-{{ sport_id }}">▶</span>
+    <a href="/olympiad/sport/{{ sport_id }}" onclick="event.stopPropagation();">{{ sport.name }}</a>
+</h3>
+<div class="table-responsive sport-table" id="sport-{{ sport_id }}" style="display: none;"><table>
     <thead>
         <tr>
             <th scope="col">Rank</th>
@@ -159,6 +162,22 @@ function toggleDetails(callsign) {
     </tbody>
 </table></div>
 {% endfor %}
+
+<script>
+function toggleSport(sportId) {
+    const table = document.getElementById(sportId);
+    const icon = document.getElementById('icon-' + sportId);
+    if (!table || !icon) return;
+
+    if (table.style.display === 'none') {
+        table.style.display = 'block';
+        icon.textContent = '▼';
+    } else {
+        table.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
 {% endif %}
 
 <h3>About Medals</h3>
