@@ -27,6 +27,7 @@
     <table>
         <thead>
             <tr>
+                <th style="width: 30px;"></th>
                 <th>Rank</th>
                 <th>Team</th>
                 <th>Captain</th>
@@ -37,7 +38,12 @@
         </thead>
         <tbody>
             {% for team in teams %}
-            <tr>
+            <tr class="team-row" data-team-id="{{ team.id }}">
+                <td style="cursor: pointer; text-align: center;" onclick="toggleTeamDetails({{ team.id }})">
+                    {% if team_sport_medals.get(team.id) %}
+                    <span class="expand-icon" id="icon-team-{{ team.id }}">▶</span>
+                    {% endif %}
+                </td>
                 <td>{{ loop.index + (pagination.page - 1) * pagination.per_page }}</td>
                 <td><a href="/team/{{ team.id }}">{{ team.name }}</a></td>
                 <td><a href="/competitor/{{ team.captain_callsign }}">{{ team.captain_first_name | competitor_display(team.captain_callsign) }}</a></td>
@@ -50,10 +56,82 @@
                     {% if team.gold == 0 and team.silver == 0 and team.bronze == 0 %}-{% endif %}
                 </td>
             </tr>
+            {% if team_sport_medals.get(team.id) %}
+            <tr class="details-row" id="details-team-{{ team.id }}" style="display: none;">
+                <td colspan="7" style="padding: 0; background: var(--bg-primary);">
+                    <div style="padding: 10px 15px 10px 40px;">
+                        <table style="margin: 0; font-size: 0.9em; width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="padding: 4px 8px;">Sport</th>
+                                    <th style="padding: 4px 8px;">🥇</th>
+                                    <th style="padding: 4px 8px;">🥈</th>
+                                    <th style="padding: 4px 8px;">🥉</th>
+                                    <th style="padding: 4px 8px;">Points</th>
+                                    <th style="padding: 4px 8px;">Team Medal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sport in team_sport_medals[team.id] %}
+                                <tr>
+                                    <td style="padding: 4px 8px;"><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
+                                    <td style="padding: 4px 8px;">{{ sport.gold_count or '-' }}</td>
+                                    <td style="padding: 4px 8px;">{{ sport.silver_count or '-' }}</td>
+                                    <td style="padding: 4px 8px;">{{ sport.bronze_count or '-' }}</td>
+                                    <td style="padding: 4px 8px;"><strong>{{ sport.total_points | round(1) }}</strong></td>
+                                    <td style="padding: 4px 8px;">
+                                        {% if sport.medal == 'gold' %}🥇
+                                        {% elif sport.medal == 'silver' %}🥈
+                                        {% elif sport.medal == 'bronze' %}🥉
+                                        {% else %}-{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+<script>
+function toggleTeamDetails(teamId) {
+    const detailsRow = document.getElementById('details-team-' + teamId);
+    const icon = document.getElementById('icon-team-' + teamId);
+    if (!detailsRow || !icon) return;
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
+
+<style>
+.expand-icon {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+}
+.team-row:hover .expand-icon {
+    color: var(--text-primary);
+}
+.details-row th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.details-row td {
+    border-bottom: 1px solid var(--border-color);
+}
+</style>
 
 {% if pagination.total_pages > 1 %}
 <div class="pagination" style="margin-top: 20px;">

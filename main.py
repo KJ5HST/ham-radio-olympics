@@ -4642,9 +4642,32 @@ async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, u
         if user:
             user_team = get_user_team(conn, user.callsign)
 
+        # Get per-sport medal breakdown for each team (for collapsible details)
+        team_ids = [t["id"] for t in teams]
+        team_sport_medals = {}
+        if team_ids:
+            placeholders = ",".join("?" * len(team_ids))
+            cursor = conn.execute(f"""
+                SELECT tm.team_id, s.id as sport_id, s.name as sport_name,
+                       tm.total_points, tm.gold_count, tm.silver_count, tm.bronze_count, tm.medal
+                FROM team_medals tm
+                JOIN sports s ON tm.sport_id = s.id
+                WHERE tm.team_id IN ({placeholders})
+                  AND tm.match_id IS NULL
+                  AND tm.calculation_method = 'normalized'
+                  AND (tm.gold_count > 0 OR tm.silver_count > 0 OR tm.bronze_count > 0)
+                ORDER BY tm.total_points DESC
+            """, team_ids)
+            for row in cursor.fetchall():
+                team_id = row["team_id"]
+                if team_id not in team_sport_medals:
+                    team_sport_medals[team_id] = []
+                team_sport_medals[team_id].append(dict(row))
+
         return templates.TemplateResponse("teams.html", {
             "request": request,
             "teams": teams,
+            "team_sport_medals": team_sport_medals,
             "user_team": user_team,
             "user": user,
             "csrf_token": request.state.csrf_token,
