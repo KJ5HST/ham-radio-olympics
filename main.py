@@ -405,8 +405,8 @@ def pota_tooltip(value: str) -> str:
         return value
     # Escape the entire value first to prevent XSS
     escaped_value = html.escape(str(value))
-    # Pattern matches POTA park references
-    pattern = r'\b([A-Z]{1,3}-\d{4,})\b'
+    # Pattern matches POTA park references (3+ digits to handle non-zero-padded IDs)
+    pattern = r'\b([A-Z]{1,3}-\d{3,})\b'
 
     def replace_pota(match):
         ref = match.group(1)

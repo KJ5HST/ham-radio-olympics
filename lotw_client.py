@@ -5,7 +5,7 @@ LoTW (Logbook of the World) client for fetching QSO data.
 import httpx
 from typing import List, Optional
 from datetime import datetime
-from qrz_client import QSOData, parse_adif, _extract_pota_from_comment
+from qrz_client import QSOData, parse_adif, _extract_pota_from_comment, _normalize_park_id
 
 
 LOTW_REPORT_URL = "https://lotw.arrl.org/lotwuser/lotwreport.adi"
@@ -205,16 +205,17 @@ def parse_lotw_qso(raw_qso: dict) -> Optional[QSOData]:
     # Check multiple possible field names for POTA/SIG info
     # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF
     # Also check COMMENT field as fallback (some users put park refs there)
+    # Normalize all park IDs to standard format (zero-padded to 4 digits)
     my_sig_info = (
-        raw_qso.get("MY_SIG_INFO") or
-        raw_qso.get("MY_POTA_REF") or
-        raw_qso.get("MY_WWFF_REF") or
+        _normalize_park_id(raw_qso.get("MY_SIG_INFO")) or
+        _normalize_park_id(raw_qso.get("MY_POTA_REF")) or
+        _normalize_park_id(raw_qso.get("MY_WWFF_REF")) or
         _extract_pota_from_comment(raw_qso.get("MY_COMMENT", ""))
     )
     dx_sig_info = (
-        raw_qso.get("SIG_INFO") or
-        raw_qso.get("POTA_REF") or
-        raw_qso.get("WWFF_REF") or
+        _normalize_park_id(raw_qso.get("SIG_INFO")) or
+        _normalize_park_id(raw_qso.get("POTA_REF")) or
+        _normalize_park_id(raw_qso.get("WWFF_REF")) or
         _extract_pota_from_comment(raw_qso.get("COMMENT", ""))
     )
 

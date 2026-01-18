@@ -3,9 +3,10 @@ Sync logic for fetching QSOs from QRZ and updating scores.
 """
 
 import binascii
+import httpx
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, Set, List
 
 from cryptography.fernet import InvalidToken
 from database import get_db, get_db_exclusive
@@ -17,6 +18,97 @@ from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
 from scoring import recompute_match_medals, compute_team_standings
 from dxcc import get_continent_from_callsign
+
+
+async def validate_park_ids(park_ids: Set[str]) -> Set[str]:
+    """
+    Validate a set of POTA park IDs against the POTA API.
+
+    Returns the set of valid park IDs. Invalid IDs are filtered out.
+    Results are cached for 30 days.
+    """
+    if not park_ids:
+        return set()
+
+    valid_ids = set()
+    ids_to_check = set()
+
+    # Check cache first
+    with get_db() as conn:
+        for park_id in park_ids:
+            cursor = conn.execute(
+                "SELECT reference, cached_at FROM pota_parks WHERE reference = ?",
+                (park_id,)
+            )
+            cached = cursor.fetchone()
+            if cached:
+                cached_at = datetime.fromisoformat(cached["cached_at"])
+                if datetime.utcnow() - cached_at < timedelta(days=30):
+                    valid_ids.add(park_id)
+                    continue
+            ids_to_check.add(park_id)
+
+    # Validate uncached IDs against POTA API
+    for park_id in ids_to_check:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.pota.app/park/{park_id}",
+                    timeout=10.0
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    if data and isinstance(data, dict) and data.get("name"):
+                        # Valid park - cache it
+                        valid_ids.add(park_id)
+                        name = data.get("name", "Unknown")
+                        location = data.get("locationDesc", "")
+                        grid = data.get("grid", "")
+                        with get_db() as conn:
+                            conn.execute("""
+                                INSERT OR REPLACE INTO pota_parks (reference, name, location, grid, cached_at)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (park_id, name, location, grid, datetime.utcnow().isoformat()))
+                        logger.info(f"Validated POTA park: {park_id} ({name})")
+                    else:
+                        logger.warning(f"Invalid POTA park ID: {park_id}")
+                else:
+                    logger.warning(f"Invalid POTA park ID: {park_id} (HTTP {response.status_code})")
+        except httpx.RequestError as e:
+            # On network error, tentatively accept the ID
+            logger.warning(f"Could not validate park {park_id}: {e}")
+            valid_ids.add(park_id)
+
+    return valid_ids
+
+
+def _collect_park_ids(qsos: List[QSOData]) -> Set[str]:
+    """Collect all unique park IDs from a list of QSOs."""
+    park_ids = set()
+    for qso in qsos:
+        if qso.my_sig_info:
+            park_ids.add(qso.my_sig_info)
+        if qso.dx_sig_info:
+            park_ids.add(qso.dx_sig_info)
+    return park_ids
+
+
+def _filter_invalid_park_ids(qsos: List[QSOData], valid_ids: Set[str]) -> List[QSOData]:
+    """
+    Return a new list of QSOs with invalid park IDs cleared.
+
+    Since QSOData is a dataclass, we need to create new instances.
+    """
+    from dataclasses import replace
+    filtered = []
+    for qso in qsos:
+        my_sig = qso.my_sig_info if qso.my_sig_info in valid_ids else None
+        dx_sig = qso.dx_sig_info if qso.dx_sig_info in valid_ids else None
+        if my_sig != qso.my_sig_info or dx_sig != qso.dx_sig_info:
+            # Need to create a new QSOData with filtered values
+            qso = replace(qso, my_sig_info=my_sig, dx_sig_info=dx_sig)
+        filtered.append(qso)
+    return filtered
 
 
 async def populate_competitor_name(callsign: str) -> bool:
@@ -119,6 +211,12 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     if not qsos:
         return {"message": "No QSOs found in QRZ logbook", "new_qsos": 0, "updated_qsos": 0}
 
+    # Validate park IDs against POTA API
+    park_ids = _collect_park_ids(qsos)
+    if park_ids:
+        valid_park_ids = await validate_park_ids(park_ids)
+        qsos = _filter_invalid_park_ids(qsos, valid_park_ids)
+
     # Process and store QSOs
     new_count = 0
     updated_count = 0
@@ -200,31 +298,36 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     except Exception as e:
         logger.warning(f"Failed to populate name for {callsign}: {e}")
 
-    # Use exclusive transaction to prevent race conditions in upsert
-    with get_db_exclusive() as conn:
-        # Verify competitor exists
+    # Verify competitor exists
+    with get_db() as conn:
         cursor = conn.execute(
-            "SELECT * FROM competitors WHERE callsign = ?",
+            "SELECT 1 FROM competitors WHERE callsign = ?",
             (callsign.upper(),)
         )
-        competitor = cursor.fetchone()
-
-        if not competitor:
+        if not cursor.fetchone():
             return {"error": f"Competitor {callsign} not found"}
 
-        # Fetch QSOs from LoTW
-        try:
-            qsos = await fetch_lotw_qsos(lotw_username, lotw_password, confirmed_only=False)
-        except LoTWError as e:
-            return {"error": str(e)}
+    # Fetch QSOs from LoTW
+    try:
+        qsos = await fetch_lotw_qsos(lotw_username, lotw_password, confirmed_only=False)
+    except LoTWError as e:
+        return {"error": str(e)}
 
-        if not qsos:
-            return {"message": "No QSOs found in LoTW", "new_qsos": 0, "updated_qsos": 0}
+    if not qsos:
+        return {"message": "No QSOs found in LoTW", "new_qsos": 0, "updated_qsos": 0}
 
-        # Process and store QSOs
-        new_count = 0
-        updated_count = 0
+    # Validate park IDs against POTA API
+    park_ids = _collect_park_ids(qsos)
+    if park_ids:
+        valid_park_ids = await validate_park_ids(park_ids)
+        qsos = _filter_invalid_park_ids(qsos, valid_park_ids)
 
+    # Process and store QSOs
+    new_count = 0
+    updated_count = 0
+
+    # Use exclusive transaction to prevent race conditions in upsert
+    with get_db_exclusive() as conn:
         for qso in qsos:
             result = _upsert_qso(conn, callsign.upper(), qso)
             if result == "new":

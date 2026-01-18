@@ -32,27 +32,60 @@ class QSOData:
     qrz_logid: Optional[str]
 
 
-# POTA park reference pattern: 1-2 letter country code, dash, 4-5 digits
-# Examples: US-3310, K-0001, VE-1234, G-0001, DL-0001
-POTA_PATTERN = re.compile(r'\b([A-Z]{1,2}-\d{4,5})\b', re.IGNORECASE)
+# POTA park reference pattern: 1-3 letter country code, dash, 3+ digits
+# Examples: US-0303, K-0001, VE-1234, G-0001, DL-0001
+POTA_PATTERN = re.compile(r'\b([A-Z]{1,3}-\d{3,})\b', re.IGNORECASE)
+
+
+def _normalize_park_id(park_id: Optional[str]) -> Optional[str]:
+    """
+    Normalize a POTA park ID to standard format (zero-padded to 4 digits).
+
+    Args:
+        park_id: Raw park ID (e.g., "US-303")
+
+    Returns:
+        Normalized park ID (e.g., "US-0303") or None if invalid
+    """
+    if not park_id:
+        return None
+
+    park_id = park_id.upper().strip()
+    match = POTA_PATTERN.match(park_id)
+
+    if not match:
+        return None
+
+    # Extract prefix and number
+    parts = park_id.split('-', 1)
+    if len(parts) != 2:
+        return None
+
+    prefix = parts[0]
+    number = parts[1]
+
+    # Zero-pad to at least 4 digits
+    number = number.zfill(4)
+
+    return f"{prefix}-{number}"
 
 
 def _extract_pota_from_comment(comment: str) -> Optional[str]:
     """
-    Extract POTA park reference from a comment field.
+    Extract and normalize POTA park reference from a comment field.
 
     Args:
         comment: The comment text to search
 
     Returns:
-        Park reference (e.g., "US-3310") if found, None otherwise
+        Normalized park reference (e.g., "US-0303") if found, None otherwise
     """
     if not comment:
         return None
 
     match = POTA_PATTERN.search(comment)
     if match:
-        return match.group(1).upper()
+        return _normalize_park_id(match.group(1))
     return None
 
 
@@ -203,16 +236,17 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     # Check multiple possible field names for POTA/SIG info
     # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF
     # Also check COMMENT field as fallback (some users put park refs there)
+    # Normalize all park IDs to standard format (zero-padded to 4 digits)
     my_sig_info = (
-        raw_qso.get("MY_SIG_INFO") or
-        raw_qso.get("MY_POTA_REF") or
-        raw_qso.get("MY_WWFF_REF") or
+        _normalize_park_id(raw_qso.get("MY_SIG_INFO")) or
+        _normalize_park_id(raw_qso.get("MY_POTA_REF")) or
+        _normalize_park_id(raw_qso.get("MY_WWFF_REF")) or
         _extract_pota_from_comment(raw_qso.get("MY_COMMENT", ""))
     )
     dx_sig_info = (
-        raw_qso.get("SIG_INFO") or
-        raw_qso.get("POTA_REF") or
-        raw_qso.get("WWFF_REF") or
+        _normalize_park_id(raw_qso.get("SIG_INFO")) or
+        _normalize_park_id(raw_qso.get("POTA_REF")) or
+        _normalize_park_id(raw_qso.get("WWFF_REF")) or
         _extract_pota_from_comment(raw_qso.get("COMMENT", ""))
     )
 
