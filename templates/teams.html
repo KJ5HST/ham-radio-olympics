@@ -57,28 +57,15 @@
                 </td>
             </tr>
             {% if team_sport_medals.get(team.id) %}
-            <tr class="details-row" id="details-team-{{ team.id }}" style="display: none;">
-                <td class="col-expand"></td>
-                <td class="col-rank"></td>
-                <td class="col-team"><strong style="color: var(--text-secondary); font-size: 0.85em;">Sport</strong></td>
-                <td class="col-captain"></td>
-                <td class="col-members"></td>
-                <td class="col-points"><strong style="color: var(--text-secondary); font-size: 0.85em;">Pts</strong></td>
-                <td class="col-medals"><strong style="color: var(--text-secondary); font-size: 0.85em;">Medals</strong></td>
-            </tr>
             {% for sport in team_sport_medals[team.id] %}
-            <tr class="details-row" id="details-team-{{ team.id }}-{{ loop.index }}" style="display: none;">
+            <tr class="details-row" id="details-team-{{ team.id }}-{{ loop.index }}" style="display: none; background: var(--bg-primary);">
                 <td class="col-expand"></td>
                 <td class="col-rank"></td>
-                <td class="col-team" style="padding-left: 20px;"><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
-                <td class="col-captain">
-                    {% if sport.medal == 'gold' %}🥇
-                    {% elif sport.medal == 'silver' %}🥈
-                    {% elif sport.medal == 'bronze' %}🥉{% endif %}
-                </td>
+                <td class="col-team" style="padding-left: 20px; font-size: 0.9em;"><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
+                <td class="col-captain" style="font-size: 0.9em;">{% if sport.medal == 'gold' %}🥇 Team{% elif sport.medal == 'silver' %}🥈 Team{% elif sport.medal == 'bronze' %}🥉 Team{% endif %}</td>
                 <td class="col-members"></td>
-                <td class="col-points">{{ sport.total_points | round(1) }}</td>
-                <td class="col-medals">
+                <td class="col-points" style="font-size: 0.9em;">{{ sport.total_points | round(1) }}</td>
+                <td class="col-medals" style="font-size: 0.9em;">
                     {% if sport.gold_count %}<span class="medal-count">🥇{{ sport.gold_count }}</span> {% endif %}
                     {% if sport.silver_count %}<span class="medal-count">🥈{{ sport.silver_count }}</span> {% endif %}
                     {% if sport.bronze_count %}<span class="medal-count">🥉{{ sport.bronze_count }}</span> {% endif %}
