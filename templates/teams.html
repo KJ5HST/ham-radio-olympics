@@ -24,19 +24,10 @@
 
 {% if teams %}
 <div class="card">
-    <table class="teams-table">
-        <colgroup>
-            <col style="width: 30px;">
-            <col style="width: 50px;">
-            <col>
-            <col>
-            <col style="width: 70px;">
-            <col style="width: 60px;">
-            <col style="width: 140px;">
-        </colgroup>
+    <table>
         <thead>
             <tr>
-                <th></th>
+                <th style="width: 30px;"></th>
                 <th>Rank</th>
                 <th>Team</th>
                 <th>Captain</th>
@@ -47,7 +38,7 @@
         </thead>
         <tbody>
             {% for team in teams %}
-            <tr class="team-row">
+            <tr>
                 <td style="cursor: pointer; text-align: center;" onclick="toggleTeamDetails({{ team.id }})">
                     {% if team_sport_medals.get(team.id) %}
                     <span class="expand-icon" id="icon-team-{{ team.id }}">▶</span>
@@ -66,50 +57,61 @@
                 </td>
             </tr>
             {% if team_sport_medals.get(team.id) %}
-            {% for sport in team_sport_medals[team.id] %}
-            <tr class="details-row" id="details-team-{{ team.id }}-{{ loop.index }}" style="display: none;">
-                <td></td>
-                <td></td>
-                <td colspan="2" style="padding-left: 20px; font-size: 0.9em;">
-                    <a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a>
-                    {% if sport.medal == 'gold' %} <span style="color: var(--text-secondary);">🥇 Team</span>
-                    {% elif sport.medal == 'silver' %} <span style="color: var(--text-secondary);">🥈 Team</span>
-                    {% elif sport.medal == 'bronze' %} <span style="color: var(--text-secondary);">🥉 Team</span>{% endif %}
-                </td>
-                <td></td>
-                <td style="font-size: 0.9em;">{{ sport.total_points | round(1) }}</td>
-                <td style="font-size: 0.9em;">
-                    {% if sport.gold_count %}<span class="medal-count">🥇{{ sport.gold_count }}</span> {% endif %}
-                    {% if sport.silver_count %}<span class="medal-count">🥈{{ sport.silver_count }}</span> {% endif %}
-                    {% if sport.bronze_count %}<span class="medal-count">🥉{{ sport.bronze_count }}</span> {% endif %}
+            <tr class="details-row" id="details-team-{{ team.id }}" style="display: none;">
+                <td colspan="7" style="padding: 0; background: var(--bg-secondary);">
+                    <table class="nested-table">
+                        <colgroup>
+                            <col style="width: 50%;">
+                            <col style="width: 12%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 8%;">
+                            <col style="width: 14%;">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>Sport</th>
+                                <th>Points</th>
+                                <th>🥇</th>
+                                <th>🥈</th>
+                                <th>🥉</th>
+                                <th>Team Medal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sport in team_sport_medals[team.id] %}
+                            <tr>
+                                <td><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
+                                <td>{{ sport.total_points | round(1) }}</td>
+                                <td>{{ sport.gold_count or '-' }}</td>
+                                <td>{{ sport.silver_count or '-' }}</td>
+                                <td>{{ sport.bronze_count or '-' }}</td>
+                                <td>{% if sport.medal == 'gold' %}🥇{% elif sport.medal == 'silver' %}🥈{% elif sport.medal == 'bronze' %}🥉{% else %}-{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </td>
             </tr>
-            {% endfor %}
             {% endif %}
             {% endfor %}
         </tbody>
     </table>
 </div>
 
-<style>
-.teams-table { table-layout: fixed; width: 100%; }
-.details-row { background: var(--bg-primary); }
-</style>
-
 <script>
 function toggleTeamDetails(teamId) {
+    const detailsRow = document.getElementById('details-team-' + teamId);
     const icon = document.getElementById('icon-team-' + teamId);
-    if (!icon) return;
+    if (!detailsRow || !icon) return;
 
-    // Find all detail rows for this team
-    const detailRows = document.querySelectorAll('tr[id^="details-team-' + teamId + '"]');
-    if (detailRows.length === 0) return;
-
-    const isHidden = detailRows[0].style.display === 'none';
-    detailRows.forEach(row => {
-        row.style.display = isHidden ? 'table-row' : 'none';
-    });
-    icon.textContent = isHidden ? '▼' : '▶';
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
 }
 </script>
 
@@ -118,16 +120,22 @@ function toggleTeamDetails(teamId) {
     font-size: 0.8em;
     color: var(--text-secondary);
 }
-.team-row:hover .expand-icon {
-    color: var(--text-primary);
+.nested-table {
+    width: calc(100% - 50px);
+    margin: 10px 20px 10px 50px;
+    font-size: 0.9em;
+    border-collapse: collapse;
+    table-layout: fixed;
 }
-.details-row th {
+.nested-table th {
+    text-align: left;
+    padding: 4px 8px;
     font-weight: 600;
     color: var(--text-secondary);
-    text-align: left;
     border-bottom: 1px solid var(--border-color);
 }
-.details-row td {
+.nested-table td {
+    padding: 4px 8px;
     border-bottom: 1px solid var(--border-color);
 }
 </style>
