@@ -16,6 +16,7 @@ from qrz_client import fetch_qsos, QSOData, QRZAPIError
 from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
 from scoring import recompute_match_medals, compute_team_standings
+from dxcc import get_continent_from_callsign
 
 
 async def populate_competitor_name(callsign: str) -> bool:
@@ -562,6 +563,13 @@ async def sync_all_competitors() -> dict:
         result = await sync_competitor(callsign)
         results.append(result)
 
+    # Populate missing dx_dxcc values from callsign lookups
+    try:
+        dxcc_result = await populate_missing_dxcc()
+        logger.info(f"Populated missing dx_dxcc: {dxcc_result}")
+    except Exception as e:
+        logger.warning(f"Failed to populate missing dx_dxcc: {e}")
+
     # Recompute medals for all active matches
     recompute_all_active_matches()
 
@@ -629,3 +637,50 @@ def recompute_sport_matches(sport_id: int):
     # Regenerate cached PDF once after all medals/records are updated
     from pdf_export import regenerate_active_olympiad_pdf
     regenerate_active_olympiad_pdf()
+
+
+async def populate_missing_dxcc() -> dict:
+    """
+    Populate missing dx_dxcc values by looking up callsigns.
+
+    Uses the callsign lookup service (QRZ/HamQTH) to get DXCC codes
+    for QSOs that are missing dx_dxcc.
+
+    Returns:
+        dict with update statistics
+    """
+    from callsign_lookup import lookup_callsign
+
+    with get_db() as conn:
+        # Get all unique dx_callsigns that are missing dx_dxcc
+        cursor = conn.execute("""
+            SELECT DISTINCT dx_callsign FROM qsos
+            WHERE dx_dxcc IS NULL AND dx_callsign IS NOT NULL
+            LIMIT 100
+        """)
+        missing_callsigns = [row["dx_callsign"] for row in cursor.fetchall()]
+
+    if not missing_callsigns:
+        return {"updated": 0, "lookups": 0}
+
+    lookups = 0
+    updated = 0
+
+    for callsign in missing_callsigns:
+        try:
+            lookups += 1
+            info = await lookup_callsign(callsign)
+
+            if info and info.dxcc:
+                with get_db() as conn:
+                    # Update all QSOs with this dx_callsign that are missing dx_dxcc
+                    cursor = conn.execute(
+                        "UPDATE qsos SET dx_dxcc = ? WHERE dx_callsign = ? AND dx_dxcc IS NULL",
+                        (info.dxcc, callsign)
+                    )
+                    updated += cursor.rowcount
+                    logger.info(f"Updated dx_dxcc for {callsign}: DXCC={info.dxcc} ({cursor.rowcount} QSOs)")
+        except Exception as e:
+            logger.warning(f"Failed to look up {callsign}: {e}")
+
+    return {"updated": updated, "lookups": lookups, "callsigns": len(missing_callsigns)}

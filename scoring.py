@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
 from database import get_db, get_db_exclusive
-from dxcc import get_continent
+from dxcc import get_continent, get_continent_from_callsign
 from grid_distance import grid_distance
 
 
@@ -128,12 +128,24 @@ def matches_target(
         if mode == "work":
             dxcc = qso.get("dx_dxcc")
             if dxcc:
+                # Trust DXCC code if available
                 continent = get_continent(dxcc)
+                return continent == target_value
+            # Fallback: derive continent from callsign prefix only if no DXCC
+            dx_call = qso.get("dx_callsign")
+            if dx_call:
+                continent = get_continent_from_callsign(dx_call)
                 return continent == target_value
         else:  # activate
             dxcc = qso.get("my_dxcc")
             if dxcc:
+                # Trust DXCC code if available
                 continent = get_continent(dxcc)
+                return continent == target_value
+            # Fallback: derive continent from competitor's callsign only if no DXCC
+            my_call = qso.get("competitor_callsign")
+            if my_call:
+                continent = get_continent_from_callsign(my_call)
                 return continent == target_value
         return False
 
@@ -192,8 +204,12 @@ def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
 
     if mode == "work":
         # Work mode requires DX station info
+        # dx_dxcc is preferred, but we can fall back to deriving from callsign
         if not qso.get("dx_dxcc"):
-            return False, "Missing DXCC for work mode"
+            # Check if we can derive continent from callsign
+            dx_call = qso.get("dx_callsign")
+            if not dx_call or not get_continent_from_callsign(dx_call):
+                return False, "Missing DXCC for work mode"
         if not qso.get("dx_grid"):
             return False, "Missing GRIDSQUARE for work mode"
     else:  # activate

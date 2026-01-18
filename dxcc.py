@@ -4,6 +4,7 @@ DXCC entity to continent mapping.
 
 import json
 import os
+import re
 from typing import Optional
 
 # Load DXCC data from JSON file
@@ -361,3 +362,202 @@ def _get_embedded_data() -> dict:
             "519": "NA", "520": "SA", "521": "AF", "522": "EU"
         }
     }
+
+
+# Callsign prefix to continent mapping
+# This is used as a fallback when dx_dxcc is not available
+# Covers major ITU call sign prefixes
+_PREFIX_TO_CONTINENT = {
+    # North America (NA) - USA
+    "W": "NA", "K": "NA", "N": "NA", "AA": "NA", "AB": "NA", "AC": "NA", "AD": "NA",
+    "AE": "NA", "AF": "NA", "AG": "NA", "AH": "NA", "AI": "NA", "AJ": "NA", "AK": "NA",
+    "AL": "NA", "KA": "NA", "KB": "NA", "KC": "NA", "KD": "NA", "KE": "NA", "KF": "NA",
+    "KG": "NA", "KH": "NA", "KI": "NA", "KJ": "NA", "KK": "NA", "KL": "NA", "KM": "NA",
+    "KN": "NA", "KO": "NA", "KP": "NA", "KQ": "NA", "KR": "NA", "KS": "NA", "KT": "NA",
+    "KU": "NA", "KV": "NA", "KW": "NA", "KX": "NA", "KY": "NA", "KZ": "NA",
+    "NA": "NA", "NB": "NA", "NC": "NA", "ND": "NA", "NE": "NA", "NF": "NA", "NG": "NA",
+    "NH": "NA", "NI": "NA", "NJ": "NA", "NK": "NA", "NL": "NA", "NM": "NA", "NN": "NA",
+    "NO": "NA", "NP": "NA", "NQ": "NA", "NR": "NA", "NS": "NA", "NT": "NA", "NU": "NA",
+    "NV": "NA", "NW": "NA", "NX": "NA", "NY": "NA", "NZ": "NA",
+    "WA": "NA", "WB": "NA", "WC": "NA", "WD": "NA", "WE": "NA", "WF": "NA", "WG": "NA",
+    "WH": "NA", "WI": "NA", "WJ": "NA", "WK": "NA", "WL": "NA", "WM": "NA", "WN": "NA",
+    "WO": "NA", "WP": "NA", "WQ": "NA", "WR": "NA", "WS": "NA", "WT": "NA", "WU": "NA",
+    "WV": "NA", "WW": "NA", "WX": "NA", "WY": "NA", "WZ": "NA",
+    # Canada
+    "VA": "NA", "VB": "NA", "VC": "NA", "VD": "NA", "VE": "NA", "VG": "NA", "VO": "NA",
+    "VX": "NA", "VY": "NA", "CY": "NA", "CF": "NA", "CG": "NA", "CH": "NA", "CI": "NA",
+    "CJ": "NA", "CK": "NA", "XJ": "NA", "XK": "NA", "XL": "NA", "XM": "NA", "XN": "NA",
+    "XO": "NA",
+    # Mexico
+    "XA": "NA", "XB": "NA", "XC": "NA", "XD": "NA", "XE": "NA", "XF": "NA",
+    "4A": "NA", "4B": "NA", "4C": "NA", "6D": "NA", "6E": "NA", "6F": "NA", "6G": "NA",
+    "6H": "NA", "6I": "NA", "6J": "NA",
+    # Caribbean/Central America
+    "TI": "NA", "TE": "NA", "TG": "NA", "HR": "NA", "HP": "NA", "HQ": "NA",
+    "YN": "NA", "YS": "NA", "V3": "NA", "8P": "NA", "J3": "NA", "J6": "NA",
+    "J7": "NA", "J8": "NA", "VP2": "NA", "VP5": "NA", "VP9": "NA", "ZF": "NA",
+    "6Y": "NA", "HI": "NA", "HH": "NA", "CO": "NA", "CM": "NA", "PJ": "NA",
+
+    # South America (SA)
+    "LU": "SA", "LO": "SA", "LP": "SA", "LQ": "SA", "LR": "SA", "LS": "SA", "LT": "SA",
+    "LV": "SA", "LW": "SA", "AY": "SA", "AZ": "SA", "L2": "SA", "L3": "SA", "L4": "SA",
+    "L5": "SA", "L6": "SA", "L7": "SA", "L8": "SA", "L9": "SA",
+    "PP": "SA", "PQ": "SA", "PR": "SA", "PS": "SA", "PT": "SA", "PU": "SA", "PV": "SA",
+    "PW": "SA", "PX": "SA", "PY": "SA", "ZV": "SA", "ZW": "SA", "ZX": "SA", "ZY": "SA",
+    "ZZ": "SA",
+    "CE": "SA", "CA": "SA", "CB": "SA", "CC": "SA", "CD": "SA", "XQ": "SA", "XR": "SA",
+    "3G": "SA",
+    "CP": "SA", "HC": "SA", "HD": "SA", "OA": "SA", "OB": "SA", "OC": "SA",
+    "CX": "SA", "CV": "SA", "YV": "SA", "YW": "SA", "YX": "SA", "YY": "SA",
+    "ZP": "SA", "9Y": "SA", "9Z": "SA", "P4": "SA", "HK": "SA", "HJ": "SA",
+    "8R": "SA",
+
+    # Europe (EU)
+    "G": "EU", "M": "EU", "2E": "EU", "2D": "EU", "2I": "EU", "2M": "EU", "2W": "EU",
+    "GW": "EU", "GD": "EU", "GI": "EU", "GM": "EU", "GU": "EU", "GJ": "EU",
+    "MW": "EU", "MD": "EU", "MI": "EU", "MM": "EU", "MU": "EU", "MJ": "EU",
+    "DL": "EU", "DA": "EU", "DB": "EU", "DC": "EU", "DD": "EU", "DE": "EU", "DF": "EU",
+    "DG": "EU", "DH": "EU", "DI": "EU", "DJ": "EU", "DK": "EU", "DM": "EU", "DN": "EU",
+    "DO": "EU", "DP": "EU", "DQ": "EU", "DR": "EU",
+    "F": "EU", "TM": "EU", "TO": "EU", "TP": "EU", "TQ": "EU", "TV": "EU",
+    "I": "EU", "IA": "EU", "IB": "EU", "IC": "EU", "ID": "EU", "IE": "EU", "IF": "EU",
+    "IG": "EU", "IH": "EU", "II": "EU", "IJ": "EU", "IK": "EU", "IL": "EU", "IM": "EU",
+    "IN": "EU", "IO": "EU", "IP": "EU", "IQ": "EU", "IR": "EU", "IS": "EU", "IT": "EU",
+    "IU": "EU", "IV": "EU", "IW": "EU", "IX": "EU", "IY": "EU", "IZ": "EU",
+    "EA": "EU", "EB": "EU", "EC": "EU", "ED": "EU", "EE": "EU", "EF": "EU", "EG": "EU",
+    "EH": "EU", "AM": "EU", "AN": "EU", "AO": "EU",
+    "PA": "EU", "PB": "EU", "PC": "EU", "PD": "EU", "PE": "EU", "PF": "EU", "PG": "EU",
+    "PH": "EU", "PI": "EU",
+    "ON": "EU", "OO": "EU", "OP": "EU", "OQ": "EU", "OR": "EU", "OS": "EU", "OT": "EU",
+    "SM": "EU", "SA": "EU", "SB": "EU", "SC": "EU", "SD": "EU", "SE": "EU", "SF": "EU",
+    "SG": "EU", "SH": "EU", "SI": "EU", "SJ": "EU", "SK": "EU", "SL": "EU", "7S": "EU",
+    "8S": "EU",
+    "LA": "EU", "LB": "EU", "LC": "EU", "LD": "EU", "LE": "EU", "LF": "EU", "LG": "EU",
+    "LH": "EU", "LI": "EU", "LJ": "EU", "LK": "EU", "LL": "EU", "LM": "EU", "LN": "EU",
+    "OZ": "EU", "OU": "EU", "OV": "EU", "OW": "EU", "OX": "EU", "XP": "EU", "5P": "EU",
+    "5Q": "EU",
+    "OH": "EU", "OG": "EU", "OI": "EU", "OF": "EU",
+    "SP": "EU", "SQ": "EU", "SR": "EU", "SN": "EU", "SO": "EU", "3Z": "EU", "HF": "EU",
+    "OE": "EU", "HB": "EU", "HB0": "EU",
+    "OK": "EU", "OL": "EU", "OM": "EU",
+    "HA": "EU", "HG": "EU",
+    "LZ": "EU", "YO": "EU", "YP": "EU", "YQ": "EU", "YR": "EU",
+    "YU": "EU", "YT": "EU", "YZ": "EU", "4N": "EU", "4O": "EU",
+    "9A": "EU", "S5": "EU", "E7": "EU", "Z3": "EU",
+    "SV": "EU", "SW": "EU", "SX": "EU", "SY": "EU", "SZ": "EU", "J4": "EU",
+    "CT": "EU", "CS": "EU", "CQ": "EU", "CR": "EU",
+    "EI": "EU", "EJ": "EU",
+    "TF": "EU", "OY": "EU",
+    "LX": "EU", "T7": "EU", "3A": "EU", "C3": "EU", "HV": "EU",
+    "9H": "EU", "TA": "EU", "TB": "EU", "TC": "EU",
+    "UA": "EU", "UB": "EU", "UC": "EU", "UD": "EU", "UE": "EU", "UF": "EU", "UG": "EU",
+    "UH": "EU", "UI": "EU", "RA": "EU", "R1": "EU", "R2": "EU", "R3": "EU", "R4": "EU",
+    "R5": "EU", "R6": "EU", "R7": "EU", "R8": "EU", "R9": "EU",
+    "UR": "EU", "US": "EU", "UT": "EU", "UU": "EU", "UV": "EU", "UW": "EU", "UX": "EU",
+    "UY": "EU", "UZ": "EU", "EM": "EU", "EN": "EU", "EO": "EU",
+    "LY": "EU", "YL": "EU", "ES": "EU",
+    "ER": "EU", "EU": "EU", "EV": "EU", "EW": "EU",
+
+    # Asia (AS)
+    "JA": "AS", "JB": "AS", "JC": "AS", "JD": "AS", "JE": "AS", "JF": "AS", "JG": "AS",
+    "JH": "AS", "JI": "AS", "JJ": "AS", "JK": "AS", "JL": "AS", "JM": "AS", "JN": "AS",
+    "JO": "AS", "JP": "AS", "JQ": "AS", "JR": "AS", "JS": "AS", "7J": "AS", "7K": "AS",
+    "7L": "AS", "7M": "AS", "7N": "AS", "8J": "AS", "8K": "AS", "8L": "AS", "8M": "AS",
+    "8N": "AS",
+    "HL": "AS", "HM": "AS", "6K": "AS", "6L": "AS", "6M": "AS", "6N": "AS", "DS": "AS",
+    "DT": "AS",
+    "BA": "AS", "BB": "AS", "BC": "AS", "BD": "AS", "BE": "AS", "BF": "AS", "BG": "AS",
+    "BH": "AS", "BI": "AS", "BJ": "AS", "BK": "AS", "BL": "AS", "BM": "AS", "BN": "AS",
+    "BO": "AS", "BP": "AS", "BQ": "AS", "BR": "AS", "BS": "AS", "BT": "AS", "BU": "AS",
+    "BV": "AS", "BW": "AS", "BX": "AS", "BY": "AS", "BZ": "AS", "XS": "AS", "3H": "AS",
+    "3I": "AS", "3J": "AS", "3K": "AS", "3L": "AS", "3M": "AS", "3N": "AS", "3O": "AS",
+    "3P": "AS", "3Q": "AS", "3R": "AS", "3S": "AS", "3T": "AS", "3U": "AS",
+    "VU": "AS", "AT": "AS", "AU": "AS", "AV": "AS", "AW": "AS",
+    "VR": "AS", "XX": "AS",
+    "HS": "AS", "E2": "AS",
+    "9M": "AS", "9W": "AS",
+    "9V": "AS",
+    "DU": "AS", "DV": "AS", "DW": "AS", "DX": "AS", "DY": "AS", "DZ": "AS", "4D": "AS",
+    "4E": "AS", "4F": "AS", "4G": "AS", "4H": "AS", "4I": "AS",
+    "YB": "AS", "YC": "AS", "YD": "AS", "YE": "AS", "YF": "AS", "YG": "AS", "YH": "AS",
+    "7A": "AS", "7B": "AS", "7C": "AS", "7D": "AS", "7E": "AS", "7F": "AS", "7G": "AS",
+    "7H": "AS", "7I": "AS", "8A": "AS", "8B": "AS", "8C": "AS", "8D": "AS", "8E": "AS",
+    "8F": "AS", "8G": "AS", "8H": "AS", "8I": "AS",
+    "AP": "AS", "6P": "AS", "6Q": "AS", "6R": "AS", "6S": "AS",
+    "A4": "AS", "A5": "AS", "A6": "AS", "A7": "AS", "A9": "AS",
+    "HZ": "AS", "7Z": "AS", "8Z": "AS",
+    "EP": "AS", "EQ": "AS", "9K": "AS", "OD": "AS", "JY": "AS", "YI": "AS", "YK": "AS",
+    "4X": "AS", "4Z": "AS",
+    "EK": "AS", "4J": "AS", "4K": "AS", "EX": "AS", "EY": "AS", "EZ": "AS",
+    "UK": "AS", "UN": "AS", "UJ": "AS", "UL": "AS", "UM": "AS",
+    "XV": "AS", "XU": "AS", "XW": "AS", "XY": "AS", "XZ": "AS", "9N": "AS",
+    "4S": "AS", "S2": "AS",
+    "8Q": "AS",
+    "UA0": "AS", "UA9": "AS", "R0": "AS",
+
+    # Oceania (OC)
+    "VK": "OC", "AX": "OC",
+    "ZL": "OC", "ZK": "OC", "ZM": "OC",
+    "KH6": "OC",
+    "FK": "OC", "TX": "OC",
+    "YJ": "OC", "3D2": "OC", "5W": "OC", "A3": "OC", "T2": "OC", "T3": "OC",
+    "V7": "OC", "V6": "OC", "T8": "OC", "KC6": "OC", "KX6": "OC",
+    "P2": "OC", "KG6": "OC",
+    "FO": "OC", "E5": "OC", "ZK1": "OC", "ZK2": "OC",
+
+    # Africa (AF)
+    "ZS": "AF", "ZR": "AF", "ZT": "AF", "ZU": "AF", "V5": "AF", "A2": "AF",
+    "7P": "AF", "7Q": "AF", "3DA": "AF", "3D0": "AF", "9J": "AF",
+    "5H": "AF", "5I": "AF", "5X": "AF", "5Z": "AF", "ET": "AF", "E3": "AF",
+    "ST": "AF", "6U": "AF", "9U": "AF", "9X": "AF",
+    "SU": "AF", "SS": "AF", "6O": "AF",
+    "CN": "AF", "5A": "AF", "7X": "AF", "TS": "AF", "3V": "AF",
+    "5N": "AF", "5O": "AF", "EL": "AF", "TU": "AF", "TY": "AF", "TZ": "AF",
+    "XT": "AF", "6V": "AF", "6W": "AF", "C5": "AF", "J5": "AF", "D4": "AF",
+    "9G": "AF", "9L": "AF", "5T": "AF", "5U": "AF", "5V": "AF",
+    "TR": "AF", "TN": "AF", "TT": "AF", "TJ": "AF", "TL": "AF", "9Q": "AF",
+    "D2": "AF", "D3": "AF", "CT3": "AF", "S9": "AF", "3C": "AF",
+    "5R": "AF", "5S": "AF", "3B": "AF", "FR": "AF", "FH": "AF", "S7": "AF", "D6": "AF",
+
+    # Antarctica (AN)
+    "KC4": "AN", "DP0": "AN", "VP8": "AN", "RI1AN": "AN", "CE9": "AN", "ZL5": "AN",
+    "VK0": "AN", "8J1": "AN",
+}
+
+
+def get_continent_from_callsign(callsign: str) -> Optional[str]:
+    """
+    Derive continent from callsign prefix.
+
+    This is a fallback when dx_dxcc is not available.
+    Uses ITU callsign prefix assignments.
+
+    Args:
+        callsign: The amateur radio callsign
+
+    Returns:
+        Continent code (AF, AN, AS, EU, NA, OC, SA) or None if not determinable
+    """
+    if not callsign:
+        return None
+
+    callsign = callsign.upper().strip()
+
+    # Remove any suffix (like /P, /M, /QRP)
+    callsign = callsign.split("/")[0]
+
+    if not callsign:
+        return None
+
+    # Try longest prefix matches first (up to 5 chars), then shorter
+    for length in range(min(5, len(callsign)), 0, -1):
+        prefix = callsign[:length]
+        if prefix in _PREFIX_TO_CONTINENT:
+            return _PREFIX_TO_CONTINENT[prefix]
+
+    # Try single character prefix (last resort)
+    first_char = callsign[0]
+    if first_char in _PREFIX_TO_CONTINENT:
+        return _PREFIX_TO_CONTINENT[first_char]
+
+    return None

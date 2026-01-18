@@ -1067,7 +1067,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         medals = [dict(row) for row in cursor.fetchall()]
 
         # Get sport info for display
-        cursor = conn.execute("SELECT name, target_type FROM sports WHERE id = ?", (sport_id,))
+        cursor = conn.execute("SELECT name, target_type, work_enabled, activate_enabled, allowed_modes FROM sports WHERE id = ?", (sport_id,))
         sport = cursor.fetchone()
 
         # Format target display
@@ -1095,12 +1095,24 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         target_value = match_dict["target_value"]
 
         qso_details = {}
+        # Parse allowed_modes for filtering
+        allowed_modes = None
+        if sport and sport["allowed_modes"]:
+            allowed_modes = [m.strip().upper() for m in sport["allowed_modes"].split(",")]
+
         for row in cursor.fetchall():
             qso = dict(row)
-            # Check if QSO matches target (try both work and activate modes)
+
+            # Filter by allowed_modes if specified
+            if allowed_modes:
+                qso_mode = (qso.get("mode") or "").upper()
+                if qso_mode not in allowed_modes:
+                    continue
+
+            # Check if QSO matches target (only check modes that are enabled for this sport)
             if target_type and target_value:
-                matches_work = matches_target(qso, target_type, target_value, "work")
-                matches_activate = matches_target(qso, target_type, target_value, "activate")
+                matches_work = sport["work_enabled"] and matches_target(qso, target_type, target_value, "work")
+                matches_activate = sport["activate_enabled"] and matches_target(qso, target_type, target_value, "activate")
                 if not matches_work and not matches_activate:
                     continue
 
