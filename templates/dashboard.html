@@ -581,7 +581,7 @@ async function rejectInvite(teamId) {
     <tbody>
         {% for qso in qsos %}
         <tr>
-            <td>{{ qso.qso_datetime_utc | format_time_local(qso.dx_grid if competitor.time_display == 'local' else none, competitor.time_display or 'utc') }}</td>
+            <td>{{ qso.qso_datetime_utc | format_time_local(competitor.home_grid, competitor.time_display or 'utc') }}</td>
             <td>
                 <span class="dx-callsign" title="{{ qso.dx_country or '' }}">
                     {{ qso.dx_dxcc | country_flag }}
