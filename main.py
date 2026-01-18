@@ -1079,7 +1079,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         cursor = conn.execute("""
             SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                    q.mode, q.tx_power_w, q.distance_km, q.cool_factor, q.is_confirmed,
-                   q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
+                   q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc, q.my_grid
             FROM qsos q
             WHERE q.competitor_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
               AND datetime(q.qso_datetime_utc) >= datetime(?)
@@ -1130,6 +1130,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                 "grid": row["dx_grid"],
                 "park": row["dx_sig_info"],
                 "my_park": row["my_sig_info"],  # Competitor was activating from this park
+                "my_grid": row["my_grid"],  # Competitor's grid for local time display
             })
 
         display_prefs = get_display_prefs(user)
@@ -1410,7 +1411,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
             cursor = conn.execute(f"""
                 SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                        q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
-                       q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
+                       q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc, q.my_grid
                 FROM qsos q
                 WHERE q.competitor_callsign IN ({placeholders})
                   AND q.is_confirmed = 1
@@ -1461,6 +1462,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                         "cool_factor": earliest["cool_factor"],
                         "medal_type": "QSO Race",
                         "my_park": earliest.get("my_sig_info"),  # Activation indicator
+                        "my_grid": earliest.get("my_grid"),  # Competitor's grid for local time
                     })
                 # Cool Factor medal: highest cool_factor QSO
                 if row["cool_factor_medal"] and all_matching:
@@ -1476,6 +1478,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                             "cool_factor": best_cf["cool_factor"],
                             "medal_type": "Cool Factor",
                             "my_park": best_cf.get("my_sig_info"),  # Activation indicator
+                            "my_grid": best_cf.get("my_grid"),  # Competitor's grid for local time
                         })
 
                 medal_details[callsign].append({
