@@ -1575,23 +1575,19 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                 m.callsign,
                 m.role,
                 c.first_name,
-                SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END) +
-                SUM(CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
-                SUM(CASE WHEN m.qso_race_medal = 'silver' THEN 1 ELSE 0 END) +
-                SUM(CASE WHEN m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
-                SUM(CASE WHEN m.qso_race_medal = 'bronze' THEN 1 ELSE 0 END) +
-                SUM(CASE WHEN m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count,
-                SUM(CASE WHEN m.qso_race_medal IS NOT NULL THEN 1 ELSE 0 END) +
-                SUM(CASE WHEN m.cool_factor_medal IS NOT NULL THEN 1 ELSE 0 END) as total_medals,
+                SUM(CASE WHEN m.qso_race_medal = 'gold' THEN 1 ELSE 0 END +
+                    CASE WHEN m.cool_factor_medal = 'gold' THEN 1 ELSE 0 END) as gold_count,
+                SUM(CASE WHEN m.qso_race_medal = 'silver' THEN 1 ELSE 0 END +
+                    CASE WHEN m.cool_factor_medal = 'silver' THEN 1 ELSE 0 END) as silver_count,
+                SUM(CASE WHEN m.qso_race_medal = 'bronze' THEN 1 ELSE 0 END +
+                    CASE WHEN m.cool_factor_medal = 'bronze' THEN 1 ELSE 0 END) as bronze_count,
                 SUM(m.total_points) as total_points
             FROM medals m
-            JOIN competitors c ON m.callsign = c.callsign
+            LEFT JOIN competitors c ON m.callsign = c.callsign
             JOIN matches ma ON m.match_id = ma.id
             JOIN sports s ON ma.sport_id = s.id
-            WHERE m.qualified = 1
-            GROUP BY s.id, m.callsign, m.role
-            HAVING total_medals > 0
-            ORDER BY s.name, total_points DESC, gold_count DESC, silver_count DESC, bronze_count DESC
+            GROUP BY s.id, m.callsign, m.role, c.first_name
+            ORDER BY s.name, total_points DESC
         """)
         sport_standings_raw = [dict(row) for row in cursor.fetchall()]
 
