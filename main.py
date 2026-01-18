@@ -317,7 +317,7 @@ def format_date(value: str, include_time: bool = False, home_grid: str = None, t
         tz_str = ""
         if include_time:
             if time_display == "local" and home_grid:
-                offset = grid_to_timezone_offset(home_grid)
+                offset = grid_to_timezone_offset(home_grid, dt)
                 dt = dt + timedelta(hours=offset)
                 sign = "+" if offset >= 0 else ""
                 tz_str = f" (UTC{sign}{offset})"
@@ -426,11 +426,13 @@ def format_distance(value, unit: str = "km") -> str:
 templates.env.filters["format_distance"] = format_distance
 
 
-def grid_to_timezone_offset(grid: str) -> int:
+def grid_to_timezone_offset(grid: str, dt: datetime = None) -> int:
     """Calculate timezone offset (hours from UTC) based on grid square longitude.
 
     Uses simplified calculation: each 20 degrees = ~1.33 hours offset.
     Grid squares are 2 degrees wide for the first 2 chars (field).
+
+    If dt is provided, adjusts for daylight saving time in applicable regions.
     """
     if not grid or len(grid) < 2:
         return 0
@@ -441,11 +443,67 @@ def grid_to_timezone_offset(grid: str) -> int:
         # Calculate center longitude: -180 + (field * 20) + 10
         lon = -180 + (lon_field * 20) + 10
 
+        # Second char (A-R) represents 10-degree latitude zones
+        lat_field = ord(grid[1].upper()) - ord('A')  # 0-17
+        lat = -90 + (lat_field * 10) + 5
+
         # Timezone is roughly longitude / 15
         offset = round(lon / 15)
+
+        # Check for DST in applicable regions
+        if dt:
+            # Continental US/Canada (lon -130 to -50, lat 25 to 60)
+            # Most observe DST from second Sunday in March to first Sunday in November
+            if -130 <= lon <= -50 and 25 <= lat <= 60:
+                if _is_us_dst(dt):
+                    offset += 1
+            # Western Europe (lon -10 to 30, lat 35 to 70)
+            # Observes DST from last Sunday in March to last Sunday in October
+            elif -10 <= lon <= 30 and 35 <= lat <= 70:
+                if _is_eu_dst(dt):
+                    offset += 1
+
         return offset
     except (ValueError, IndexError):
         return 0
+
+
+def _is_us_dst(dt: datetime) -> bool:
+    """Check if US daylight saving time is in effect for the given date.
+
+    DST runs from second Sunday in March to first Sunday in November.
+    """
+    year = dt.year
+    # Second Sunday in March
+    march_start = datetime(year, 3, 8)  # Earliest possible second Sunday
+    while march_start.weekday() != 6:  # Find Sunday
+        march_start += timedelta(days=1)
+
+    # First Sunday in November
+    nov_end = datetime(year, 11, 1)
+    while nov_end.weekday() != 6:
+        nov_end += timedelta(days=1)
+
+    return march_start <= dt.replace(tzinfo=None) < nov_end
+
+
+def _is_eu_dst(dt: datetime) -> bool:
+    """Check if EU daylight saving time is in effect for the given date.
+
+    DST runs from last Sunday in March to last Sunday in October.
+    """
+    year = dt.year
+    # Last Sunday in March
+    march_end = datetime(year, 3, 31)
+    while march_end.weekday() != 6:
+        march_end -= timedelta(days=1)
+
+    # Last Sunday in October
+    oct_end = datetime(year, 10, 31)
+    while oct_end.weekday() != 6:
+        oct_end -= timedelta(days=1)
+
+    return march_end <= dt.replace(tzinfo=None) < oct_end
 
 
 def format_time_local(value, home_grid: str = None, time_display: str = "utc") -> str:
@@ -468,7 +526,7 @@ def format_time_local(value, home_grid: str = None, time_display: str = "utc") -
             dt = value
 
         if time_display == "local" and home_grid:
-            offset = grid_to_timezone_offset(home_grid)
+            offset = grid_to_timezone_offset(home_grid, dt)
             dt = dt + timedelta(hours=offset)
             sign = "+" if offset >= 0 else ""
             tz_str = f" (UTC{sign}{offset})"
