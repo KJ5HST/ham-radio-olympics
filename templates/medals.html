@@ -127,6 +127,40 @@ function toggleDetails(callsign) {
 </div>
 {% endif %}
 
+{% if sport_standings %}
+<h2 style="margin-top: 30px;">Standings by Sport</h2>
+
+{% for sport_id, sport in sport_standings.items() %}
+<h3 style="margin-top: 20px;"><a href="/olympiad/sport/{{ sport_id }}">{{ sport.name }}</a></h3>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col">Rank</th>
+            <th scope="col">Competitor</th>
+            <th scope="col"><span class="medal-emoji gold"></span></th>
+            <th scope="col"><span class="medal-emoji silver"></span></th>
+            <th scope="col"><span class="medal-emoji bronze"></span></th>
+            <th scope="col">Total</th>
+            <th scope="col">Points</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for competitor in sport.competitors %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a></td>
+            <td>{{ competitor.gold_count }}</td>
+            <td>{{ competitor.silver_count }}</td>
+            <td>{{ competitor.bronze_count }}</td>
+            <td><strong>{{ competitor.total_medals }}</strong></td>
+            <td>{{ competitor.total_points }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% endfor %}
+{% endif %}
+
 <h3>About Medals</h3>
 <div class="card">
     <p>Medals are awarded for two events in each match:</p>
