@@ -19,6 +19,8 @@ def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(_get_database_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")  # Allow concurrent reads during writes
+    conn.execute("PRAGMA busy_timeout = 5000")  # Wait up to 5s for locks
     return conn
 
 
@@ -891,6 +893,30 @@ def init_db():
                 UNIQUE(team_id, match_id, sport_id, calculation_method)
             );
 
+            -- QSO Disqualifications table (sport-specific: a QSO may be valid in one sport but DQ'd in another)
+            CREATE TABLE IF NOT EXISTS qso_disqualifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                qso_id INTEGER NOT NULL,
+                sport_id INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('disqualified', 'refuted', 'requalified')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (qso_id) REFERENCES qsos(id) ON DELETE CASCADE,
+                FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+                UNIQUE (qso_id, sport_id)
+            );
+
+            -- QSO Disqualification Comments table (tracks all actions and reasons)
+            CREATE TABLE IF NOT EXISTS qso_disqualification_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                disqualification_id INTEGER NOT NULL,
+                author_callsign TEXT NOT NULL,
+                comment_type TEXT NOT NULL CHECK (comment_type IN ('disqualify', 'refute', 'requalify')),
+                comment TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (disqualification_id) REFERENCES qso_disqualifications(id) ON DELETE CASCADE
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
@@ -923,6 +949,12 @@ def init_db():
 
             -- Performance index for records lookups
             CREATE INDEX IF NOT EXISTS idx_records_callsign ON records(callsign);
+
+            -- Indexes for QSO disqualifications
+            CREATE INDEX IF NOT EXISTS idx_qso_dq_qso ON qso_disqualifications(qso_id);
+            CREATE INDEX IF NOT EXISTS idx_qso_dq_sport ON qso_disqualifications(sport_id);
+            CREATE INDEX IF NOT EXISTS idx_qso_dq_status ON qso_disqualifications(status);
+            CREATE INDEX IF NOT EXISTS idx_qso_dq_comments_dq ON qso_disqualification_comments(disqualification_id);
         """)
 
 

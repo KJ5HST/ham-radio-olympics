@@ -2899,13 +2899,13 @@ class TestBackgroundSync:
     """Test background sync functionality."""
 
     @pytest.mark.asyncio
-    async def test_background_sync_calls_sync_all(self):
-        """Test background_sync calls sync_all_competitors after sleep."""
+    async def test_background_sync_calls_subprocess(self):
+        """Test background_sync calls run_sync_subprocess after sleep."""
         import asyncio
         from unittest.mock import patch, AsyncMock
         from main import background_sync
 
-        with patch('main.sync_all_competitors', new_callable=AsyncMock) as mock_sync:
+        with patch('main.run_sync_subprocess', new_callable=AsyncMock) as mock_sync:
             with patch.object(main.config, 'SYNC_INTERVAL_SECONDS', 0.01):  # Very short interval for testing
                 # Run background_sync briefly then cancel
                 task = asyncio.create_task(background_sync())
@@ -2935,7 +2935,7 @@ class TestBackgroundSync:
                 raise Exception("Test error")
             # Second call succeeds
 
-        with patch('main.sync_all_competitors', side_effect=mock_sync_with_error):
+        with patch('main.run_sync_subprocess', side_effect=mock_sync_with_error):
             with patch.object(main.config, 'SYNC_INTERVAL_SECONDS', 0.01):
                 task = asyncio.create_task(background_sync())
                 await asyncio.sleep(0.05)

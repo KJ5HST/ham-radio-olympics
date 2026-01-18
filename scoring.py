@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-from database import get_db, get_db_exclusive
+from database import get_db
 from dxcc import get_continent, get_continent_from_callsign
 from grid_distance import grid_distance
 
@@ -267,6 +267,7 @@ def get_matching_qsos(
 
     with get_db() as conn:
         # Get all confirmed QSOs in the time window from competitors who opted in
+        # Exclude QSOs that are disqualified for this sport
         # If confirmation_deadline is set, only include QSOs confirmed before the deadline
         if confirmation_deadline:
             cursor = conn.execute("""
@@ -274,21 +275,27 @@ def get_matching_qsos(
                 FROM qsos q
                 JOIN competitors c ON q.competitor_callsign = c.callsign
                 JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
+                LEFT JOIN qso_disqualifications dq
+                    ON q.id = dq.qso_id AND dq.sport_id = ? AND dq.status = 'disqualified'
                 WHERE q.is_confirmed = 1
                 AND q.qso_datetime_utc >= ?
                 AND q.qso_datetime_utc <= ?
                 AND (q.confirmed_at IS NULL OR q.confirmed_at <= ?)
-            """, (sport_id, start_date.isoformat(), end_date.isoformat(), confirmation_deadline.isoformat()))
+                AND dq.id IS NULL
+            """, (sport_id, sport_id, start_date.isoformat(), end_date.isoformat(), confirmation_deadline.isoformat()))
         else:
             cursor = conn.execute("""
                 SELECT q.*, c.registered_at
                 FROM qsos q
                 JOIN competitors c ON q.competitor_callsign = c.callsign
                 JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
+                LEFT JOIN qso_disqualifications dq
+                    ON q.id = dq.qso_id AND dq.sport_id = ? AND dq.status = 'disqualified'
                 WHERE q.is_confirmed = 1
                 AND q.qso_datetime_utc >= ?
                 AND q.qso_datetime_utc <= ?
-            """, (sport_id, start_date.isoformat(), end_date.isoformat()))
+                AND dq.id IS NULL
+            """, (sport_id, sport_id, start_date.isoformat(), end_date.isoformat()))
 
         all_qsos = [dict(row) for row in cursor.fetchall()]
 
@@ -509,12 +516,12 @@ def recompute_match_medals(match_id: int):
     Recompute all medals for a Match.
 
     This should be called after a sync to update standings.
-    Uses exclusive transaction to prevent race conditions during concurrent syncs.
+    With WAL mode enabled, we use regular transactions to allow concurrent reads.
     """
-    # Collect QSOs for record updates (done outside exclusive block to avoid deadlock)
+    # Collect QSOs for record updates (done outside transaction block to avoid deadlock)
     qsos_for_records = []
 
-    with get_db_exclusive() as conn:
+    with get_db() as conn:
         # Get match and sport config
         cursor = conn.execute("""
             SELECT m.*, s.target_type as sport_target_type, s.work_enabled, s.activate_enabled,
@@ -605,7 +612,7 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
     """
     Check and update records based on a QSO.
 
-    Uses exclusive transaction to prevent race conditions during concurrent syncs.
+    With WAL mode enabled, we use regular transactions to allow concurrent reads.
 
     Args:
         qso_id: QSO ID
@@ -613,7 +620,7 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
         sport_id: Sport ID (None for global records)
         match_id: Match ID where the QSO qualified
     """
-    with get_db_exclusive() as conn:
+    with get_db() as conn:
         # Get QSO data
         cursor = conn.execute("SELECT * FROM qsos WHERE id = ?", (qso_id,))
         qso = cursor.fetchone()
@@ -741,9 +748,9 @@ def compute_team_standings(
         match_id: Optional match ID (None for sport-level standings)
         top_n: Number of top members for top_n method (default 3)
 
-    Uses exclusive transaction to prevent race conditions during concurrent updates.
+    With WAL mode enabled, we use regular transactions to allow concurrent reads.
     """
-    with get_db_exclusive() as conn:
+    with get_db() as conn:
         # Get all active teams with members
         cursor = conn.execute("""
             SELECT t.id, t.name, tm.callsign

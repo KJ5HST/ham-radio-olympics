@@ -35,6 +35,7 @@
                     <a href="/admin/sport/{{ sport.id }}/competitors" class="btn btn-sm btn-icon" title="Competitors"><span class="icon">👥</span></a>
                     <a href="/admin/sport/{{ sport.id }}/matches" class="btn btn-sm btn-icon btn-info" title="Matches"><span class="icon">📅</span></a>
                     <button type="button" onclick="editSport({{ sport.id }}, '{{ sport.name | e }}', '{{ (sport.description or '') | e }}', '{{ sport.target_type }}', {{ sport.work_enabled | lower }}, {{ sport.activate_enabled | lower }}, {{ sport.separate_pools | lower }}, '{{ sport.allowed_modes or '' }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="duplicateSport({{ sport.id }}, '{{ sport.name | e }}')" class="btn btn-sm btn-icon btn-purple" title="Duplicate"><span class="icon">📋</span></button>
                     <button type="button" onclick="deleteSport({{ sport.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -199,6 +200,26 @@ async function deleteSport(id) {
         credentials: 'same-origin'
     });
     location.reload();
+}
+
+async function duplicateSport(id, name) {
+    if (!confirm('Duplicate "' + name + '" and all its Matches?')) return;
+    try {
+        const resp = await fetch('/admin/sport/' + id + '/duplicate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast('Error: ' + data.detail, 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
 }
 </script>
 {% endblock %}

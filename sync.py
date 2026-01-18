@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Set, List
 
 from cryptography.fernet import InvalidToken
-from database import get_db, get_db_exclusive
+from database import get_db
 
 logger = logging.getLogger(__name__)
 from crypto import decrypt_api_key
@@ -217,24 +217,29 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         valid_park_ids = await validate_park_ids(park_ids)
         qsos = _filter_invalid_park_ids(qsos, valid_park_ids)
 
-    # Process and store QSOs
+    # Process and store QSOs in small batches to avoid blocking reads
     new_count = 0
     updated_count = 0
+    batch_size = 50
 
-    # Use exclusive transaction to prevent race conditions in upsert
-    with get_db_exclusive() as conn:
-        for qso in qsos:
-            result = _upsert_qso(conn, callsign.upper(), qso)
-            if result == "new":
-                new_count += 1
-            elif result == "updated":
-                updated_count += 1
+    for i in range(0, len(qsos), batch_size):
+        batch = qsos[i:i + batch_size]
+        with get_db() as conn:
+            for qso in batch:
+                result = _upsert_qso(conn, callsign.upper(), qso)
+                if result == "new":
+                    new_count += 1
+                elif result == "updated":
+                    updated_count += 1
+            conn.commit()
 
-        # Update last sync time
+    # Update last sync time
+    with get_db() as conn:
         conn.execute(
             "UPDATE competitors SET last_sync_at = ? WHERE callsign = ?",
             (datetime.utcnow().isoformat(), callsign.upper())
         )
+        conn.commit()
 
     # Recompute medals for all active matches after sync
     recompute_all_active_matches()
@@ -322,24 +327,29 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
         valid_park_ids = await validate_park_ids(park_ids)
         qsos = _filter_invalid_park_ids(qsos, valid_park_ids)
 
-    # Process and store QSOs
+    # Process and store QSOs in small batches to avoid blocking reads
     new_count = 0
     updated_count = 0
+    batch_size = 50
 
-    # Use exclusive transaction to prevent race conditions in upsert
-    with get_db_exclusive() as conn:
-        for qso in qsos:
-            result = _upsert_qso(conn, callsign.upper(), qso)
-            if result == "new":
-                new_count += 1
-            elif result == "updated":
-                updated_count += 1
+    for i in range(0, len(qsos), batch_size):
+        batch = qsos[i:i + batch_size]
+        with get_db() as conn:
+            for qso in batch:
+                result = _upsert_qso(conn, callsign.upper(), qso)
+                if result == "new":
+                    new_count += 1
+                elif result == "updated":
+                    updated_count += 1
+            conn.commit()
 
-        # Update last sync time
+    # Update last sync time
+    with get_db() as conn:
         conn.execute(
             "UPDATE competitors SET last_sync_at = ? WHERE callsign = ?",
             (datetime.utcnow().isoformat(), callsign.upper())
         )
+        conn.commit()
 
     # Recompute medals for all active matches after sync
     recompute_all_active_matches()
@@ -673,8 +683,9 @@ async def sync_all_competitors() -> dict:
     except Exception as e:
         logger.warning(f"Failed to populate missing dx_dxcc: {e}")
 
-    # Recompute medals for all active matches
-    recompute_all_active_matches()
+    # Recompute medals for all active matches (run in thread pool to avoid blocking event loop)
+    import asyncio
+    await asyncio.to_thread(recompute_all_active_matches)
 
     total_new = sum(r.get("new_qsos", 0) for r in results)
     total_updated = sum(r.get("updated_qsos", 0) for r in results)

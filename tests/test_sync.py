@@ -714,3 +714,102 @@ class TestSyncCompetitorWithKey:
 
         assert "error" in result
         assert "Invalid API key" in result["error"]
+
+
+class TestSyncSubprocess:
+    """Test subprocess-based sync to ensure it doesn't block the event loop."""
+
+    def test_sync_script_exists(self):
+        """Test that the standalone sync script exists."""
+        import os
+        script_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "scripts",
+            "run_sync.py"
+        )
+        assert os.path.exists(script_path), f"Sync script not found at {script_path}"
+
+    def test_get_sync_script_path(self):
+        """Test get_sync_script_path returns correct path."""
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from main import get_sync_script_path
+
+        path = get_sync_script_path()
+        assert path.endswith("run_sync.py")
+        assert "scripts" in path
+        assert os.path.exists(path)
+
+    @patch('main.asyncio.create_subprocess_exec')
+    def test_run_sync_subprocess_success(self, mock_subprocess):
+        """Test run_sync_subprocess completes successfully."""
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from main import run_sync_subprocess
+
+        # Mock the subprocess
+        mock_process = AsyncMock()
+        mock_process.returncode = 0
+        mock_process.communicate = AsyncMock(return_value=(b"Sync complete", b""))
+        mock_subprocess.return_value = mock_process
+
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(run_sync_subprocess())
+
+        # Verify subprocess was called with python and the sync script
+        mock_subprocess.assert_called_once()
+        call_args = mock_subprocess.call_args
+        assert call_args[0][0] == sys.executable
+        assert "run_sync.py" in call_args[0][1]
+
+    @patch('main.asyncio.create_subprocess_exec')
+    def test_run_sync_subprocess_failure(self, mock_subprocess):
+        """Test run_sync_subprocess handles subprocess failure."""
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from main import run_sync_subprocess
+
+        # Mock the subprocess with non-zero return code
+        mock_process = AsyncMock()
+        mock_process.returncode = 1
+        mock_process.communicate = AsyncMock(return_value=(b"", b"Error message"))
+        mock_subprocess.return_value = mock_process
+
+        import asyncio
+        # Should not raise, just log the error
+        asyncio.get_event_loop().run_until_complete(run_sync_subprocess())
+
+        mock_subprocess.assert_called_once()
+
+    @patch('main.asyncio.create_subprocess_exec')
+    def test_run_sync_subprocess_exception(self, mock_subprocess):
+        """Test run_sync_subprocess handles exceptions gracefully."""
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+        from main import run_sync_subprocess
+
+        # Mock subprocess to raise exception
+        mock_subprocess.side_effect = Exception("Failed to spawn process")
+
+        import asyncio
+        # Should not raise, just log the error
+        asyncio.get_event_loop().run_until_complete(run_sync_subprocess())
+
+    def test_sync_script_imports(self):
+        """Test that the sync script can be imported without errors."""
+        import subprocess
+        import sys
+
+        script_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "scripts",
+            "run_sync.py"
+        )
+
+        # Check that the script at least parses correctly
+        result = subprocess.run(
+            [sys.executable, "-m", "py_compile", script_path],
+            capture_output=True,
+            text=True
+        )
+        assert result.returncode == 0, f"Script has syntax errors: {result.stderr}"

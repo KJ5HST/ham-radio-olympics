@@ -580,7 +580,7 @@ async function rejectInvite(teamId) {
     </thead>
     <tbody>
         {% for qso in qsos %}
-        <tr>
+        <tr{% if qso.has_disqualified %} class="qso-dq-row"{% endif %}>
             <td>{{ qso.qso_datetime_utc | format_time_local(qso.my_grid or competitor.home_grid, competitor.time_display or 'utc') }}</td>
             <td>
                 <span class="dx-callsign" title="{{ qso.dx_country or '' }}">
@@ -590,13 +590,29 @@ async function rejectInvite(teamId) {
                 {% if qso.dx_sig_info or qso.my_sig_info %}
                 <span class="pota-badge">🏕️ {{ (qso.dx_sig_info or qso.my_sig_info) | pota_tooltip }}</span>
                 {% endif %}
+                {% if qso.disqualifications %}
+                {% for dq in qso.disqualifications %}
+                {% if dq.status == 'disqualified' %}
+                <span class="badge badge-dq" title="Disqualified from {{ dq.sport_name }}" style="cursor: pointer;" onclick="viewQsoDqHistory({{ qso.id }})">DQ</span>
+                {% elif dq.status == 'refuted' %}
+                <span class="badge badge-refuted" title="Refuted in {{ dq.sport_name }}" style="cursor: pointer;" onclick="viewQsoDqHistory({{ qso.id }})">REFUTED</span>
+                {% elif dq.status == 'requalified' %}
+                <span class="badge badge-rq" title="Requalified in {{ dq.sport_name }}" style="cursor: pointer;" onclick="viewQsoDqHistory({{ qso.id }})">RQ</span>
+                {% endif %}
+                {% endfor %}
+                {% endif %}
             </td>
             <td>{{ qso.band or '-' }}</td>
             <td>{{ qso.mode or '-' }}</td>
             <td>{% if qso.tx_power_w %}{{ qso.tx_power_w }}W{% else %}-{% endif %}</td>
             <td>{{ qso.distance_km | format_distance(competitor.distance_unit or 'km') if qso.distance_km else '-' }}</td>
             <td>{{ "%.1f" | format(qso.cool_factor) if qso.cool_factor else '-' }}</td>
-            <td>{% if qso.is_confirmed %}Yes{% else %}No{% endif %}</td>
+            <td>
+                {% if qso.is_confirmed %}Yes{% else %}No{% endif %}
+                {% if is_own_profile and qso.has_disqualified %}
+                <button class="btn btn-sm btn-warning" style="margin-left: 5px; padding: 2px 6px; font-size: 0.7em;" onclick="showRefuteModal({{ qso.id }}, '{{ qso.dx_callsign }}')" title="Refute disqualification">Refute</button>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -630,4 +646,243 @@ async function rejectInvite(teamId) {
     {% endif %}
 </div>
 {% endif %}
+
+<!-- DQ History Modal -->
+<div id="qso-dq-history-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; margin: 20px; max-height: 80vh; overflow-y: auto; border: 1px solid var(--border-color);">
+        <h4 style="margin-top: 0;">Disqualification History</h4>
+        <div id="qso-dq-history-content">Loading...</div>
+        <div style="margin-top: 15px;">
+            <button onclick="hideQsoDqHistoryModal()" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Refute Modal -->
+<div id="refute-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 500px; width: 90%; margin: 20px; border: 1px solid var(--border-color);">
+        <h4 style="margin-top: 0;">Refute Disqualification</h4>
+        <p style="color: var(--text-secondary); font-size: 0.9em;">QSO with <strong id="refute-dx-call"></strong></p>
+        <input type="hidden" id="refute-qso-id">
+        <div id="refute-sports-list" style="margin-bottom: 15px;">Loading disqualifications...</div>
+        <div class="form-group">
+            <label for="refute-text">Refutation (required, min 10 characters)</label>
+            <textarea id="refute-text" rows="3" placeholder="Explain why this QSO should not be disqualified..." style="width: 100%;"></textarea>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button onclick="submitRefute()" id="refute-submit-btn" class="btn btn-warning" style="flex: 1;">Submit Refutation</button>
+            <button onclick="hideRefuteModal()" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+        </div>
+        <div id="refute-result" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<style>
+.qso-dq-row {
+    background: rgba(197, 48, 48, 0.1);
+}
+.badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: bold;
+    margin-left: 5px;
+    text-transform: uppercase;
+}
+.badge-dq {
+    background: #c53030;
+    color: white;
+}
+.badge-refuted {
+    background: #d69e2e;
+    color: white;
+}
+.badge-rq {
+    background: #38a169;
+    color: white;
+}
+.btn-warning {
+    background: #d69e2e;
+    color: white;
+}
+.btn-warning:hover {
+    background: #b7791f;
+}
+.dq-comment {
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 5px;
+    background: var(--bg-secondary);
+    border-left: 3px solid var(--border-color);
+}
+.dq-comment.disqualify { border-left-color: #c53030; }
+.dq-comment.refute { border-left-color: #d69e2e; }
+.dq-comment.requalify { border-left-color: #38a169; }
+</style>
+
+<script>
+let currentRefuteSportId = null;
+
+async function viewQsoDqHistory(qsoId) {
+    document.getElementById('qso-dq-history-modal').style.display = 'flex';
+    document.getElementById('qso-dq-history-content').innerHTML = '<p>Loading...</p>';
+
+    try {
+        const resp = await fetch('/qso/' + qsoId + '/disqualifications');
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            document.getElementById('qso-dq-history-content').innerHTML = '<p class="alert alert-error">' + (data.detail || 'Failed to load') + '</p>';
+            return;
+        }
+
+        let html = '<p><strong>QSO:</strong> ' + data.competitor_callsign + ' &rarr; ' + data.dx_callsign + '</p>';
+        html += '<p><strong>Date:</strong> ' + formatTimestamp(data.qso_datetime_utc) + '</p>';
+
+        if (data.disqualifications.length === 0) {
+            html += '<p style="color: var(--text-secondary);">No disqualification history.</p>';
+        } else {
+            for (const dq of data.disqualifications) {
+                html += '<div style="margin-top: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 5px;">';
+                html += '<p><strong>' + dq.sport_name + '</strong> - Status: <span class="badge badge-' + (dq.status === 'disqualified' ? 'dq' : dq.status === 'refuted' ? 'refuted' : 'rq') + '">' + dq.status.toUpperCase() + '</span></p>';
+                for (const c of dq.comments) {
+                    html += '<div class="dq-comment ' + c.comment_type + '">';
+                    html += '<small style="color: var(--text-secondary);">' + formatTimestamp(c.created_at) + ' - <strong>' + c.author_callsign + '</strong> (' + c.comment_type + ')</small>';
+                    html += '<p style="margin: 5px 0 0 0;">' + escapeHtml(c.comment) + '</p>';
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+        }
+
+        document.getElementById('qso-dq-history-content').innerHTML = html;
+    } catch (e) {
+        document.getElementById('qso-dq-history-content').innerHTML = '<p class="alert alert-error">Failed to load: ' + e.message + '</p>';
+    }
+}
+
+function hideQsoDqHistoryModal() {
+    document.getElementById('qso-dq-history-modal').style.display = 'none';
+}
+
+async function showRefuteModal(qsoId, dxCall) {
+    document.getElementById('refute-qso-id').value = qsoId;
+    document.getElementById('refute-dx-call').textContent = dxCall;
+    document.getElementById('refute-text').value = '';
+    document.getElementById('refute-result').innerHTML = '';
+    document.getElementById('refute-sports-list').innerHTML = '<p>Loading disqualifications...</p>';
+    document.getElementById('refute-modal').style.display = 'flex';
+
+    // Load disqualifications to let user select which to refute
+    try {
+        const resp = await fetch('/qso/' + qsoId + '/disqualifications');
+        const data = await resp.json();
+
+        if (!resp.ok || data.disqualifications.length === 0) {
+            document.getElementById('refute-sports-list').innerHTML = '<p class="alert alert-error">No active disqualifications found</p>';
+            return;
+        }
+
+        // Show only disqualified (not already refuted or requalified)
+        const disqualified = data.disqualifications.filter(d => d.status === 'disqualified');
+        if (disqualified.length === 0) {
+            document.getElementById('refute-sports-list').innerHTML = '<p>No active disqualifications to refute.</p>';
+            return;
+        }
+
+        let html = '<p><strong>Select sport to refute:</strong></p>';
+        for (const dq of disqualified) {
+            html += '<label style="display: block; margin: 5px 0; cursor: pointer;">';
+            html += '<input type="radio" name="refute-sport" value="' + dq.sport_id + '" style="margin-right: 8px;"';
+            if (disqualified.length === 1) html += ' checked';
+            html += '>' + dq.sport_name;
+            html += '</label>';
+        }
+        document.getElementById('refute-sports-list').innerHTML = html;
+
+        if (disqualified.length === 1) {
+            currentRefuteSportId = disqualified[0].sport_id;
+        }
+    } catch (e) {
+        document.getElementById('refute-sports-list').innerHTML = '<p class="alert alert-error">Failed to load: ' + e.message + '</p>';
+    }
+
+    document.getElementById('refute-text').focus();
+}
+
+function hideRefuteModal() {
+    document.getElementById('refute-modal').style.display = 'none';
+    currentRefuteSportId = null;
+}
+
+async function submitRefute() {
+    const qsoId = document.getElementById('refute-qso-id').value;
+    const refutation = document.getElementById('refute-text').value.trim();
+    const result = document.getElementById('refute-result');
+    const btn = document.getElementById('refute-submit-btn');
+
+    // Get selected sport
+    const selectedSport = document.querySelector('input[name="refute-sport"]:checked');
+    if (!selectedSport) {
+        result.innerHTML = '<div class="alert alert-error">Please select a sport to refute</div>';
+        return;
+    }
+    const sportId = selectedSport.value;
+
+    if (refutation.length < 10) {
+        result.innerHTML = '<div class="alert alert-error">Refutation must be at least 10 characters</div>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+        const resp = await fetch('/qso/' + qsoId + '/sport/' + sportId + '/refute', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({refutation: refutation})
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            hideRefuteModal();
+            showToast('Refutation submitted successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Failed to submit refutation') + '</div>';
+            btn.disabled = false;
+            btn.textContent = 'Submit Refutation';
+        }
+    } catch (e) {
+        result.innerHTML = '<div class="alert alert-error">Request failed: ' + e.message + '</div>';
+        btn.disabled = false;
+        btn.textContent = 'Submit Refutation';
+    }
+}
+
+function formatTimestamp(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Close modals on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideQsoDqHistoryModal();
+        hideRefuteModal();
+    }
+});
+</script>
 {% endblock %}

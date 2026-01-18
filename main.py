@@ -7,6 +7,8 @@ import logging
 import os
 import re
 import secrets
+import subprocess
+import sys
 from datetime import datetime, timedelta
 from typing import Optional, List
 from contextlib import asynccontextmanager
@@ -56,14 +58,50 @@ limiter = Limiter(key_func=get_rate_limit_key)
 
 # Background task handle
 _sync_task = None
+_sync_process = None
+
+
+def get_sync_script_path():
+    """Get the path to the sync script."""
+    return os.path.join(os.path.dirname(__file__), "scripts", "run_sync.py")
+
+
+async def run_sync_subprocess():
+    """Run sync as a subprocess, completely independent of the event loop."""
+    global _sync_process
+    script_path = get_sync_script_path()
+
+    try:
+        # Use asyncio subprocess to spawn without blocking
+        _sync_process = await asyncio.create_subprocess_exec(
+            sys.executable, script_path,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=os.path.dirname(__file__)
+        )
+        stdout, stderr = await _sync_process.communicate()
+
+        if _sync_process.returncode == 0:
+            logger.info(f"Background sync completed successfully")
+            if stdout:
+                for line in stdout.decode().strip().split('\n')[-5:]:  # Last 5 lines
+                    logger.debug(f"Sync output: {line}")
+        else:
+            logger.error(f"Background sync failed with code {_sync_process.returncode}")
+            if stderr:
+                logger.error(f"Sync stderr: {stderr.decode()}")
+    except Exception as e:
+        logger.exception(f"Failed to run sync subprocess: {e}")
+    finally:
+        _sync_process = None
 
 
 async def background_sync():
-    """Background task that syncs all competitors periodically."""
+    """Background task that syncs all competitors periodically via subprocess."""
     while True:
         await asyncio.sleep(config.SYNC_INTERVAL_SECONDS)
         try:
-            await sync_all_competitors()
+            await run_sync_subprocess()
         except Exception as e:
             # Log error but keep running
             logger.exception(f"Background sync failed: {e}")
@@ -78,7 +116,7 @@ async def lifespan(app: FastAPI):
     seed_example_olympiad()  # Seeds example data on fresh deployments
     backfill_records()  # Backfill records for existing QSOs if needed
 
-    # Sync on wake if it's been more than an hour since the last sync (non-blocking)
+    # Sync on wake if it's been more than an hour since the last sync (non-blocking subprocess)
     async def startup_sync_if_needed():
         try:
             with get_db() as conn:
@@ -93,11 +131,11 @@ async def lifespan(app: FastAPI):
                     hours_since_sync = (datetime.utcnow() - last_sync).total_seconds() / 3600
                     if hours_since_sync >= 1:
                         logger.info(f"Last sync was {hours_since_sync:.1f} hours ago, triggering startup sync")
-                        await sync_all_competitors()
+                        await run_sync_subprocess()
                 else:
                     # No syncs yet, trigger one
                     logger.info("No previous sync found, triggering startup sync")
-                    await sync_all_competitors()
+                    await run_sync_subprocess()
         except Exception as e:
             logger.exception(f"Startup sync check failed: {e}")
 
@@ -113,6 +151,15 @@ async def lifespan(app: FastAPI):
         try:
             await _sync_task
         except asyncio.CancelledError:
+            pass
+    # Terminate any running sync subprocess
+    if _sync_process:
+        try:
+            _sync_process.terminate()
+            await asyncio.wait_for(_sync_process.wait(), timeout=5.0)
+        except asyncio.TimeoutError:
+            _sync_process.kill()
+        except Exception:
             pass
 
 
@@ -694,6 +741,48 @@ class MatchCreate(BaseModel):
         return v
 
 
+class QSODisqualifyRequest(BaseModel):
+    """Request to disqualify a QSO from a sport."""
+    reason: str
+
+    @field_validator('reason')
+    @classmethod
+    def validate_reason(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Reason is required')
+        if len(v.strip()) < 10:
+            raise ValueError('Reason must be at least 10 characters')
+        return v.strip()
+
+
+class QSORefuteRequest(BaseModel):
+    """Request to refute a QSO disqualification."""
+    refutation: str
+
+    @field_validator('refutation')
+    @classmethod
+    def validate_refutation(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Refutation is required')
+        if len(v.strip()) < 10:
+            raise ValueError('Refutation must be at least 10 characters')
+        return v.strip()
+
+
+class QSORequalifyRequest(BaseModel):
+    """Request to requalify a disqualified QSO."""
+    reason: str
+
+    @field_validator('reason')
+    @classmethod
+    def validate_reason(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Reason is required')
+        if len(v.strip()) < 10:
+            raise ValueError('Reason must be at least 10 characters')
+        return v.strip()
+
+
 # Admin authentication dependency
 def verify_admin(request: Request):
     """Verify admin access via key or logged-in admin user."""
@@ -1006,9 +1095,9 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
                 for qso in qsos_by_callsign.get(callsign, []):
                     qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
                     if qso_date and start_date_cmp and end_date_cmp and start_date_cmp <= qso_date <= end_date_cmp:
-                        # Check if QSO matches target
-                        matches_work = matches_target(qso, sport_dict["target_type"], target_value, "work")
-                        matches_activate = matches_target(qso, sport_dict["target_type"], target_value, "activate")
+                        # Check if QSO matches target (respecting sport's enabled modes)
+                        matches_work = sport_dict["work_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "work")
+                        matches_activate = sport_dict["activate_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "activate")
                         if matches_work or matches_activate:
                             matching_qsos.append({
                                 "dx_callsign": qso["dx_callsign"],
@@ -1148,19 +1237,26 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         match_dict = dict(match)
         target_display = format_target_display(match_dict["target_value"], sport["target_type"]) if sport else match_dict["target_value"]
 
+        # Check if current user is referee for this sport
+        is_sport_referee = False
+        if user:
+            is_sport_referee = user.is_admin or (user.is_referee and is_referee_for_sport(user.callsign, sport_id))
+
         # Get confirmed QSOs for each competitor in this match (for expandable rows)
-        # Include all fields needed for target matching
+        # Include all fields needed for target matching, plus disqualification status
         cursor = conn.execute("""
-            SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
+            SELECT q.id, q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                    q.mode, q.tx_power_w, q.distance_km, q.cool_factor, q.is_confirmed,
-                   q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc, q.my_grid
+                   q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc, q.my_grid,
+                   dq.status as dq_status
             FROM qsos q
+            LEFT JOIN qso_disqualifications dq ON q.id = dq.qso_id AND dq.sport_id = ?
             WHERE q.competitor_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
               AND datetime(q.qso_datetime_utc) >= datetime(?)
               AND datetime(q.qso_datetime_utc) <= datetime(?)
               AND q.is_confirmed = 1
             ORDER BY q.qso_datetime_utc ASC
-        """, (match_id, match_dict["start_date"], match_dict["end_date"]))
+        """, (sport_id, match_id, match_dict["start_date"], match_dict["end_date"]))
 
         # Filter QSOs to only those matching the target
         # Use match's target_type override if set, otherwise use sport's target_type
@@ -1194,6 +1290,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
             if callsign not in qso_details:
                 qso_details[callsign] = []
             qso_details[callsign].append({
+                "id": row["id"],  # QSO ID for disqualification actions
                 "dx_callsign": row["dx_callsign"],
                 "time": row["qso_datetime_utc"],
                 "mode": row["mode"],
@@ -1205,6 +1302,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                 "park": row["dx_sig_info"],
                 "my_park": row["my_sig_info"],  # Competitor was activating from this park
                 "my_grid": row["my_grid"],  # Competitor's grid for local time display
+                "dq_status": row["dq_status"],  # Disqualification status
             })
 
         display_prefs = get_display_prefs(user)
@@ -1220,6 +1318,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
             "medals": medals,
             "qso_details": qso_details,
             "display_prefs": display_prefs,
+            "is_sport_referee": is_sport_referee,
         })
 
 
@@ -1470,7 +1569,8 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                 SELECT m.callsign, m.match_id, m.qso_race_medal, m.cool_factor_medal,
                        m.cool_factor_value, m.pota_bonus, m.total_points,
                        ma.target_value, ma.start_date, ma.end_date,
-                       s.id as sport_id, s.name as sport_name, s.target_type
+                       s.id as sport_id, s.name as sport_name, s.target_type,
+                       s.work_enabled, s.activate_enabled
                 FROM medals m
                 JOIN matches ma ON m.match_id = ma.id
                 JOIN sports s ON ma.sport_id = s.id
@@ -1512,13 +1612,15 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                 end_date = row["end_date"][:10] if row["end_date"] else None
                 target_value = row["target_value"]
                 target_type = row["target_type"]
+                work_enabled = row["work_enabled"]
+                activate_enabled = row["activate_enabled"]
 
                 all_matching = []
                 for qso in qsos_by_callsign.get(callsign, []):
                     qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
                     if qso_date and start_date and end_date and start_date <= qso_date <= end_date:
-                        matches_work = matches_target(qso, target_type, target_value, "work")
-                        matches_activate = matches_target(qso, target_type, target_value, "activate")
+                        matches_work = work_enabled and matches_target(qso, target_type, target_value, "work")
+                        matches_activate = activate_enabled and matches_target(qso, target_type, target_value, "activate")
                         if matches_work or matches_activate:
                             all_matching.append(qso)
 
@@ -1671,10 +1773,21 @@ async def get_competitor(
         """, qso_params + [per_page, offset])
         qsos = [dict(row) for row in cursor.fetchall()]
 
-        # Add country names to QSOs
+        # Add country names and disqualification info to QSOs
         for qso in qsos:
             if qso.get("dx_dxcc"):
                 qso["dx_country"] = get_country_name(qso["dx_dxcc"])
+            # Get disqualification info for this QSO (sport-specific)
+            cursor = conn.execute("""
+                SELECT dq.sport_id, s.name as sport_name, dq.status
+                FROM qso_disqualifications dq
+                JOIN sports s ON dq.sport_id = s.id
+                WHERE dq.qso_id = ?
+            """, (qso["id"],))
+            dq_rows = cursor.fetchall()
+            qso["disqualifications"] = [dict(r) for r in dq_rows]
+            qso["has_disqualified"] = any(d["status"] == "disqualified" for d in qso["disqualifications"])
+            qso["has_refuted"] = any(d["status"] == "refuted" for d in qso["disqualifications"])
 
         # Get medals with qualifying QSO info
         # Use subqueries with MIN(id) to avoid cartesian product when multiple QSOs have same timestamp
@@ -1859,26 +1972,34 @@ async def get_competitor(
 async def sync_page(request: Request, callsign: Optional[str] = None):
     """Sync page - shows sync results."""
     if callsign:
+        # Single competitor sync runs inline (smaller operation)
         result = await sync_competitor(callsign)
+        return templates.TemplateResponse("sync.html", {
+            "request": request,
+            "result": result,
+            "callsign": callsign,
+        })
     else:
-        result = await sync_all_competitors()
-
-    return templates.TemplateResponse("sync.html", {
-        "request": request,
-        "result": result,
-        "callsign": callsign,
-    })
+        # Full sync runs as subprocess to avoid blocking
+        asyncio.create_task(run_sync_subprocess())
+        return templates.TemplateResponse("sync.html", {
+            "request": request,
+            "result": {"message": "Full sync started in background"},
+            "callsign": None,
+        })
 
 
 @app.post("/sync")
 async def trigger_sync(callsign: Optional[str] = None):
     """Trigger QRZ sync (API). Syncs single competitor or all if no callsign provided."""
     if callsign:
+        # Single competitor sync runs inline (smaller operation)
         result = await sync_competitor(callsign)
+        return result
     else:
-        result = await sync_all_competitors()
-
-    return result
+        # Full sync runs as subprocess to avoid blocking
+        asyncio.create_task(run_sync_subprocess())
+        return {"message": "Full sync started in background"}
 
 
 class QRZSyncRequest(BaseModel):
@@ -3422,6 +3543,56 @@ async def delete_sport(request: Request, sport_id: int):
     return {"message": "Sport deleted"}
 
 
+@app.post("/admin/sport/{sport_id}/duplicate")
+async def duplicate_sport(sport_id: int, _: bool = Depends(verify_admin)):
+    """Duplicate a Sport and all its Matches."""
+    with get_db() as conn:
+        # Get original sport
+        cursor = conn.execute("SELECT * FROM sports WHERE id = ?", (sport_id,))
+        sport = cursor.fetchone()
+        if not sport:
+            raise HTTPException(status_code=404, detail="Sport not found")
+
+        # Create new sport with " (copy)" appended
+        cursor = conn.execute("""
+            INSERT INTO sports (olympiad_id, name, description, target_type,
+                              work_enabled, activate_enabled, separate_pools, allowed_modes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            sport["olympiad_id"],
+            sport["name"] + " (copy)",
+            sport["description"],
+            sport["target_type"],
+            sport["work_enabled"],
+            sport["activate_enabled"],
+            sport["separate_pools"],
+            sport["allowed_modes"],
+        ))
+        new_sport_id = cursor.lastrowid
+
+        # Get all matches from original sport
+        cursor = conn.execute("SELECT * FROM matches WHERE sport_id = ?", (sport_id,))
+        matches = cursor.fetchall()
+
+        # Duplicate each match
+        for match in matches:
+            conn.execute("""
+                INSERT INTO matches (sport_id, start_date, end_date, target_value, target_type)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                new_sport_id,
+                match["start_date"],
+                match["end_date"],
+                match["target_value"],
+                match["target_type"],
+            ))
+
+    return {
+        "message": f"Sport duplicated with {len(matches)} matches",
+        "new_sport_id": new_sport_id
+    }
+
+
 @app.get("/admin/sport/{sport_id}/matches", response_class=HTMLResponse)
 async def admin_sport_matches(request: Request, sport_id: int):
     """List Matches for a Sport. Admins or assigned referees can view."""
@@ -3632,8 +3803,8 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
             WHERE id = ?
         """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, match_id))
 
-    # Recompute medals for this match (outside connection to avoid lock)
-    recompute_match_medals(match_id)
+    # Recompute medals for this match (run in thread pool to avoid blocking/locks)
+    await asyncio.to_thread(recompute_match_medals, match_id)
 
     return {"message": "Match updated"}
 
@@ -4069,9 +4240,9 @@ async def disqualify_competitor(callsign: str, _: bool = Depends(verify_admin_or
                 )
             """, (callsign, sport_id))
 
-    # Recompute medals for affected matches
+    # Recompute medals for affected matches (run in thread pool to avoid blocking)
     from sync import recompute_all_active_matches
-    recompute_all_active_matches()
+    await asyncio.to_thread(recompute_all_active_matches)
 
     return {"message": f"Competitor {callsign} disqualified from {removed_count} sport(s)"}
 
@@ -4247,11 +4418,9 @@ async def admin_recompute_records(_: bool = Depends(verify_admin)):
     from scoring import recompute_all_records
     from sync import recompute_all_active_matches
 
-    # First recompute medals for all matches
-    recompute_all_active_matches()
-
-    # Then recompute world records
-    recompute_all_records()
+    # Run in thread pool to avoid blocking the event loop
+    await asyncio.to_thread(recompute_all_active_matches)
+    await asyncio.to_thread(recompute_all_records)
 
     return {"message": "Medals and world records recomputed successfully"}
 
@@ -5580,6 +5749,309 @@ async def api_sports(request: Request, olympiad_id: Optional[int] = None):
 
         sports = [dict(row) for row in cursor.fetchall()]
         return {"sports": sports}
+
+
+# ============================================================
+# QSO DISQUALIFICATION ENDPOINTS
+# ============================================================
+
+
+def log_audit(actor_callsign: Optional[str], action: str, target_type: str, target_id: str, details: str, ip_address: Optional[str] = None):
+    """Helper to log an audit entry."""
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details, ip_address)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (datetime.utcnow().isoformat(), actor_callsign, action, target_type, target_id, details, ip_address))
+
+
+@app.post("/referee/sport/{sport_id}/qso/{qso_id}/disqualify")
+@limiter.limit("30/minute")
+async def disqualify_qso(
+    request: Request,
+    sport_id: int,
+    qso_id: int,
+    data: QSODisqualifyRequest
+):
+    """
+    Disqualify a QSO from a specific sport.
+
+    Requires admin access or referee assignment for the sport.
+    The QSO will not count toward medals in this sport until requalified.
+    """
+    verify_admin_or_sport_referee(request, sport_id)
+    user = get_current_user(request)
+    now = datetime.utcnow().isoformat()
+
+    with get_db() as conn:
+        # Verify QSO exists
+        cursor = conn.execute("SELECT competitor_callsign FROM qsos WHERE id = ?", (qso_id,))
+        qso = cursor.fetchone()
+        if not qso:
+            raise HTTPException(status_code=404, detail="QSO not found")
+
+        # Verify sport exists
+        cursor = conn.execute("SELECT name FROM sports WHERE id = ?", (sport_id,))
+        sport = cursor.fetchone()
+        if not sport:
+            raise HTTPException(status_code=404, detail="Sport not found")
+
+        # Check if already disqualified
+        cursor = conn.execute(
+            "SELECT id, status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+            (qso_id, sport_id)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            if existing["status"] == "disqualified":
+                raise HTTPException(status_code=400, detail="QSO is already disqualified for this sport")
+            # Update existing record
+            conn.execute(
+                "UPDATE qso_disqualifications SET status = 'disqualified', updated_at = ? WHERE id = ?",
+                (now, existing["id"])
+            )
+            dq_id = existing["id"]
+        else:
+            # Create new disqualification
+            cursor = conn.execute(
+                "INSERT INTO qso_disqualifications (qso_id, sport_id, status, created_at, updated_at) VALUES (?, ?, 'disqualified', ?, ?)",
+                (qso_id, sport_id, now, now)
+            )
+            dq_id = cursor.lastrowid
+
+        # Add comment
+        conn.execute(
+            "INSERT INTO qso_disqualification_comments (disqualification_id, author_callsign, comment_type, comment, created_at) VALUES (?, ?, 'disqualify', ?, ?)",
+            (dq_id, user.callsign if user else "ADMIN", data.reason, now)
+        )
+
+    # Log audit
+    log_audit(
+        actor_callsign=user.callsign if user else None,
+        action="qso_disqualified",
+        target_type="qso",
+        target_id=str(qso_id),
+        details=f"Sport: {sport['name']}, Reason: {data.reason}",
+        ip_address=request.client.host if request.client else None
+    )
+
+    # Recompute medals for affected matches in this sport (run in thread pool to avoid blocking/locks)
+    with get_db() as conn:
+        cursor = conn.execute("SELECT id FROM matches WHERE sport_id = ?", (sport_id,))
+        match_ids = [row["id"] for row in cursor.fetchall()]
+
+    for match_id in match_ids:
+        await asyncio.to_thread(recompute_match_medals, match_id)
+
+    return {
+        "message": "QSO disqualified",
+        "qso_id": qso_id,
+        "sport_id": sport_id,
+        "competitor": qso["competitor_callsign"]
+    }
+
+
+@app.post("/qso/{qso_id}/sport/{sport_id}/refute")
+@limiter.limit("10/minute")
+async def refute_qso_disqualification(
+    request: Request,
+    qso_id: int,
+    sport_id: int,
+    data: QSORefuteRequest
+):
+    """
+    Submit a refutation for a disqualified QSO.
+
+    Only the QSO owner can refute.
+    The referee must review and decide whether to requalify or maintain the disqualification.
+    """
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Login required")
+
+    now = datetime.utcnow().isoformat()
+
+    with get_db() as conn:
+        # Verify QSO exists and belongs to user
+        cursor = conn.execute("SELECT competitor_callsign FROM qsos WHERE id = ?", (qso_id,))
+        qso = cursor.fetchone()
+        if not qso:
+            raise HTTPException(status_code=404, detail="QSO not found")
+
+        if qso["competitor_callsign"].upper() != user.callsign.upper():
+            raise HTTPException(status_code=403, detail="You can only refute your own QSOs")
+
+        # Check disqualification exists and is in disqualified status
+        cursor = conn.execute(
+            "SELECT id, status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+            (qso_id, sport_id)
+        )
+        dq = cursor.fetchone()
+
+        if not dq:
+            raise HTTPException(status_code=404, detail="No disqualification found for this QSO in this sport")
+
+        if dq["status"] != "disqualified":
+            raise HTTPException(status_code=400, detail=f"QSO is not currently disqualified (status: {dq['status']})")
+
+        # Update status to refuted
+        conn.execute(
+            "UPDATE qso_disqualifications SET status = 'refuted', updated_at = ? WHERE id = ?",
+            (now, dq["id"])
+        )
+
+        # Add refutation comment
+        conn.execute(
+            "INSERT INTO qso_disqualification_comments (disqualification_id, author_callsign, comment_type, comment, created_at) VALUES (?, ?, 'refute', ?, ?)",
+            (dq["id"], user.callsign, data.refutation, now)
+        )
+
+    # Log audit
+    log_audit(
+        actor_callsign=user.callsign,
+        action="qso_refuted",
+        target_type="qso",
+        target_id=str(qso_id),
+        details=f"Sport ID: {sport_id}, Refutation: {data.refutation}",
+        ip_address=request.client.host if request.client else None
+    )
+
+    return {
+        "message": "Refutation submitted",
+        "qso_id": qso_id,
+        "sport_id": sport_id,
+        "status": "refuted"
+    }
+
+
+@app.post("/referee/sport/{sport_id}/qso/{qso_id}/requalify")
+@limiter.limit("30/minute")
+async def requalify_qso(
+    request: Request,
+    sport_id: int,
+    qso_id: int,
+    data: QSORequalifyRequest
+):
+    """
+    Requalify a previously disqualified QSO.
+
+    Requires admin access or referee assignment for the sport.
+    The QSO will count toward medals again in this sport.
+    """
+    verify_admin_or_sport_referee(request, sport_id)
+    user = get_current_user(request)
+    now = datetime.utcnow().isoformat()
+
+    with get_db() as conn:
+        # Verify QSO exists
+        cursor = conn.execute("SELECT competitor_callsign FROM qsos WHERE id = ?", (qso_id,))
+        qso = cursor.fetchone()
+        if not qso:
+            raise HTTPException(status_code=404, detail="QSO not found")
+
+        # Verify sport exists
+        cursor = conn.execute("SELECT name FROM sports WHERE id = ?", (sport_id,))
+        sport = cursor.fetchone()
+        if not sport:
+            raise HTTPException(status_code=404, detail="Sport not found")
+
+        # Check disqualification exists
+        cursor = conn.execute(
+            "SELECT id, status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+            (qso_id, sport_id)
+        )
+        dq = cursor.fetchone()
+
+        if not dq:
+            raise HTTPException(status_code=404, detail="No disqualification found for this QSO in this sport")
+
+        if dq["status"] == "requalified":
+            raise HTTPException(status_code=400, detail="QSO is already requalified")
+
+        # Update status to requalified
+        conn.execute(
+            "UPDATE qso_disqualifications SET status = 'requalified', updated_at = ? WHERE id = ?",
+            (now, dq["id"])
+        )
+
+        # Add requalify comment
+        conn.execute(
+            "INSERT INTO qso_disqualification_comments (disqualification_id, author_callsign, comment_type, comment, created_at) VALUES (?, ?, 'requalify', ?, ?)",
+            (dq["id"], user.callsign if user else "ADMIN", data.reason, now)
+        )
+
+    # Log audit
+    log_audit(
+        actor_callsign=user.callsign if user else None,
+        action="qso_requalified",
+        target_type="qso",
+        target_id=str(qso_id),
+        details=f"Sport: {sport['name']}, Reason: {data.reason}",
+        ip_address=request.client.host if request.client else None
+    )
+
+    # Recompute medals for affected matches in this sport (run in thread pool to avoid blocking/locks)
+    with get_db() as conn:
+        cursor = conn.execute("SELECT id FROM matches WHERE sport_id = ?", (sport_id,))
+        match_ids = [row["id"] for row in cursor.fetchall()]
+
+    for match_id in match_ids:
+        await asyncio.to_thread(recompute_match_medals, match_id)
+
+    return {
+        "message": "QSO requalified",
+        "qso_id": qso_id,
+        "sport_id": sport_id,
+        "competitor": qso["competitor_callsign"]
+    }
+
+
+@app.get("/qso/{qso_id}/disqualifications")
+@limiter.limit("60/minute")
+async def get_qso_disqualifications(request: Request, qso_id: int):
+    """
+    Get disqualification history for a QSO.
+
+    Public endpoint - transparency is important for fair competition.
+    Returns all sports where this QSO has been disqualified/refuted/requalified,
+    along with the full comment history.
+    """
+    with get_db() as conn:
+        # Verify QSO exists
+        cursor = conn.execute("SELECT competitor_callsign, dx_callsign, qso_datetime_utc FROM qsos WHERE id = ?", (qso_id,))
+        qso = cursor.fetchone()
+        if not qso:
+            raise HTTPException(status_code=404, detail="QSO not found")
+
+        # Get all disqualifications for this QSO
+        cursor = conn.execute("""
+            SELECT dq.id, dq.sport_id, s.name as sport_name, dq.status, dq.created_at, dq.updated_at
+            FROM qso_disqualifications dq
+            JOIN sports s ON dq.sport_id = s.id
+            WHERE dq.qso_id = ?
+            ORDER BY dq.created_at DESC
+        """, (qso_id,))
+        disqualifications = [dict(row) for row in cursor.fetchall()]
+
+        # Get comments for each disqualification
+        for dq in disqualifications:
+            cursor = conn.execute("""
+                SELECT author_callsign, comment_type, comment, created_at
+                FROM qso_disqualification_comments
+                WHERE disqualification_id = ?
+                ORDER BY created_at ASC
+            """, (dq["id"],))
+            dq["comments"] = [dict(row) for row in cursor.fetchall()]
+            del dq["id"]  # Remove internal ID from response
+
+    return {
+        "qso_id": qso_id,
+        "competitor_callsign": qso["competitor_callsign"],
+        "dx_callsign": qso["dx_callsign"],
+        "qso_datetime_utc": qso["qso_datetime_utc"],
+        "disqualifications": disqualifications
+    }
 
 
 # ============================================================
