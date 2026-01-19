@@ -12,10 +12,11 @@
 {% endif %}
 
 <div class="card">
-    <p>QSOs with invalid park reference formats have been auto-disqualified. Referees can review and requalify if appropriate.</p>
-    <p><strong>Total flagged QSOs:</strong> {{ total_count }}</p>
+    <p>QSOs with invalid park reference formats have been auto-disqualified. Admins can review and requalify if appropriate.</p>
+    <p><strong>Total flagged QSOs:</strong> {{ total_count }} | <span style="color: #dc3545;">DQ: {{ total_dq }}</span> | <span style="color: #28a745;">RQ: {{ total_rq }}</span></p>
 
     {% if anomalies %}
+    <div class="table-responsive">
     <table>
         <thead>
             <tr>
@@ -25,7 +26,6 @@
                 <th scope="col">MY_SIG_INFO</th>
                 <th scope="col">SIG_INFO</th>
                 <th scope="col">Issue</th>
-                <th scope="col">Status</th>
             </tr>
         </thead>
         <tbody>
@@ -34,24 +34,31 @@
                 <td><a href="/competitor/{{ a.competitor }}">{{ a.competitor }}</a></td>
                 <td>{{ a.dx_call }}</td>
                 <td>{{ a.qso_date | format_date }}</td>
-                <td>{{ a.my_sig_info or '-' }}</td>
-                <td>{{ a.dx_sig_info or '-' }}</td>
+                <td><code>{{ a.my_sig_info or '-' }}</code></td>
+                <td><code>{{ a.dx_sig_info or '-' }}</code></td>
                 <td style="font-size: 0.85em;">{{ a.comment }}</td>
-                <td>
-                    {% if a.status == 'disqualified' %}
-                    <span style="color: #dc3545;">DQ</span>
-                    {% elif a.status == 'refuted' %}
-                    <span style="color: #ffc107;">Refuted</span>
-                    {% elif a.status == 'requalified' %}
-                    <span style="color: #28a745;">Requalified</span>
-                    {% else %}
-                    {{ a.status }}
-                    {% endif %}
+            </tr>
+            <tr class="sports-row">
+                <td colspan="6" style="padding: 8px 12px 12px 24px; background: var(--bg-secondary); border-top: none;">
+                    {% for s in a.sports %}
+                    <span class="sport-status">
+                        {{ s.sport_name }}:
+                        {% if s.status == 'disqualified' %}
+                        <span class="badge badge-dq">DQ</span>
+                        <button type="button" class="btn btn-sm btn-success" onclick="showRqModal({{ a.qso_id }}, {{ s.sport_id }}, '{{ a.dx_call }}', '{{ s.sport_name }}')">RQ</button>
+                        {% elif s.status == 'refuted' %}
+                        <span class="badge badge-refuted">Refuted</span>
+                        {% elif s.status == 'requalified' %}
+                        <span class="badge badge-rq">RQ</span>
+                        {% endif %}
+                    </span>
+                    {% endfor %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
     <p>No park reference anomalies found.</p>
     {% endif %}
@@ -67,4 +74,99 @@
 </div>
 
 <p><a href="/admin">&larr; Back to Admin Dashboard</a></p>
+
+<!-- Requalify Modal -->
+<div id="rq-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h4 style="margin-top: 0;">Requalify QSO</h4>
+        <p style="color: var(--text-secondary); font-size: 0.9em;">
+            QSO with <strong id="rq-dx-call"></strong> in <strong id="rq-sport-name"></strong>
+        </p>
+        <input type="hidden" id="rq-qso-id">
+        <input type="hidden" id="rq-sport-id">
+        <div class="form-group">
+            <label for="rq-reason">Reason (required, min 10 characters)</label>
+            <textarea id="rq-reason" rows="3" placeholder="Explain why this QSO should be requalified..."></textarea>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button type="button" onclick="submitRq()" class="btn btn-success" id="rq-submit-btn">Requalify</button>
+            <button type="button" onclick="hideRqModal()" class="btn btn-secondary">Cancel</button>
+        </div>
+        <div id="rq-result" style="margin-top: 10px;"></div>
+    </div>
+</div>
+
+<style>
+.badge-dq { background: #dc3545; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; }
+.badge-refuted { background: #ffc107; color: black; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; }
+.badge-rq { background: #28a745; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; }
+.sports-row td { font-size: 0.9em; }
+.sport-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 16px;
+    padding: 4px 0;
+}
+.sport-status .btn-sm {
+    padding: 2px 8px;
+    min-height: auto;
+    font-size: 0.75em;
+}
+</style>
+
+<script>
+function showRqModal(qsoId, sportId, dxCall, sportName) {
+    document.getElementById('rq-qso-id').value = qsoId;
+    document.getElementById('rq-sport-id').value = sportId;
+    document.getElementById('rq-dx-call').textContent = dxCall;
+    document.getElementById('rq-sport-name').textContent = sportName;
+    document.getElementById('rq-reason').value = '';
+    document.getElementById('rq-result').innerHTML = '';
+    document.getElementById('rq-modal').classList.add('show');
+    document.getElementById('rq-reason').focus();
+}
+
+function hideRqModal() {
+    document.getElementById('rq-modal').classList.remove('show');
+}
+
+async function submitRq() {
+    const qsoId = document.getElementById('rq-qso-id').value;
+    const sportId = document.getElementById('rq-sport-id').value;
+    const reason = document.getElementById('rq-reason').value.trim();
+    const result = document.getElementById('rq-result');
+    const btn = document.getElementById('rq-submit-btn');
+
+    if (reason.length < 10) {
+        result.innerHTML = '<div class="alert alert-error">Reason must be at least 10 characters.</div>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Requalifying...';
+
+    try {
+        const resp = await fetch('/referee/sport/' + sportId + '/qso/' + qsoId + '/requalify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({ reason: reason })
+        });
+
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">QSO requalified successfully!</div>';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            const data = await resp.json();
+            result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Failed to requalify') + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Requalify';
+    }
+}
+</script>
 {% endblock %}

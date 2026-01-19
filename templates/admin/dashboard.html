@@ -50,6 +50,10 @@
         <div class="value">⚠️</div>
         <div class="label">Park Anomalies</div>
     </a>
+    <div class="stat-box" id="sync-toggle-box" style="cursor: pointer;{% if sync_paused %} background: #fed7d7;{% endif %}" onclick="toggleAutoSync()">
+        <div class="value" id="sync-toggle-icon">{% if sync_paused %}⏸️{% else %}🔄{% endif %}</div>
+        <div class="label" id="sync-toggle-label">{% if sync_paused %}Sync Paused{% else %}Auto-Sync{% endif %}</div>
+    </div>
 </div>
 
 <h3>Olympiads</h3>
@@ -317,6 +321,42 @@ async function sendMatchReminders() {
         showToast(data.message || 'Reminders sent', 'success');
     } catch (err) {
         console.error('Match reminders error:', err);
+        showToast('Error: ' + (err.message || 'Request failed'), 'error');
+    }
+}
+
+async function toggleAutoSync() {
+    try {
+        const resp = await fetch('/admin/toggle-auto-sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        if (!resp.ok) {
+            try {
+                const errData = await resp.json();
+                showToast('Error: ' + (errData.detail || resp.statusText), 'error');
+            } catch {
+                showToast('Error: ' + resp.status + ' ' + resp.statusText, 'error');
+            }
+            return;
+        }
+        const data = await resp.json();
+        const box = document.getElementById('sync-toggle-box');
+        const icon = document.getElementById('sync-toggle-icon');
+        const label = document.getElementById('sync-toggle-label');
+        if (data.paused) {
+            box.style.background = '#fed7d7';
+            icon.textContent = '⏸️';
+            label.textContent = 'Sync Paused';
+        } else {
+            box.style.background = '';
+            icon.textContent = '🔄';
+            label.textContent = 'Auto-Sync';
+        }
+        showToast(data.message, 'success');
+    } catch (err) {
+        console.error('Toggle sync error:', err);
         showToast('Error: ' + (err.message || 'Request failed'), 'error');
     }
 }

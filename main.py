@@ -96,10 +96,34 @@ async def run_sync_subprocess():
         _sync_process = None
 
 
+def is_sync_paused() -> bool:
+    """Check if auto-sync is paused (stored in database)."""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT value FROM settings WHERE key = 'sync_paused'")
+        row = cursor.fetchone()
+        return row is not None and row["value"] == "1"
+
+
+def set_sync_paused(paused: bool) -> None:
+    """Set the auto-sync paused state in database."""
+    from datetime import datetime
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO settings (key, value, updated_at) VALUES ('sync_paused', ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?""",
+            ("1" if paused else "0", datetime.utcnow().isoformat(),
+             "1" if paused else "0", datetime.utcnow().isoformat())
+        )
+        conn.commit()
+
+
 async def background_sync():
     """Background task that syncs all competitors periodically via subprocess."""
     while True:
         await asyncio.sleep(config.SYNC_INTERVAL_SECONDS)
+        if is_sync_paused():
+            logger.info("Auto-sync is paused, skipping")
+            continue
         try:
             await run_sync_subprocess()
         except Exception as e:
@@ -3202,6 +3226,7 @@ async def admin_dashboard(request: Request, _: bool = Depends(verify_admin)):
         "olympiads": olympiads,
         "competitor_count": competitor_count,
         "recent_audit": recent_audit,
+        "sync_paused": is_sync_paused(),
     })
 
 
@@ -3438,7 +3463,7 @@ async def admin_get_park_anomalies(
         """)
         anomalies = [dict(row) for row in cursor.fetchall()]
 
-    # Group by QSO to avoid duplicates (same QSO can be DQ'd from multiple sports)
+    # Group by QSO but keep sport details for RQ action
     qso_map = {}
     for a in anomalies:
         qso_id = a["qso_id"]
@@ -3451,19 +3476,28 @@ async def admin_get_park_anomalies(
                 "my_sig_info": a["my_sig_info"],
                 "dx_sig_info": a["dx_sig_info"],
                 "comment": a["comment"].replace("Auto-flagged: Park reference format anomaly. ", ""),
-                "status": a["status"],
-                "sports": [],
                 "created_at": a["created_at"],
+                "sports": [],  # List of {sport_id, sport_name, status}
             }
-        qso_map[qso_id]["sports"].append(a["sport_name"])
+        qso_map[qso_id]["sports"].append({
+            "sport_id": a["sport_id"],
+            "sport_name": a["sport_name"],
+            "status": a["status"],
+        })
 
     grouped = list(qso_map.values())
+
+    # Count stats
+    total_dq = sum(1 for a in grouped for s in a["sports"] if s["status"] == "disqualified")
+    total_rq = sum(1 for a in grouped for s in a["sports"] if s["status"] == "requalified")
 
     return templates.TemplateResponse("admin/park_anomalies.html", {
         "request": request,
         "user": get_current_user(request),
         "anomalies": grouped,
         "total_count": len(grouped),
+        "total_dq": total_dq,
+        "total_rq": total_rq,
         "checked": checked,
         "found": found,
         "dq": dq,
@@ -4626,6 +4660,23 @@ async def admin_send_match_reminders(_: bool = Depends(verify_admin), hours: int
         return {"message": f"Sent {result['sent']} match reminders, errors {result['errors']}"}
     else:
         return {"message": "No upcoming matches to remind about"}
+
+
+@app.post("/admin/toggle-auto-sync")
+async def admin_toggle_auto_sync(_: bool = Depends(verify_admin)):
+    """Toggle the auto-sync on or off."""
+    current = is_sync_paused()
+    set_sync_paused(not current)
+    new_state = not current
+    status = "paused" if new_state else "running"
+    logger.info(f"Auto-sync toggled to: {status}")
+    return {"paused": new_state, "message": f"Auto-sync is now {status}"}
+
+
+@app.get("/admin/auto-sync-status")
+async def admin_auto_sync_status(_: bool = Depends(verify_admin)):
+    """Get the current auto-sync status."""
+    return {"paused": is_sync_paused()}
 
 
 @app.get("/admin/teams", response_class=HTMLResponse)
