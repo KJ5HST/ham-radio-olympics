@@ -410,9 +410,9 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
             since_date = max(olympiad_start, confirmation_window)
             logger.info(f"Incremental sync for {callsign}: fetching QSOs from {since_date.date()} (most recent QSO: {latest_qso.date()})")
         else:
-            # First sync: start from olympiad start date
-            since_date = olympiad_start
-            logger.info(f"First sync for {callsign}: fetching QSOs from {since_date.date()}")
+            # First sync: pull ALL QSOs to seed the database
+            since_date = None
+            logger.info(f"First sync for {callsign}: fetching all QSOs (no date filter)")
 
     # Fetch QSOs from QRZ with date range
     try:
@@ -557,13 +557,12 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
             confirmation_window = latest_qso - timedelta(days=60)
             # Use the later of olympiad start or confirmation window
             since_date = max(olympiad_start, confirmation_window)
+            start_date_str = since_date.strftime("%Y-%m-%d")
             logger.info(f"Incremental LoTW sync for {callsign}: fetching QSOs from {since_date.date()} (most recent QSO: {latest_qso.date()})")
         else:
-            # First sync: start from olympiad start date
-            since_date = olympiad_start
-            logger.info(f"First LoTW sync for {callsign}: fetching QSOs from {since_date.date()}")
-
-        start_date_str = since_date.strftime("%Y-%m-%d")
+            # First sync: pull ALL QSOs to seed the database
+            start_date_str = None
+            logger.info(f"First LoTW sync for {callsign}: fetching all QSOs (no date filter)")
 
     # Fetch QSOs from LoTW with date range
     try:
