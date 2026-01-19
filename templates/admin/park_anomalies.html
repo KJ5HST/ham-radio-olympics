@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Park Reference Anomalies - Admin{% endblock %}
+
+{% block content %}
+<h2>Park Reference Anomalies</h2>
+
+{% if checked %}
+<div class="card" style="background-color: #d4edda; border-color: #c3e6cb; margin-bottom: 20px;">
+    <p style="margin: 0;"><strong>Check complete:</strong> Found {{ found }} anomalies, disqualified {{ dq }} QSOs.</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <p>QSOs with invalid park reference formats have been auto-disqualified. Referees can review and requalify if appropriate.</p>
+    <p><strong>Total flagged QSOs:</strong> {{ total_count }}</p>
+
+    {% if anomalies %}
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">Competitor</th>
+                <th scope="col">Worked</th>
+                <th scope="col">Date</th>
+                <th scope="col">MY_SIG_INFO</th>
+                <th scope="col">SIG_INFO</th>
+                <th scope="col">Issue</th>
+                <th scope="col">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in anomalies %}
+            <tr>
+                <td><a href="/competitor/{{ a.competitor }}">{{ a.competitor }}</a></td>
+                <td>{{ a.dx_call }}</td>
+                <td>{{ a.qso_date | format_date }}</td>
+                <td>{{ a.my_sig_info or '-' }}</td>
+                <td>{{ a.dx_sig_info or '-' }}</td>
+                <td style="font-size: 0.85em;">{{ a.comment }}</td>
+                <td>
+                    {% if a.status == 'disqualified' %}
+                    <span style="color: #dc3545;">DQ</span>
+                    {% elif a.status == 'refuted' %}
+                    <span style="color: #ffc107;">Refuted</span>
+                    {% elif a.status == 'requalified' %}
+                    <span style="color: #28a745;">Requalified</span>
+                    {% else %}
+                    {{ a.status }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No park reference anomalies found.</p>
+    {% endif %}
+</div>
+
+<div class="card" style="margin-top: 20px;">
+    <h3>Run Anomaly Check</h3>
+    <p>Click below to scan all QSOs and flag any new anomalies.</p>
+    <form method="POST" action="/admin/check-park-anomalies">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn">Run Anomaly Check</button>
+    </form>
+</div>
+
+<p><a href="/admin">&larr; Back to Admin Dashboard</a></p>
+{% endblock %}

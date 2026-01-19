@@ -7,22 +7,149 @@ and competitor-specific reports for use in remote locations without internet.
 The cached olympiad PDF is automatically regenerated when medals or records change.
 """
 
+import io
 import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from fpdf import FPDF
+from PIL import Image, ImageDraw
 
 from database import get_db
 from dxcc import get_country_name, get_continent_name
 
 logger = logging.getLogger(__name__)
 
-# Medal icons (Unicode)
-GOLD_ICON = "\U0001F947"    # 🥇
-SILVER_ICON = "\U0001F948"  # 🥈
-BRONZE_ICON = "\U0001F949"  # 🥉
+# Medal colors (RGB)
+MEDAL_COLORS = {
+    "gold": (255, 215, 0),
+    "silver": (192, 192, 192),
+    "bronze": (205, 127, 50),
+}
+
+# Ribbon colors for each medal
+RIBBON_COLORS = {
+    "gold": (220, 20, 60),      # Crimson red
+    "silver": (70, 130, 180),   # Steel blue
+    "bronze": (34, 139, 34),    # Forest green
+}
+
+# Cache for medal icon bytes
+_medal_icon_cache: Dict[str, bytes] = {}
+
+
+def get_medal_icon(medal_type: str, size: int = 64) -> bytes:
+    """Generate a medal icon as PNG bytes (emoji-style with ribbon).
+
+    Args:
+        medal_type: 'gold', 'silver', or 'bronze'
+        size: Icon size in pixels
+
+    Returns:
+        PNG image bytes
+    """
+    cache_key = f"{medal_type}_{size}"
+    if cache_key in _medal_icon_cache:
+        return _medal_icon_cache[cache_key]
+
+    color = MEDAL_COLORS.get(medal_type, (128, 128, 128))
+    ribbon_color = RIBBON_COLORS.get(medal_type, (128, 128, 128))
+
+    # Create image with transparency
+    img = Image.new("RGBA", (size, size), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(img)
+
+    # Dimensions
+    ribbon_width = size // 3
+    ribbon_top = 0
+    ribbon_bottom = size // 3
+    medal_radius = size // 3
+    medal_center_x = size // 2
+    medal_center_y = size * 2 // 3
+
+    # Draw ribbon (two stripes forming a V)
+    ribbon_dark = tuple(max(0, c - 30) for c in ribbon_color)
+    # Left ribbon stripe
+    draw.polygon([
+        (size // 2 - 2, ribbon_top),
+        (size // 2 - ribbon_width // 2, ribbon_top),
+        (medal_center_x - medal_radius // 2, medal_center_y - medal_radius // 2),
+        (medal_center_x, medal_center_y - medal_radius // 3),
+    ], fill=ribbon_color)
+    # Right ribbon stripe
+    draw.polygon([
+        (size // 2 + 2, ribbon_top),
+        (size // 2 + ribbon_width // 2, ribbon_top),
+        (medal_center_x + medal_radius // 2, medal_center_y - medal_radius // 2),
+        (medal_center_x, medal_center_y - medal_radius // 3),
+    ], fill=ribbon_dark)
+
+    # Draw medal (circle with border and shine)
+    medal_left = medal_center_x - medal_radius
+    medal_top = medal_center_y - medal_radius
+    medal_right = medal_center_x + medal_radius
+    medal_bottom = medal_center_y + medal_radius
+
+    # Outer edge (darker)
+    darker = tuple(max(0, c - 50) for c in color)
+    draw.ellipse([medal_left, medal_top, medal_right, medal_bottom], fill=darker)
+
+    # Main medal body
+    border = size // 16
+    draw.ellipse([
+        medal_left + border, medal_top + border,
+        medal_right - border, medal_bottom - border
+    ], fill=color)
+
+    # Inner circle detail
+    inner_border = size // 8
+    inner_darker = tuple(max(0, c - 25) for c in color)
+    draw.ellipse([
+        medal_left + inner_border, medal_top + inner_border,
+        medal_right - inner_border, medal_bottom - inner_border
+    ], fill=inner_darker, outline=darker, width=1)
+
+    # Highlight (shine effect)
+    lighter = tuple(min(255, c + 80) for c in color)
+    highlight_size = medal_radius // 2
+    highlight_x = medal_center_x - medal_radius // 3
+    highlight_y = medal_center_y - medal_radius // 3
+    draw.ellipse([
+        highlight_x, highlight_y,
+        highlight_x + highlight_size, highlight_y + highlight_size
+    ], fill=lighter)
+
+    # Number in center (1, 2, 3)
+    number = {"gold": "1", "silver": "2", "bronze": "3"}.get(medal_type, "")
+    if number:
+        # Draw number - use a simple approach since we can't guarantee font availability
+        num_color = tuple(max(0, c - 80) for c in color)
+        # Draw a thicker number by drawing multiple offset copies
+        num_size = medal_radius // 2
+        num_x = medal_center_x
+        num_y = medal_center_y + size // 32  # Slight offset down
+
+        # Simple "1", "2", "3" shapes
+        if number == "1":
+            draw.line([(num_x, num_y - num_size//2), (num_x, num_y + num_size//2)], fill=num_color, width=max(2, size//16))
+        elif number == "2":
+            # Simplified 2
+            draw.arc([num_x - num_size//2, num_y - num_size//2, num_x + num_size//2, num_y], 180, 0, fill=num_color, width=max(2, size//16))
+            draw.line([(num_x + num_size//2, num_y), (num_x - num_size//2, num_y + num_size//2)], fill=num_color, width=max(2, size//16))
+            draw.line([(num_x - num_size//2, num_y + num_size//2), (num_x + num_size//2, num_y + num_size//2)], fill=num_color, width=max(2, size//16))
+        elif number == "3":
+            # Simplified 3
+            draw.arc([num_x - num_size//2, num_y - num_size//2, num_x + num_size//2, num_y + num_size//6], 270, 90, fill=num_color, width=max(2, size//16))
+            draw.arc([num_x - num_size//2, num_y - num_size//6, num_x + num_size//2, num_y + num_size//2], 270, 90, fill=num_color, width=max(2, size//16))
+
+    # Convert to bytes
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    icon_bytes = buf.getvalue()
+
+    _medal_icon_cache[cache_key] = icon_bytes
+    return icon_bytes
 
 
 def format_date_us(date_str: str) -> str:
@@ -253,6 +380,248 @@ class OlympicsPDF(FPDF):
 
             for cell, width, align in zip(row, col_widths, col_aligns):
                 self.cell(width, 6, str(cell)[:40], border=1, fill=True, align=align)
+            self.ln()
+
+    def add_podium_table(self, qso_race_medals: Dict[str, Dict], cool_factor_medals: Dict[str, Dict]):
+        """Add podium table with medal icons.
+
+        Args:
+            qso_race_medals: Dict mapping medal type to winner info
+            cool_factor_medals: Dict mapping medal type to winner info
+        """
+        row_height = 7
+        icon_size = 5  # mm
+
+        # Header row
+        self.set_font("Helvetica", "B", 9)
+        self.set_fill_color(200, 200, 200)
+        col_widths = [15, 55, 55]  # Medal icon, QSO Race, Cool Factor
+        headers = ["", "QSO Race", "Cool Factor"]
+        for header, width in zip(headers, col_widths):
+            self.cell(width, row_height, header, border=1, fill=True, align="C")
+        self.ln()
+
+        # Data rows with medal icons
+        self.set_font("Helvetica", "", 9)
+        for i, medal_type in enumerate(["gold", "silver", "bronze"]):
+            if i % 2 == 0:
+                self.set_fill_color(255, 255, 255)
+            else:
+                self.set_fill_color(248, 248, 248)
+
+            # Medal icon cell
+            x_start = self.get_x()
+            y_start = self.get_y()
+            self.cell(col_widths[0], row_height, "", border=1, fill=True)
+
+            # Draw medal icon centered in first cell
+            icon_bytes = get_medal_icon(medal_type)
+            icon_x = x_start + (col_widths[0] - icon_size) / 2
+            icon_y = y_start + (row_height - icon_size) / 2
+            self.image(io.BytesIO(icon_bytes), x=icon_x, y=icon_y, w=icon_size, h=icon_size)
+
+            # QSO Race winner
+            qso = qso_race_medals.get(medal_type, {})
+            qso_call = qso.get("callsign", "-")
+            self.cell(col_widths[1], row_height, qso_call, border=1, fill=True, align="C")
+
+            # Cool Factor winner
+            cf = cool_factor_medals.get(medal_type, {})
+            cf_call = cf.get("callsign", "-")
+            self.cell(col_widths[2], row_height, cf_call, border=1, fill=True, align="C")
+
+            self.ln()
+
+    def _draw_medal_icons_in_cell(self, x: float, y: float, width: float, height: float,
+                                     gold: int, silver: int, bronze: int, icon_size: float = 4):
+        """Draw medal icons within a cell area.
+
+        Args:
+            x, y: Cell top-left position
+            width, height: Cell dimensions
+            gold, silver, bronze: Count of each medal type
+            icon_size: Size of each icon in mm
+        """
+        total_medals = gold + silver + bronze
+        if total_medals == 0:
+            return
+
+        # Calculate spacing - center the medals in the cell
+        spacing = 1  # mm between icons
+        total_width = total_medals * icon_size + (total_medals - 1) * spacing
+        start_x = x + (width - total_width) / 2
+        icon_y = y + (height - icon_size) / 2
+
+        current_x = start_x
+        for medal_type, count in [("gold", gold), ("silver", silver), ("bronze", bronze)]:
+            for _ in range(count):
+                icon_bytes = get_medal_icon(medal_type)
+                self.image(io.BytesIO(icon_bytes), x=current_x, y=icon_y, w=icon_size, h=icon_size)
+                current_x += icon_size + spacing
+
+    def add_standings_table_with_medals(self, standings: List[Dict], show_rank: bool = True):
+        """Add standings table with medal icons.
+
+        Args:
+            standings: List of standing entries with callsign, total_points, medals info
+            show_rank: Whether to show rank column
+        """
+        if not standings:
+            return
+
+        row_height = 6
+        icon_size = 4  # mm
+
+        # Header row
+        self.set_font("Helvetica", "B", 9)
+        self.set_fill_color(200, 200, 200)
+        headers = ["#", "Callsign", "Points", "QSO Race Medals", "Cool Factor Medals"]
+        col_widths = [12, 40, 25, 55, 55]
+        for header, width in zip(headers, col_widths):
+            self.cell(width, 7, header, border=1, fill=True, align="C")
+        self.ln()
+
+        # Data rows
+        self.set_font("Helvetica", "", 9)
+        for i, s in enumerate(standings):
+            rank = i + 1
+            if i % 2 == 0:
+                self.set_fill_color(255, 255, 255)
+            else:
+                self.set_fill_color(248, 248, 248)
+
+            # Rank
+            self.cell(col_widths[0], row_height, str(rank), border=1, fill=True, align="C")
+
+            # Callsign
+            self.cell(col_widths[1], row_height, s["callsign"], border=1, fill=True, align="C")
+
+            # Points
+            self.cell(col_widths[2], row_height, str(s["total_points"]), border=1, fill=True, align="C")
+
+            # QSO Race medals - draw cell then add icons
+            x_race = self.get_x()
+            y_race = self.get_y()
+            self.cell(col_widths[3], row_height, "", border=1, fill=True)
+            self._draw_medal_icons_in_cell(x_race, y_race, col_widths[3], row_height,
+                                           s['gold_count'], s['silver_count'], s['bronze_count'], icon_size)
+
+            # Cool Factor medals - draw cell then add icons
+            x_cf = self.get_x()
+            y_cf = self.get_y()
+            self.cell(col_widths[4], row_height, "", border=1, fill=True)
+            self._draw_medal_icons_in_cell(x_cf, y_cf, col_widths[4], row_height,
+                                           s['cf_gold'], s['cf_silver'], s['cf_bronze'], icon_size)
+
+            self.ln()
+
+    def add_match_standings_table(self, leaderboard: List[Dict]):
+        """Add match standings table with medal icons in Race and CF columns.
+
+        Args:
+            leaderboard: List of entries with callsign, qso_race_medal, cool_factor_medal, etc.
+        """
+        if not leaderboard:
+            return
+
+        row_height = 6
+        icon_size = 4  # mm
+
+        # Header row
+        self.set_font("Helvetica", "B", 9)
+        self.set_fill_color(200, 200, 200)
+        headers = ["#", "Callsign", "Race", "CF", "POTA", "Pts"]
+        col_widths = [15, 45, 25, 25, 25, 25]
+        for header, width in zip(headers, col_widths):
+            self.cell(width, 7, header, border=1, fill=True, align="C")
+        self.ln()
+
+        # Data rows
+        self.set_font("Helvetica", "", 9)
+        for i, entry in enumerate(leaderboard):
+            rank = i + 1
+            if i % 2 == 0:
+                self.set_fill_color(255, 255, 255)
+            else:
+                self.set_fill_color(248, 248, 248)
+
+            # Rank
+            self.cell(col_widths[0], row_height, str(rank), border=1, fill=True, align="C")
+
+            # Callsign
+            self.cell(col_widths[1], row_height, entry["callsign"], border=1, fill=True, align="C")
+
+            # Race medal - draw cell then add icon if applicable
+            x_race = self.get_x()
+            y_race = self.get_y()
+            self.cell(col_widths[2], row_height, "", border=1, fill=True)
+            if entry.get("qso_race_medal"):
+                icon_bytes = get_medal_icon(entry["qso_race_medal"])
+                icon_x = x_race + (col_widths[2] - icon_size) / 2
+                icon_y = y_race + (row_height - icon_size) / 2
+                self.image(io.BytesIO(icon_bytes), x=icon_x, y=icon_y, w=icon_size, h=icon_size)
+
+            # CF medal - draw cell then add icon if applicable
+            x_cf = self.get_x()
+            y_cf = self.get_y()
+            self.cell(col_widths[3], row_height, "", border=1, fill=True)
+            if entry.get("cool_factor_medal"):
+                icon_bytes = get_medal_icon(entry["cool_factor_medal"])
+                icon_x = x_cf + (col_widths[3] - icon_size) / 2
+                icon_y = y_cf + (row_height - icon_size) / 2
+                self.image(io.BytesIO(icon_bytes), x=icon_x, y=icon_y, w=icon_size, h=icon_size)
+
+            # POTA
+            pota = "+1" if entry.get("pota_bonus") else "-"
+            self.cell(col_widths[4], row_height, pota, border=1, fill=True, align="C")
+
+            # Points
+            self.cell(col_widths[5], row_height, str(entry["total_points"]), border=1, fill=True, align="C")
+
+            self.ln()
+
+    def add_matches_table(self, matches: List[Dict], target_type: str, matches_with_qsos: set):
+        """Add matches table with bold targets for matches that have QSOs.
+
+        Args:
+            matches: List of match dicts with target_value, start_date, end_date
+            target_type: The target type for formatting
+            matches_with_qsos: Set of match IDs that have QSOs
+        """
+        if not matches:
+            return
+
+        row_height = 6
+        col_widths = [90, 50, 50]
+
+        # Header row
+        self.set_font("Helvetica", "B", 9)
+        self.set_fill_color(200, 200, 200)
+        for header, width in zip(["Target", "Start", "End"], col_widths):
+            self.cell(width, 7, header, border=1, fill=True, align="C")
+        self.ln()
+
+        # Data rows
+        for i, match in enumerate(matches):
+            if i % 2 == 0:
+                self.set_fill_color(255, 255, 255)
+            else:
+                self.set_fill_color(248, 248, 248)
+
+            has_qsos = match["id"] in matches_with_qsos
+            target_display = format_target(target_type, match["target_value"])
+
+            # Target - bold if has QSOs
+            if has_qsos:
+                self.set_font("Helvetica", "B", 9)
+            else:
+                self.set_font("Helvetica", "", 9)
+            self.cell(col_widths[0], row_height, target_display[:50], border=1, fill=True, align="L")
+
+            # Dates - always normal weight
+            self.set_font("Helvetica", "", 9)
+            self.cell(col_widths[1], row_height, format_date_us(match["start_date"]), border=1, fill=True, align="C")
+            self.cell(col_widths[2], row_height, format_date_us(match["end_date"]), border=1, fill=True, align="C")
             self.ln()
 
     def add_legend(self):
@@ -622,36 +991,35 @@ def build_sport_section(pdf: OlympicsPDF, sport_data: Dict[str, Any], include_qs
         pdf.set_font("Helvetica", "", 10)
     pdf.ln(5)
 
-    # Overall standings
+    # Overall standings with medal icons for top 3
     if sport_data["standings"]:
         pdf.add_subsection_header(f"Overall Standings (Top {len(sport_data['standings'])})")
-        headers = ["Rank", "Callsign", "Points", "QSO Race Medals", "Cool Factor Medals"]
-        rows = []
-        for i, s in enumerate(sport_data["standings"], 1):
-            race_medals = f"{s['gold_count']}G {s['silver_count']}S {s['bronze_count']}B"
-            cf_medals = f"{s['cf_gold']}G {s['cf_silver']}S {s['cf_bronze']}B"
-            rows.append([str(i), s["callsign"], str(s["total_points"]), race_medals, cf_medals])
-        pdf.add_table(headers, rows, [20, 40, 30, 50, 50])
+        pdf.add_standings_table_with_medals(sport_data["standings"])
         pdf.ln(5)
 
-    # Matches table
+    # Pre-fetch match data to determine which have QSOs
+    match_data_cache = {}
+    matches_with_qsos = set()
+    for match in sport_data["matches"]:
+        match_data = get_match_data(match["id"], top_n)
+        match_data_cache[match["id"]] = match_data
+        if match_data and match_data["leaderboard"]:
+            matches_with_qsos.add(match["id"])
+
+    # Matches table with bold targets for those with QSOs
     if sport_data["matches"]:
         pdf.add_subsection_header("Matches")
-        headers = ["Target", "Start", "End"]
-        rows = []
-        for match in sport_data["matches"]:
-            target_display = format_target(sport["target_type"], match["target_value"])
-            rows.append([
-                target_display,
-                format_date_us(match["start_date"]),
-                format_date_us(match["end_date"])
-            ])
-        pdf.add_table(headers, rows, [90, 50, 50], ["L", "C", "C"])
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 4, "Bold targets have QSOs logged.", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(1)
+        pdf.add_matches_table(sport_data["matches"], sport["target_type"], matches_with_qsos)
         pdf.ln(5)
 
     # Match details with leaderboards
     for match in sport_data["matches"]:
-        match_data = get_match_data(match["id"], top_n)
+        match_data = match_data_cache.get(match["id"])
         if match_data and match_data["leaderboard"]:
             build_match_section(pdf, match_data, sport["target_type"])
 
@@ -669,36 +1037,20 @@ def build_match_section(pdf: OlympicsPDF, match_data: Dict[str, Any], target_typ
 
     pdf.add_subsection_header(f"{target_display} ({date_range})")
 
-    # Combined medals table showing QSO Race and Cool Factor winners
+    # Podium table showing QSO Race and Cool Factor winners with medal icons
     qso_medals = match_data.get("qso_race_medals", {})
     cf_medals = match_data.get("cool_factor_medals", {})
 
     if qso_medals or cf_medals:
-        headers = ["Medal", "QSO Race", "Date/Time", "Cool Factor", "km/W"]
-        rows = []
-        for medal_type in ["gold", "silver", "bronze"]:
-            medal_label = medal_type.capitalize()
-            # QSO Race winner
-            qso = qso_medals.get(medal_type, {})
-            qso_call = qso.get("callsign", "-")
-            qso_time = format_datetime_us(qso.get("qso_race_claim_time", "")) if qso else "-"
-            # Cool Factor winner
-            cf = cf_medals.get(medal_type, {})
-            cf_call = cf.get("callsign", "-")
-            cf_val = f"{cf['cool_factor_value']:.1f}" if cf.get("cool_factor_value") else "-"
-            rows.append([medal_label, qso_call, qso_time, cf_call, cf_val])
-        pdf.add_table(headers, rows, [30, 40, 50, 40, 30])
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 6, "Podium", new_x="LMARGIN", new_y="NEXT")
+        pdf.add_podium_table(qso_medals, cf_medals)
         pdf.ln(3)
 
-    # Full leaderboard table
-    headers = ["#", "Callsign", "Race", "CF", "POTA", "Pts"]
-    rows = []
-    for i, entry in enumerate(leaderboard, 1):
-        race = format_medal_icon(entry["qso_race_medal"])
-        cf = format_medal_icon(entry["cool_factor_medal"])
-        pota = "+1" if entry["pota_bonus"] else "-"
-        rows.append([str(i), entry["callsign"], race, cf, pota, str(entry["total_points"])])
-    pdf.add_table(headers, rows, [15, 45, 35, 35, 25, 25])
+    # Standings table with medal icons
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(0, 6, "Standings", new_x="LMARGIN", new_y="NEXT")
+    pdf.add_match_standings_table(leaderboard)
     pdf.ln(5)
 
 

@@ -168,6 +168,11 @@ def parse_qrz_response(text: str) -> Dict[str, str]:
     return result
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     """
     Convert raw ADIF dictionary to QSOData object.
@@ -178,6 +183,13 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
     Returns:
         QSOData object or None if required fields missing
     """
+    # Log raw ADIF fields for debugging park data issues
+    # Look for any field containing 'SIG', 'POTA', 'WWFF', or 'PARK'
+    sig_fields = {k: v for k, v in raw_qso.items()
+                  if any(x in k.upper() for x in ['SIG', 'POTA', 'WWFF', 'PARK'])}
+    if sig_fields:
+        logger.debug(f"QSO {raw_qso.get('CALL')} park-related fields: {sig_fields}")
+
     # Required fields
     call = raw_qso.get("CALL")
     qso_date = raw_qso.get("QSO_DATE")
@@ -234,20 +246,34 @@ def parse_qso_data(raw_qso: Dict[str, str]) -> Optional[QSOData]:
         is_confirmed = True
 
     # Check multiple possible field names for POTA/SIG info
-    # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF
+    # Standard ADIF uses SIG_INFO, but some loggers use POTA_REF or app-specific fields
     # Also check COMMENT field as fallback (some users put park refs there)
     # Normalize all park IDs to standard format (zero-padded to 4 digits)
+    #
+    # Field order priority:
+    # 1. Standard ADIF: MY_SIG_INFO, SIG_INFO
+    # 2. POTA-specific: MY_POTA_REF, POTA_REF
+    # 3. WWFF-specific: MY_WWFF_REF, WWFF_REF
+    # 4. App-specific fields that some loggers use
+    # 5. Comments as fallback
+    # Note: SIG and MY_SIG contain the program name (e.g., "POTA"), not the park reference
+    # The park reference is in SIG_INFO and MY_SIG_INFO
     my_sig_info = (
         _normalize_park_id(raw_qso.get("MY_SIG_INFO")) or
         _normalize_park_id(raw_qso.get("MY_POTA_REF")) or
         _normalize_park_id(raw_qso.get("MY_WWFF_REF")) or
-        _extract_pota_from_comment(raw_qso.get("MY_COMMENT", ""))
+        _normalize_park_id(raw_qso.get("APP_POTA_MYPARKREF")) or  # App-specific
+        _normalize_park_id(raw_qso.get("APP_POTA_REF")) or  # App-specific variant
+        _extract_pota_from_comment(raw_qso.get("MY_COMMENT", "")) or
+        _extract_pota_from_comment(raw_qso.get("NOTES", ""))  # Some loggers use NOTES
     )
     dx_sig_info = (
         _normalize_park_id(raw_qso.get("SIG_INFO")) or
         _normalize_park_id(raw_qso.get("POTA_REF")) or
         _normalize_park_id(raw_qso.get("WWFF_REF")) or
-        _extract_pota_from_comment(raw_qso.get("COMMENT", ""))
+        _normalize_park_id(raw_qso.get("APP_POTA_PARKREF")) or  # App-specific
+        _extract_pota_from_comment(raw_qso.get("COMMENT", "")) or
+        _extract_pota_from_comment(raw_qso.get("QSO_NOTES", ""))  # Some loggers use QSO_NOTES
     )
 
     return QSOData(

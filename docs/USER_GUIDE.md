@@ -89,6 +89,18 @@ Ham Radio Olympics automatically pulls your QSO data from QRZ.com and/or LoTW. T
 
 The system will fetch all QSOs from your connected services and match them against active matches in the current Olympiad.
 
+### World Radio League (WRL) Users - IMPORTANT
+
+> **WARNING:** Do NOT use the direct WRL → QRZ integration. There is a bug that strips POTA data (SIG/SIG_INFO fields) during the automatic sync, causing your park hunts and activations to not be credited.
+
+**Correct workflow for WRL users:**
+
+1. **In WRL:** Export your log to an ADIF file (File → Export → ADIF)
+2. **In QRZ:** Import that ADIF file manually (My Logbook → Import → Choose File)
+3. **In Ham Radio Olympics:** Click "Sync to QRZ" from your Dashboard
+
+This manual export/import process preserves all POTA park references (MY_SIG_INFO for activations, SIG_INFO for hunts) and ensures your contacts are properly credited for competitions.
+
 ### Your Dashboard
 
 After logging in, your **Dashboard** is your home base, displaying:

@@ -2,6 +2,17 @@
 
 Amateur radio competition server with LoTW and QRZ Logbook integration. Designed for clubs to do a variety of competitions ("matches") for a multitude of interests ("sports" like POTA) throughout a season (aka "Olympiad"). The activities are pretty flexible, but at this point scoring is pretty static and has some room for improvement, but it's a start.
 
+## Important Note for World Radio League (WRL) Users
+
+> **WARNING:** Do NOT use the direct WRL → QRZ integration. There is a bug that strips POTA data (SIG/SIG_INFO fields) during the automatic sync.
+
+**Correct workflow:**
+1. Export ADIF from WRL manually
+2. Import the ADIF file into QRZ manually
+3. Then sync from Ham Radio Olympics
+
+See the [User Guide](USER_GUIDE.md) for details.
+
 ## Features
 
 - **Olympiad/Sport/Match Hierarchy** - Like real Olympics

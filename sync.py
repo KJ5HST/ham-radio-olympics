@@ -5,8 +5,9 @@ Sync logic for fetching QSOs from QRZ and updating scores.
 import binascii
 import httpx
 import logging
+import re
 from datetime import datetime, timedelta
-from typing import Optional, Set, List
+from typing import Optional, Set, List, Tuple, Dict
 
 from cryptography.fernet import InvalidToken
 from database import get_db
@@ -18,6 +19,178 @@ from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
 from scoring import recompute_match_medals, compute_team_standings
 from dxcc import get_continent_from_callsign
+
+
+# Valid POTA park reference pattern: XX-NNNN or X-NNNN (country code, dash, 4+ digits with leading zeros)
+VALID_PARK_PATTERN = re.compile(r'^[A-Z]{1,2}-\d{4,}$')
+
+
+def detect_park_anomaly(park_ref: str) -> Optional[str]:
+    """
+    Detect anomalies in a park reference format.
+
+    Valid format: XX-NNNN (e.g., US-0001, K-0001, VE-0123)
+    Multiple parks are allowed (comma-separated).
+
+    Returns:
+        Anomaly description if found, None if valid format
+    """
+    if not park_ref:
+        return None
+
+    park_ref = park_ref.strip()
+
+    # Handle multiple parks (comma-separated) - check each one
+    if ',' in park_ref:
+        parks = [p.strip() for p in park_ref.split(',')]
+        anomalies = []
+        for park in parks:
+            anomaly = detect_park_anomaly(park)
+            if anomaly:
+                anomalies.append(anomaly)
+        if anomalies:
+            return "; ".join(anomalies)
+        return None  # All parks valid
+
+    # Check valid format first
+    if VALID_PARK_PATTERN.match(park_ref):
+        return None  # Valid format
+
+    # Detect specific anomalies
+
+    # Just a number (missing country prefix entirely)
+    if park_ref.isdigit():
+        return f"Missing country prefix: '{park_ref}' (expected format: XX-{park_ref.zfill(4)})"
+
+    # Has country code but missing dash (e.g., "US0001")
+    match = re.match(r'^([A-Z]{1,2})(\d+)$', park_ref)
+    if match:
+        country, number = match.groups()
+        return f"Missing dash in park reference: '{park_ref}' (expected: {country}-{number.zfill(4)})"
+
+    # Has dash but number not zero-padded properly or too short
+    match = re.match(r'^([A-Z]{1,2})-(\d{1,3})$', park_ref)
+    if match:
+        country, number = match.groups()
+        return f"Park number needs leading zeros: '{park_ref}' (expected: {country}-{number.zfill(4)})"
+
+    # Other invalid format
+    return f"Invalid park reference format: '{park_ref}' (expected format: XX-NNNN)"
+
+
+def auto_disqualify_qso(qso_id: int, sport_id: int, reason: str) -> bool:
+    """
+    Automatically disqualify a QSO for a sport with system-generated reason.
+
+    Args:
+        qso_id: The QSO ID to disqualify
+        sport_id: The sport ID to disqualify from
+        reason: The reason for disqualification
+
+    Returns:
+        True if disqualified, False if already disqualified or error
+    """
+    now = datetime.utcnow().isoformat()
+
+    with get_db() as conn:
+        # Check if already disqualified
+        cursor = conn.execute(
+            "SELECT id, status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+            (qso_id, sport_id)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            if existing["status"] == "disqualified":
+                return False  # Already disqualified
+            # Update existing record back to disqualified
+            conn.execute(
+                "UPDATE qso_disqualifications SET status = 'disqualified', updated_at = ? WHERE id = ?",
+                (now, existing["id"])
+            )
+            dq_id = existing["id"]
+        else:
+            # Create new disqualification
+            cursor = conn.execute(
+                "INSERT INTO qso_disqualifications (qso_id, sport_id, status, created_at, updated_at) VALUES (?, ?, 'disqualified', ?, ?)",
+                (qso_id, sport_id, now, now)
+            )
+            dq_id = cursor.lastrowid
+
+        # Add comment
+        conn.execute(
+            "INSERT INTO qso_disqualification_comments (disqualification_id, author_callsign, comment_type, comment, created_at) VALUES (?, ?, 'disqualify', ?, ?)",
+            (dq_id, "SYSTEM", reason, now)
+        )
+        conn.commit()
+
+    return True
+
+
+def check_and_disqualify_park_anomalies() -> Dict[str, int]:
+    """
+    Check all QSOs for park reference anomalies and auto-disqualify them.
+
+    Returns:
+        Dict with counts of anomalies found and QSOs disqualified
+    """
+    stats = {
+        "anomalies_found": 0,
+        "qsos_disqualified": 0,
+        "already_disqualified": 0,
+    }
+
+    # Get all sports that use park/pota target types (these are the ones affected by park anomalies)
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT id, name FROM sports WHERE target_type IN ('park', 'pota')"
+        )
+        park_sports = [dict(row) for row in cursor.fetchall()]
+
+        if not park_sports:
+            logger.info("No park/pota sports found, skipping anomaly check")
+            return stats
+
+        # Find all QSOs with park references that have anomalies
+        cursor = conn.execute("""
+            SELECT id, competitor_callsign, dx_callsign, my_sig_info, dx_sig_info, qso_datetime_utc
+            FROM qsos
+            WHERE (my_sig_info IS NOT NULL AND my_sig_info != '')
+               OR (dx_sig_info IS NOT NULL AND dx_sig_info != '')
+        """)
+        qsos_with_parks = cursor.fetchall()
+
+    for qso in qsos_with_parks:
+        anomalies = []
+
+        # Check my_sig_info (activator's park)
+        if qso["my_sig_info"]:
+            anomaly = detect_park_anomaly(qso["my_sig_info"])
+            if anomaly:
+                anomalies.append(f"MY_SIG_INFO: {anomaly}")
+
+        # Check dx_sig_info (worked station's park)
+        if qso["dx_sig_info"]:
+            anomaly = detect_park_anomaly(qso["dx_sig_info"])
+            if anomaly:
+                anomalies.append(f"SIG_INFO: {anomaly}")
+
+        if anomalies:
+            stats["anomalies_found"] += 1
+            reason = "Auto-flagged: Park reference format anomaly. " + "; ".join(anomalies)
+
+            # Disqualify from all park/pota sports
+            for sport in park_sports:
+                if auto_disqualify_qso(qso["id"], sport["id"], reason):
+                    stats["qsos_disqualified"] += 1
+                    logger.info(
+                        f"Auto-disqualified QSO {qso['id']} ({qso['competitor_callsign']} -> {qso['dx_callsign']}) "
+                        f"from sport '{sport['name']}': {reason}"
+                    )
+                else:
+                    stats["already_disqualified"] += 1
+
+    return stats
 
 
 async def validate_park_ids(park_ids: Set[str]) -> Set[str]:
@@ -701,6 +874,15 @@ async def sync_all_competitors() -> dict:
 
 def recompute_all_active_matches():
     """Recompute medals for all matches in the active Olympiad."""
+    # First, check for and auto-disqualify QSOs with park reference anomalies
+    anomaly_stats = check_and_disqualify_park_anomalies()
+    if anomaly_stats["anomalies_found"] > 0:
+        logger.info(
+            f"Park anomaly check: {anomaly_stats['anomalies_found']} anomalies found, "
+            f"{anomaly_stats['qsos_disqualified']} QSOs disqualified, "
+            f"{anomaly_stats['already_disqualified']} already disqualified"
+        )
+
     with get_db() as conn:
         # Get all matches and sports in active Olympiad
         cursor = conn.execute("""

@@ -17,6 +17,19 @@ from dxcc import get_continent, get_continent_from_callsign
 from grid_distance import grid_distance
 
 
+def parse_parks(sig_info: str) -> List[str]:
+    """
+    Parse park references from a SIG_INFO field.
+
+    Handles comma-separated multiple parks (e.g., "US-0756,US-4568").
+    Returns list of uppercase, stripped park references.
+    """
+    if not sig_info:
+        return []
+    parks = [p.strip().upper() for p in sig_info.split(',')]
+    return [p for p in parks if p]  # Filter out empty strings
+
+
 @dataclass
 class MatchingQSO:
     """A QSO that matches a specific Match target."""
@@ -156,12 +169,13 @@ def matches_target(
             return str(qso.get("my_dxcc", "")) == target_value
 
     elif target_type == "park":
+        # Parse multiple parks (comma-separated) and check if any match target
         if mode == "work":
-            sig_info = (qso.get("dx_sig_info") or "").upper().strip()
-            return sig_info == target_value
+            parks = parse_parks(qso.get("dx_sig_info") or "")
+            return target_value in parks
         else:
-            sig_info = (qso.get("my_sig_info") or "").upper().strip()
-            return sig_info == target_value
+            parks = parse_parks(qso.get("my_sig_info") or "")
+            return target_value in parks
 
     elif target_type == "call":
         if mode == "work":
@@ -303,19 +317,21 @@ def get_matching_qsos(
         valid_activation_days = set()  # (callsign, park, date) tuples
         if activate_enabled and target_type in ("park", "pota"):
             # Count QSOs per (callsign, park, date)
+            # Handle multiple parks per QSO - each park counted separately
             activation_counts: Dict[Tuple[str, str, str], int] = {}
             for qso in all_qsos:
-                park = (qso.get("my_sig_info") or "").upper().strip()
-                if not park:
+                parks = parse_parks(qso.get("my_sig_info") or "")
+                if not parks:
                     continue  # No park info
-                # For 'park' target: must match specific park
-                # For 'pota' target: any park counts
-                if target_type == "park" and park != target_value.upper().strip():
-                    continue
                 callsign = qso["competitor_callsign"]
                 qso_date = qso["qso_datetime_utc"][:10]  # UTC date
-                key = (callsign, park, qso_date)
-                activation_counts[key] = activation_counts.get(key, 0) + 1
+                for park in parks:
+                    # For 'park' target: must match specific park
+                    # For 'pota' target: any park counts
+                    if target_type == "park" and park != target_value.upper().strip():
+                        continue
+                    key = (callsign, park, qso_date)
+                    activation_counts[key] = activation_counts.get(key, 0) + 1
 
             # Only days with 10+ QSOs count as valid activations
             for key, count in activation_counts.items():
@@ -358,10 +374,16 @@ def get_matching_qsos(
                 if valid and matches_target(qso, target_type, target_value, "activate"):
                     # For park/pota activations, require 10+ QSOs on that day from that park
                     if target_type in ("park", "pota"):
-                        park = (qso.get("my_sig_info") or "").upper().strip()
+                        parks = parse_parks(qso.get("my_sig_info") or "")
                         qso_date = qso["qso_datetime_utc"][:10]
-                        if (qso["competitor_callsign"], park, qso_date) not in valid_activation_days:
-                            continue  # Skip - not a valid activation day
+                        callsign = qso["competitor_callsign"]
+                        # Check if ANY of the parks has a valid activation day
+                        has_valid_activation = any(
+                            (callsign, park, qso_date) in valid_activation_days
+                            for park in parks
+                        )
+                        if not has_valid_activation:
+                            continue  # Skip - not a valid activation day for any park
 
                     role = "activate" if separate_pools else "combined"
                     has_pota = bool(qso.get("my_sig_info"))

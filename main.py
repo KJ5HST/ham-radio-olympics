@@ -3402,6 +3402,168 @@ async def create_olympiad(olympiad: OlympiadCreate, _: bool = Depends(verify_adm
         return {"id": cursor.lastrowid, "message": "Olympiad created"}
 
 
+@app.post("/admin/check-park-anomalies")
+async def admin_check_park_anomalies(request: Request, _: bool = Depends(verify_admin)):
+    """Run park anomaly check and redirect back with results."""
+    from sync import check_and_disqualify_park_anomalies
+    from starlette.responses import RedirectResponse
+    stats = check_and_disqualify_park_anomalies()
+    # Store results in a flash message or just redirect
+    return RedirectResponse(
+        url=f"/admin/park-anomalies?checked=1&found={stats['anomalies_found']}&dq={stats['qsos_disqualified']}",
+        status_code=303
+    )
+
+
+@app.get("/admin/park-anomalies")
+async def admin_get_park_anomalies(
+    request: Request,
+    checked: int = 0,
+    found: int = 0,
+    dq: int = 0,
+    _: bool = Depends(verify_admin)
+):
+    """View all QSOs with park reference anomalies (already disqualified by SYSTEM)."""
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT c.comment, c.created_at, d.qso_id, d.sport_id, d.status,
+                   q.competitor_callsign, q.dx_callsign, q.my_sig_info, q.dx_sig_info, q.qso_datetime_utc,
+                   s.name as sport_name
+            FROM qso_disqualification_comments c
+            JOIN qso_disqualifications d ON c.disqualification_id = d.id
+            JOIN qsos q ON d.qso_id = q.id
+            JOIN sports s ON d.sport_id = s.id
+            WHERE c.author_callsign = 'SYSTEM'
+            ORDER BY c.created_at DESC
+        """)
+        anomalies = [dict(row) for row in cursor.fetchall()]
+
+    # Group by QSO to avoid duplicates (same QSO can be DQ'd from multiple sports)
+    qso_map = {}
+    for a in anomalies:
+        qso_id = a["qso_id"]
+        if qso_id not in qso_map:
+            qso_map[qso_id] = {
+                "qso_id": qso_id,
+                "competitor": a["competitor_callsign"],
+                "dx_call": a["dx_callsign"],
+                "qso_date": a["qso_datetime_utc"][:10] if a["qso_datetime_utc"] else "",
+                "my_sig_info": a["my_sig_info"],
+                "dx_sig_info": a["dx_sig_info"],
+                "comment": a["comment"].replace("Auto-flagged: Park reference format anomaly. ", ""),
+                "status": a["status"],
+                "sports": [],
+                "created_at": a["created_at"],
+            }
+        qso_map[qso_id]["sports"].append(a["sport_name"])
+
+    grouped = list(qso_map.values())
+
+    return templates.TemplateResponse("admin/park_anomalies.html", {
+        "request": request,
+        "user": get_current_user(request),
+        "anomalies": grouped,
+        "total_count": len(grouped),
+        "checked": checked,
+        "found": found,
+        "dq": dq,
+    })
+
+
+@app.get("/admin/qrz-debug/{callsign}")
+async def admin_qrz_debug(callsign: str, _: bool = Depends(verify_admin)):
+    """
+    Debug endpoint to see raw ADIF fields from QRZ for a competitor.
+    Useful for diagnosing why park IDs might not be coming through.
+    """
+    from crypto import decrypt_api_key
+    from qrz_client import fetch_qsos, parse_qrz_response, parse_adif, QRZAPIError
+    import httpx
+    import binascii
+    from cryptography.fernet import InvalidToken
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            "SELECT qrz_api_key_encrypted FROM competitors WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        competitor = cursor.fetchone()
+
+        if not competitor:
+            raise HTTPException(status_code=404, detail=f"Competitor {callsign} not found")
+
+        if not competitor["qrz_api_key_encrypted"]:
+            raise HTTPException(status_code=400, detail="QRZ API key not configured for this competitor")
+
+        try:
+            api_key = decrypt_api_key(competitor["qrz_api_key_encrypted"])
+        except (InvalidToken, binascii.Error, ValueError) as e:
+            raise HTTPException(status_code=500, detail=f"Failed to decrypt API key: {e}")
+
+    # Fetch raw ADIF from QRZ (just first page, up to 50 recent QSOs)
+    async with httpx.AsyncClient() as client:
+        data = {
+            "KEY": api_key,
+            "ACTION": "FETCH",
+            "OPTION": "TYPE:ADIF,MAX:50",
+        }
+
+        try:
+            response = await client.post(
+                "https://logbook.qrz.com/api",
+                data=data,
+                headers={"User-Agent": "HamRadioOlympics/1.0"},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"QRZ API error: {e}")
+
+        result = parse_qrz_response(response.text)
+
+        if result.get("RESULT") == "AUTH":
+            raise HTTPException(status_code=401, detail="QRZ authentication failed")
+
+        if result.get("RESULT") == "FAIL":
+            reason = result.get("REASON", "Unknown error")
+            raise HTTPException(status_code=400, detail=f"QRZ error: {reason}")
+
+        adif_data = result.get("ADIF", "")
+        if not adif_data:
+            return {"message": "No QSOs found", "qsos": []}
+
+        raw_qsos = parse_adif(adif_data)
+
+    # Return simplified view of each QSO's raw ADIF fields
+    # Highlight park-related fields
+    debug_qsos = []
+    park_keywords = ['SIG', 'POTA', 'WWFF', 'PARK', 'NOTES', 'COMMENT']
+
+    for raw_qso in raw_qsos[:20]:  # Limit to 20 most recent
+        # Categorize fields
+        park_fields = {k: v for k, v in raw_qso.items()
+                       if any(kw in k.upper() for kw in park_keywords)}
+        key_fields = {
+            "CALL": raw_qso.get("CALL"),
+            "QSO_DATE": raw_qso.get("QSO_DATE"),
+            "TIME_ON": raw_qso.get("TIME_ON"),
+            "BAND": raw_qso.get("BAND"),
+            "MODE": raw_qso.get("MODE"),
+        }
+        debug_qsos.append({
+            "key_fields": key_fields,
+            "park_fields": park_fields,
+            "all_fields": list(raw_qso.keys()),
+        })
+
+    return {
+        "callsign": callsign.upper(),
+        "qso_count": len(raw_qsos),
+        "qsos": debug_qsos,
+        "note": "park_fields shows fields containing SIG, POTA, WWFF, PARK, NOTES, or COMMENT"
+    }
+
+
 @app.get("/admin/olympiad/{olympiad_id}")
 async def get_olympiad_admin(olympiad_id: int, _: bool = Depends(verify_admin)):
     """Get Olympiad for editing."""
