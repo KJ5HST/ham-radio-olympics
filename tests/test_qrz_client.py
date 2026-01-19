@@ -471,7 +471,55 @@ class TestFetchQSOs:
         assert len(result) == 1
         assert result[0].dx_callsign == "W1ABC"
 
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_fetch_qsos_with_date_range(self):
+        """Test fetch_qsos with date range filtering."""
+        from datetime import datetime
+        adif_data = "<CALL:5>W1ABC<QSO_DATE:8>20260115<TIME_ON:4>1400<APP_QRZLOG_LOGID:3>100<EOR>"
 
+        # Capture the request to verify BETWEEN option
+        route = respx.post(QRZ_API_URL).mock(side_effect=[
+            httpx.Response(200, text=f"RESULT=OK&ADIF={adif_data}"),
+            httpx.Response(200, text="RESULT=FAIL&REASON=no result"),
+        ])
+
+        since_date = datetime(2026, 1, 1)
+        until_date = datetime(2026, 1, 31)
+        result = await fetch_qsos("test-api-key", since_date=since_date, until_date=until_date)
+
+        # Verify the BETWEEN option was included in the request
+        assert len(route.calls) >= 1
+        request_body = route.calls[0].request.content.decode()
+        assert "BETWEEN" in request_body
+        assert "20260101" in request_body  # since_date
+        assert "20260131" in request_body  # until_date
+
+        assert len(result) == 1
+        assert result[0].dx_callsign == "W1ABC"
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_fetch_qsos_with_only_since_date(self):
+        """Test fetch_qsos with only since_date (until defaults to far future)."""
+        from datetime import datetime
+        adif_data = "<CALL:5>K2DEF<QSO_DATE:8>20260115<TIME_ON:4>1400<APP_QRZLOG_LOGID:3>100<EOR>"
+
+        route = respx.post(QRZ_API_URL).mock(side_effect=[
+            httpx.Response(200, text=f"RESULT=OK&ADIF={adif_data}"),
+            httpx.Response(200, text="RESULT=FAIL&REASON=no result"),
+        ])
+
+        since_date = datetime(2026, 1, 1)
+        result = await fetch_qsos("test-api-key", since_date=since_date)
+
+        # Verify the BETWEEN option was included
+        request_body = route.calls[0].request.content.decode()
+        assert "BETWEEN" in request_body
+        assert "20260101" in request_body  # since_date
+        assert "20991231" in request_body  # default until_date
+
+        assert len(result) == 1
 
 
 

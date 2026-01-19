@@ -2,48 +2,91 @@
 
 **A Competition Platform for Amateur Radio Operators**
 
-Version 1.1 - January 2026
+*Version 1.2 — January 2026*
 
 ---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Getting Started](#getting-started)
-3. [Competing](#competing)
-4. [Scoring & Medals](#scoring--medals)
-5. [Teams](#teams)
-6. [Records & Personal Bests](#records--personal-bests)
-7. [Settings & Preferences](#settings--preferences)
-8. [Referee Guide](#referee-guide)
-9. [Administrator Guide](#administrator-guide)
-10. [Glossary](#glossary)
+1. [Introduction](#1-introduction)
+   - [What is Ham Radio Olympics?](#11-what-is-ham-radio-olympics)
+   - [Key Concepts](#12-key-concepts)
+   - [Competition Modes](#13-competition-modes)
+2. [Getting Started (Competitors)](#2-getting-started-competitors)
+   - [Registration](#21-registration)
+   - [Syncing Your QSOs](#22-syncing-your-qsos)
+   - [Your Dashboard and Profile](#23-your-dashboard-and-profile)
+3. [Competing](#3-competing)
+   - [Finding Active Competitions](#31-finding-active-competitions)
+   - [Target Types](#32-target-types)
+   - [Match Events](#33-match-events)
+   - [QRP Competitions](#34-qrp-competitions)
+4. [Scoring & Medals](#4-scoring--medals)
+   - [Medal Point Values](#41-medal-point-values)
+   - [POTA Bonuses](#42-pota-bonuses)
+   - [Scoring Examples](#43-scoring-examples)
+   - [Maximum Points Per Match](#44-maximum-points-per-match)
+   - [Qualification Requirements](#45-qualification-requirements)
+5. [Teams](#5-teams)
+   - [Team Competition](#51-team-competition)
+   - [Creating a Team](#52-creating-a-team)
+   - [Joining a Team](#53-joining-a-team)
+   - [Captain Responsibilities](#54-captain-responsibilities)
+   - [Leaving a Team](#55-leaving-a-team)
+6. [Records & Personal Bests](#6-records--personal-bests)
+   - [World Records](#61-world-records)
+   - [Personal Bests](#62-personal-bests)
+   - [Medal Standings](#63-medal-standings)
+7. [Settings & Preferences](#7-settings--preferences)
+   - [Account Settings](#71-account-settings)
+   - [Display Preferences](#72-display-preferences)
+   - [Email Notifications](#73-email-notifications)
+   - [Dark Mode](#74-dark-mode)
+8. [Referee Guide](#8-referee-guide)
+   - [Referee Role Overview](#81-referee-role-overview)
+   - [Accessing the Referee Dashboard](#82-accessing-the-referee-dashboard)
+   - [Managing Matches](#83-managing-matches)
+9. [Administrator Guide](#9-administrator-guide)
+   - [Admin Authentication](#91-admin-authentication)
+   - [Creating an Olympiad](#92-creating-an-olympiad)
+   - [Creating Sports](#93-creating-sports)
+   - [Creating Matches](#94-creating-matches)
+   - [Managing Competitors](#95-managing-competitors)
+   - [Managing Teams](#96-managing-teams)
+   - [Site Settings](#97-site-settings)
+10. [Deployment & Configuration](#10-deployment--configuration)
+    - [Environment Variables](#101-environment-variables)
+    - [Local Development](#102-local-development)
+    - [Fly.io Deployment](#103-flyio-deployment)
+    - [Running Tests](#104-running-tests)
+- [Appendix A: API Reference](#appendix-a-api-reference)
+- [Appendix B: Glossary](#appendix-b-glossary)
 
 ---
 
-## Introduction
+## 1. Introduction
 
-### What is Ham Radio Olympics?
+### 1.1 What is Ham Radio Olympics?
 
 Ham Radio Olympics is a web-based competition platform designed for amateur radio clubs to organize and track radio contests throughout a season. Think of it like the actual Olympics: your club runs an "Olympiad" (a competition season), which contains multiple "Sports" (categories of competition like POTA activations or DX hunting), each with individual "Matches" (specific timed events).
 
 The platform integrates directly with QRZ.com and Logbook of The World (LoTW) to automatically sync your QSO logs, calculate scores, and award medals based on both speed (who made the first qualifying contact) and efficiency (best power-to-distance ratio).
 
-### Key Concepts
+### 1.2 Key Concepts
 
-**The Olympic Hierarchy**
+#### The Olympic Hierarchy
 
 - **Olympiad:** The overall competition season (e.g., "2026 Ham Radio Olympics"). Spans a defined date range, typically a calendar year.
 - **Sport:** A category of competition within the Olympiad (e.g., "POTA Challenge," "DX Hunt," "Grid Square Marathon"). Each sport has its own rules for what counts as a qualifying contact.
 - **Match:** A specific timed event within a sport. For example, a monthly POTA match might target K-1234, while the next month targets K-5678.
 
-**User Roles**
+#### User Roles
 
 - **Competitor:** Any registered amateur radio operator participating in competitions. Can view standings, sync QSOs, join teams, and track personal records.
 - **Referee:** A competitor with elevated privileges for specific sports. Can manage matches and view detailed competitor information within their assigned sport(s).
 - **Administrator:** Full system access. Can create Olympiads, Sports, and Matches; manage all competitors and teams; and grant referee roles.
 
-### Competition Modes
+### 1.3 Competition Modes
 
 Each sport can enable one or both competition modes:
 
@@ -54,13 +97,13 @@ Sports can award medals to hunters and activators in either combined pools (ever
 
 ---
 
-## Getting Started
+## 2. Getting Started (Competitors)
 
-### Registration
+### 2.1 Registration
 
 To participate in Ham Radio Olympics, you need to register with your callsign and connect at least one logging service (QRZ.com or LoTW).
 
-**Step-by-Step Registration:**
+#### Step-by-Step Registration
 
 1. Navigate to the Ham Radio Olympics website
 2. Click the "Sign Up" button on the landing page
@@ -70,26 +113,28 @@ To participate in Ham Radio Olympics, you need to register with your callsign an
 6. Optionally provide an email address for notifications and password recovery
 7. Submit your registration
 
-**Getting Your QRZ.com API Key:**
+#### Getting Your QRZ.com API Key
 
 1. Log in to QRZ.com
 2. Navigate to My Logbook > Settings > API tab (requires QRZ XML subscription)
 3. Generate or copy your existing API key
 4. Your API key is encrypted before storage in Ham Radio Olympics
 
-### Syncing Your QSOs
+### 2.2 Syncing Your QSOs
 
 Ham Radio Olympics automatically pulls your QSO data from QRZ.com and/or LoTW. This includes confirmation status, which is required for medal eligibility.
 
-**Manual Sync:**
+#### Manual Sync
 
-1. Navigate to your dashboard
+To manually trigger a sync of your QSOs:
+
+1. Navigate to your dashboard or the Sync page (`/sync`)
 2. Click the "Sync QSOs" button
 3. Wait for the sync to complete (this may take a moment depending on log size)
 
 The system will fetch all QSOs from your connected services and match them against active matches in the current Olympiad.
 
-### World Radio League (WRL) Users - IMPORTANT
+#### World Radio League (WRL) Users - IMPORTANT
 
 > **WARNING:** Do NOT use the direct WRL → QRZ integration. There is a bug that strips POTA data (SIG/SIG_INFO fields) during the automatic sync, causing your park hunts and activations to not be credited.
 
@@ -101,9 +146,9 @@ The system will fetch all QSOs from your connected services and match them again
 
 This manual export/import process preserves all POTA park references (MY_SIG_INFO for activations, SIG_INFO for hunts) and ensures your contacts are properly credited for competitions.
 
-### Your Dashboard
+### 2.3 Your Dashboard and Profile
 
-After logging in, your **Dashboard** is your home base, displaying:
+After logging in, your **Dashboard** (`/dashboard`) is your home base, displaying:
 
 - Total points earned across all sports
 - Medal count (Gold, Silver, Bronze)
@@ -112,13 +157,13 @@ After logging in, your **Dashboard** is your home base, displaying:
 - Recent qualifying QSOs
 - Quick access to sync, settings, and exports
 
-Your **public profile** is visible to other competitors and shows your achievements, medals, and competition history.
+Your **public profile** is visible to other competitors at `/competitor/YOUR_CALLSIGN` (e.g., `/competitor/W1ABC`).
 
 ---
 
-## Competing
+## 3. Competing
 
-### Finding Active Competitions
+### 3.1 Finding Active Competitions
 
 From the main page, you can browse the current Olympiad's sports and matches:
 
@@ -127,7 +172,7 @@ From the main page, you can browse the current Olympiad's sports and matches:
 3. Select a sport to see its matches and rules
 4. Click on a specific match to view the leaderboard and target details
 
-### Target Types
+### 3.2 Target Types
 
 Each sport defines what type of target counts as a qualifying contact:
 
@@ -140,38 +185,41 @@ Each sport defines what type of target counts as a qualifying contact:
 | Grid | Contact must be with a station in a specific Maidenhead grid square |
 | Any | Any confirmed contact qualifies (useful for general activity periods) |
 
-### Match Events
+### 3.3 Match Events
 
 Every match has two separate medal events:
 
-**QSO Race**
+#### QSO Race
 
 The QSO Race rewards the first three competitors to log a confirmed qualifying contact with the match target. Speed matters! The first confirmed QSO wins gold, second wins silver, third wins bronze.
 
 Your QSO must be confirmed (via QRZ or LoTW) to count for medals.
 
-**Cool Factor (Power Efficiency)**
+#### Cool Factor (Power Efficiency)
 
 The Cool Factor event rewards efficient operating. Your score is calculated as:
 
 > **Cool Factor = Distance (km) ÷ TX Power (watts)**
 
 For example:
+
 - 5,000 km contact at 5 watts = 1,000 cool factor
 - 1,000 km contact at 1,000 watts = 1 cool factor
 - 8,000 km contact at 10 watts = 800 cool factor
 
 The three highest cool factor scores win medals. Ties are broken by earliest QSO time.
 
-### QRP Competitions
+### 3.4 QRP Competitions
 
 Some matches may have a maximum power limit for QRP competitions. Only QSOs at or below the specified power will qualify for that match. Check the match details to see if there's a power restriction.
 
+QRP matches encourage low-power operating and reward efficient stations and skilled operators who can make long-distance contacts with minimal power.
+
 ---
 
-## Scoring & Medals
+## 4. Scoring & Medals
 
-### Medal Point Values
+### 4.1 Medal Point Values
 
 | Medal | Points |
 |-------|--------|
@@ -179,7 +227,7 @@ Some matches may have a maximum power limit for QRP competitions. Only QSOs at o
 | Silver | 2 points |
 | Bronze | 1 point |
 
-### POTA Bonuses
+### 4.2 POTA Bonuses
 
 Park contacts earn bonus points in addition to any medals:
 
@@ -189,54 +237,54 @@ Park contacts earn bonus points in addition to any medals:
 | Target is a park OR you're at a park | +1 point |
 | No park involvement | +0 points |
 
-### Scoring Examples
+### 4.3 Scoring Examples
 
 - **Example 1:** Gold in QSO Race (3) + Silver in Cool Factor (2) + Park-to-Park (2) = **7 points**
 - **Example 2:** Silver in QSO Race (2) + Bronze in Cool Factor (1) + Hunt a park (1) = **4 points**
 - **Example 3:** Bronze in QSO Race (1) + Gold in Cool Factor (3) + Activate a park (1) = **5 points**
 
-### Maximum Points Per Match
+### 4.4 Maximum Points Per Match
 
 - **Combined pools:** 7 points maximum (Gold + Gold + P2P bonus)
 - **Separate pools:** 14 points maximum (7 points per role)
 
-### Qualification Requirements
+### 4.5 Qualification Requirements
 
 The Olympiad administrator can set a minimum QSO threshold for medal eligibility. If you haven't met the minimum, you'll still appear in standings but won't be eligible to receive medals until you reach the threshold.
 
 ---
 
-## Teams
+## 5. Teams
 
-### Team Competition
+### 5.1 Team Competition
 
 Teams add a collaborative dimension to Ham Radio Olympics. Team standings are calculated by summing the points of all team members across all sports. You can only be a member of one team at a time.
 
-### Creating a Team
+### 5.2 Creating a Team
 
 Any registered competitor can create a team:
 
-1. Navigate to the Teams page
+1. Navigate to the Teams page (`/teams`)
 2. Click "Create Team"
 3. Enter a team name and optional description
 4. Submit to create the team
 
 When you create a team, you automatically become the **team captain** with special management privileges.
 
-### Joining a Team
+### 5.3 Joining a Team
 
 There are two ways to join a team:
 
-**Requesting to Join:**
+#### Requesting to Join
 
-1. Browse existing teams on the Teams page
+1. Browse existing teams at `/teams`
 2. Click on the team you want to join
 3. Click "Request to Join"
 4. Wait for the team captain to approve your request
 
 If the captain has already sent you an invitation, your join request is automatically accepted.
 
-**Accepting an Invitation:**
+#### Accepting an Invitation
 
 Team captains can invite you directly:
 
@@ -244,20 +292,24 @@ Team captains can invite you directly:
 2. Click "Accept" to join the team, or "Reject" to decline
 3. If you accept, you immediately become a team member
 
-### Captain Responsibilities
+If you've already sent a join request to that team, accepting the invitation is automatic.
+
+### 5.4 Captain Responsibilities
 
 As a team captain, you have additional management capabilities:
 
 | Action | Description |
 |--------|-------------|
-| Invite Members | Send invitations to specific competitors to join your team |
-| Approve Requests | Accept or decline join requests from competitors |
-| Remove Members | Remove a member from the team |
-| Transfer Captaincy | Hand over the captain role to another team member |
-| Update Team Info | Edit the team name and description |
-| Delete Team | Permanently delete the team |
+| **Invite Members** | Send invitations to specific competitors to join your team |
+| **Approve Requests** | Accept or decline join requests from competitors |
+| **Remove Members** | Remove a member from the team |
+| **Transfer Captaincy** | Hand over the captain role to another team member |
+| **Update Team Info** | Edit the team name and description |
+| **Delete Team** | Permanently delete the team |
 
-### Leaving a Team
+To manage your team, navigate to your team's profile page at `/team/{id}`.
+
+### 5.5 Leaving a Team
 
 To leave your current team:
 
@@ -267,13 +319,13 @@ To leave your current team:
 
 Your individual scores remain intact, but they will no longer contribute to the team total.
 
-> **Note:** Team captains cannot leave the team. You must either transfer captaincy to another member first, or delete the team entirely.
+**Note:** Team captains cannot leave the team. You must either transfer captaincy to another member first, or delete the team entirely.
 
 ---
 
-## Records & Personal Bests
+## 6. Records & Personal Bests
 
-### World Records
+### 6.1 World Records
 
 Ham Radio Olympics automatically tracks world records across all competitions. Records are tracked for achievements like:
 
@@ -282,20 +334,20 @@ Ham Radio Olympics automatically tracks world records across all competitions. R
 - Longest distance QRP contact
 - Records by mode (CW, SSB, FT8, etc.)
 
-View current records on the Records page.
+View current records at `/records`.
 
-### Personal Bests
+### 6.2 Personal Bests
 
 Your competitor profile tracks your personal best performances:
 
 - **Current Season:** Best performances during the active Olympiad
 - **All-Time:** Your best performances across all Olympiads
 
-These are displayed on your dashboard alongside your medal count and total points.
+These are displayed on your dashboard alongside your medal count and total points, allowing you to measure your improvement over time.
 
-### Medal Standings
+### 6.3 Medal Standings
 
-The Medal Standings page displays all competitors ranked by their total medal count. The leaderboard shows:
+The Medal Standings page (`/medals`) displays all competitors ranked by their total medal count. The leaderboard shows:
 
 - Gold, Silver, and Bronze medal counts
 - Total medals earned
@@ -305,11 +357,13 @@ This provides a quick overview of who's leading the competition across all sport
 
 ---
 
-## Settings & Preferences
+## 7. Settings & Preferences
 
-### Account Settings
+Access your settings from the dropdown menu in the navigation bar.
 
-Access your settings from the dropdown menu in the navigation bar. Here you can manage:
+### 7.1 Account Settings
+
+Manage your account information:
 
 **Your Name**
 - Set your first and last name to display on leaderboards and in the navigation
@@ -327,7 +381,7 @@ Access your settings from the dropdown menu in the navigation bar. Here you can 
 **LoTW Credentials**
 - Add, update, or remove your Logbook of The World credentials
 
-### Display Preferences
+### 7.2 Display Preferences
 
 Customize how information is displayed throughout the site:
 
@@ -339,7 +393,7 @@ Customize how information is displayed throughout the site:
 - **UTC:** All times shown in Coordinated Universal Time
 - **Local Time:** Times are converted to local time based on the QSO's grid square location
 
-### Email Notifications
+### 7.3 Email Notifications
 
 If you've added and verified an email address, you can receive notifications for:
 
@@ -349,23 +403,23 @@ If you've added and verified an email address, you can receive notifications for
 
 You can enable or disable each notification type individually, or turn off all notifications at once.
 
-### Dark Mode
+### 7.4 Dark Mode
 
 Use the moon/sun icon in the navigation bar to toggle between light and dark mode. The site also respects your system's color scheme preference.
 
 ---
 
-## Referee Guide
+## 8. Referee Guide
 
-### Referee Role Overview
+### 8.1 Referee Role Overview
 
 Referees are competitors with elevated privileges for specific sports. The referee role is granted by an administrator and allows you to manage matches and view detailed competitor information within your assigned sport(s).
 
-### Accessing the Referee Dashboard
+### 8.2 Accessing the Referee Dashboard
 
-Once granted referee status, you can access the referee dashboard from the dropdown menu. This provides an overview of your assigned sports and any pending tasks.
+Once granted referee status, you can access the referee dashboard at `/referee`. This provides an overview of your assigned sports and any pending tasks.
 
-### Managing Matches
+### 8.3 Managing Matches
 
 As a referee for a sport, you can:
 
@@ -379,24 +433,29 @@ As a referee for a sport, you can:
 
 ---
 
-## Administrator Guide
+## 9. Administrator Guide
 
-### Admin Dashboard
+### 9.1 Admin Authentication
 
-Administrator access provides full control over the competition platform. Access the admin dashboard from the dropdown menu after logging in with an admin account.
+Administrator access can be granted in two ways:
 
-### Creating an Olympiad
+1. **Admin User Account:** A competitor account with admin privileges. Admins can grant admin status to other users via the admin dashboard.
+2. **API Key Header:** For programmatic access, include the `X-Admin-Key` header with requests. This key is configured as an environment variable (`ADMIN_KEY`) during deployment.
+
+To access the admin dashboard, log in with an admin account and navigate to `/admin`.
+
+### 9.2 Creating an Olympiad
 
 An Olympiad is the top-level container for a competition season. To create one:
 
-1. Access the admin dashboard
+1. Access the admin dashboard at `/admin`
 2. Click "Create Olympiad"
 3. Provide name, start date, end date, and qualifying QSO minimum
 4. After creation, activate the Olympiad to make it current
 
 Only one Olympiad can be active at a time.
 
-### Creating Sports
+### 9.3 Creating Sports
 
 Sports define categories of competition. Configuration options include:
 
@@ -404,28 +463,28 @@ Sports define categories of competition. Configuration options include:
 |---------|----------------------|
 | Target Type | continent, country, park, call, grid, any |
 | Interval | daily, weekly, bi-weekly, monthly, quarterly, annually |
-| Work Enabled | Allows hunting (working stations) |
-| Activate Enabled | Allows activating (being the target) |
-| Separate Pools | If enabled, hunters and activators compete separately |
+| Work Enabled | true/false — allows hunting (working stations) |
+| Activate Enabled | true/false — allows activating (being the target) |
+| Separate Pools | true/false — if true, hunters and activators compete separately |
 
-### Creating Matches
+### 9.4 Creating Matches
 
 Matches are timed events within a sport. Each match requires:
 
-- **Start Date/Time:** When the match begins (UTC)
+- **Start Date/Time:** When the match begins (UTC recommended)
 - **End Date/Time:** When the match ends
 - **Target Value:** The specific target (e.g., "EU" for continent, "K-1234" for park)
 
 Optional match settings:
 
-- **Allowed Modes:** Restrict the match to specific modes (e.g., CW only)
-- **Max Power (watts):** Limit the match to QRP contacts only
+- **Allowed Modes:** Override sport-level mode restrictions for this match only (e.g., "CW,SSB")
+- **Max Power (watts):** Limit the match to QRP contacts — only QSOs at or below this power will qualify
 
-### Managing Competitors
+### 9.5 Managing Competitors
 
 Administrators can:
 
-- View all registered competitors
+- View all registered competitors at `/admin/competitors`
 - Enable or disable competitor accounts
 - Grant or revoke admin privileges
 - Grant or revoke referee roles
@@ -433,17 +492,17 @@ Administrators can:
 - Reset competitor passwords
 - Remove competitors if necessary
 
-### Managing Teams
+### 9.6 Managing Teams
 
 Administrators have full team management capabilities:
 
-- View all teams
+- View all teams at `/admin/teams`
 - Create teams directly
 - Add or remove team members
 - Transfer team captaincy
 - Delete teams if necessary
 
-### Site Settings
+### 9.7 Site Settings
 
 Administrators can customize the site appearance:
 
@@ -454,7 +513,175 @@ Administrators can customize the site appearance:
 
 ---
 
-## Glossary
+## 10. Deployment & Configuration
+
+### 10.1 Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ENCRYPTION_KEY` | Secret key for encrypting QRZ API keys at rest | Yes |
+| `ADMIN_KEY` | Secret for administrator authentication | Yes |
+| `DATABASE_PATH` | Path to SQLite database file | No (default: `ham_olympics.db`) |
+| `PORT` | Server port | No (default: `8000`) |
+
+### 10.2 Local Development
+
+To run Ham Radio Olympics locally for development or testing:
+
+1. Clone the repository from GitHub
+2. Install dependencies: `pip install -r requirements.txt`
+3. Set environment variables (`ENCRYPTION_KEY`, `ADMIN_KEY`)
+4. Run: `python -m uvicorn main:app --reload`
+5. Open http://localhost:8000 in your browser
+
+### 10.3 Fly.io Deployment
+
+Ham Radio Olympics includes a Dockerfile and `fly.toml` for easy deployment to Fly.io:
+
+1. Install flyctl: `curl -L https://fly.io/install.sh | sh`
+2. Login: `fly auth login`
+3. Create app: `fly launch --name ham-radio-olympics`
+4. Create persistent volume: `fly volumes create ham_olympics_data --size 1 --region iad`
+5. Set secrets: `fly secrets set ENCRYPTION_KEY="..." ADMIN_KEY="..."`
+6. Deploy: `fly deploy`
+
+### 10.4 Running Tests
+
+The project includes a comprehensive test suite. Run tests with:
+
+```bash
+pytest tests/ -v
+```
+
+---
+
+## Appendix A: API Reference
+
+### A.1 Public Endpoints (No Authentication Required)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Landing page |
+| GET | `/health` | Health check |
+| GET | `/signup` | Registration page |
+| POST | `/signup` | Register new competitor |
+| GET | `/login` | Login page |
+| POST | `/login` | Authenticate user |
+| GET | `/forgot-password` | Password reset request page |
+| POST | `/forgot-password` | Request password reset email |
+| GET | `/reset-password/{token}` | Password reset page |
+| POST | `/reset-password/{token}` | Reset password with token |
+| GET | `/verify-email/{token}` | Verify email address |
+
+### A.2 Authenticated User Endpoints
+
+These endpoints require a logged-in user:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/logout` | Log out current user |
+| GET | `/dashboard` | User dashboard |
+| GET | `/settings` | User settings page |
+| POST | `/settings/name` | Update display name |
+| POST | `/settings/email` | Update email address |
+| POST | `/settings/password` | Change password |
+| POST | `/settings/qrz-key` | Set QRZ API key |
+| DELETE | `/settings/qrz-key` | Remove QRZ API key |
+| POST | `/settings/lotw` | Set LoTW credentials |
+| DELETE | `/settings/lotw` | Remove LoTW credentials |
+| GET | `/olympiad` | Current Olympiad details |
+| GET | `/olympiad/sports` | List Sports |
+| GET | `/olympiad/sport/{id}` | Sport details |
+| GET | `/olympiad/sport/{id}/participants` | Sport participants |
+| GET | `/olympiad/sport/{id}/matches` | List Matches |
+| GET | `/olympiad/sport/{id}/match/{id}` | Match leaderboard |
+| POST | `/sport/{id}/enter` | Enter a sport |
+| POST | `/sport/{id}/leave` | Leave a sport |
+| GET | `/medals` | Medal standings |
+| GET | `/records` | World records |
+| GET | `/competitor/{call}` | Competitor profile |
+| GET | `/sync` | Sync page |
+| POST | `/sync` | Trigger QRZ/LoTW sync |
+| GET | `/export/qsos` | Export QSOs (CSV) |
+| GET | `/export/medals` | Export medals (CSV) |
+| GET | `/teams` | Team listings |
+| GET | `/team/{id}` | Team profile |
+| POST | `/team` | Create team |
+| PUT | `/team/{id}` | Update team (captain only) |
+| DELETE | `/team/{id}` | Delete team (captain only) |
+| POST | `/team/{id}/request` | Request to join team |
+| POST | `/team/{id}/invite/{call}` | Invite member (captain only) |
+| POST | `/team/{id}/approve/{call}` | Approve join request (captain only) |
+| POST | `/team/{id}/decline/{call}` | Decline join request (captain only) |
+| POST | `/team/{id}/accept` | Accept team invitation |
+| POST | `/team/{id}/reject` | Reject team invitation |
+| POST | `/team/{id}/leave` | Leave team |
+| POST | `/team/{id}/remove/{call}` | Remove member (captain only) |
+| POST | `/team/{id}/transfer/{call}` | Transfer captain role |
+
+### A.3 Referee Endpoints
+
+These endpoints require referee role for the associated sport:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/referee` | Referee dashboard |
+| GET | `/admin/sport/{id}/matches` | Manage sport matches |
+| GET | `/admin/sport/{id}/competitors` | View sport competitors |
+| POST | `/admin/sport/{id}/competitor/{call}/disqualify` | Disqualify competitor from sport |
+
+### A.4 Admin Endpoints
+
+These endpoints require administrator privileges (admin user login or `X-Admin-Key` header):
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin` | Admin dashboard |
+| GET | `/admin/audit-log` | View audit log |
+| GET | `/admin/backup` | Download database backup |
+| POST | `/admin/recompute-records` | Recompute all medals and records |
+| POST | `/admin/olympiad` | Create Olympiad |
+| GET | `/admin/olympiad/{id}` | Get Olympiad details |
+| PUT | `/admin/olympiad/{id}` | Update Olympiad |
+| DELETE | `/admin/olympiad/{id}` | Delete Olympiad |
+| POST | `/admin/olympiad/{id}/activate` | Set as active Olympiad |
+| POST | `/admin/olympiad/{id}/deactivate` | Deactivate Olympiad |
+| GET | `/admin/olympiad/{id}/sports` | List sports in Olympiad |
+| POST | `/admin/olympiad/{id}/sport` | Create Sport |
+| GET | `/admin/sport/{id}` | Get Sport details |
+| PUT | `/admin/sport/{id}` | Update Sport |
+| DELETE | `/admin/sport/{id}` | Delete Sport |
+| POST | `/admin/sport/{id}/match` | Create Match |
+| GET | `/admin/match/{id}` | Get Match details |
+| PUT | `/admin/match/{id}` | Update Match |
+| DELETE | `/admin/match/{id}` | Delete Match |
+| GET | `/admin/competitors` | List competitors |
+| GET | `/admin/export/competitors` | Export competitors (CSV) |
+| GET | `/admin/export/standings/{id}` | Export standings (CSV) |
+| POST | `/admin/competitors/bulk-disable` | Bulk disable competitors |
+| POST | `/admin/competitors/bulk-enable` | Bulk enable competitors |
+| POST | `/admin/competitors/bulk-delete` | Bulk delete competitors |
+| POST | `/admin/competitor/{call}/disable` | Disable competitor |
+| POST | `/admin/competitor/{call}/enable` | Enable competitor |
+| POST | `/admin/competitor/{call}/set-admin` | Grant admin role |
+| POST | `/admin/competitor/{call}/remove-admin` | Revoke admin role |
+| POST | `/admin/competitor/{call}/set-referee` | Grant referee role |
+| POST | `/admin/competitor/{call}/remove-referee` | Revoke referee role |
+| POST | `/admin/competitor/{call}/assign-sport/{id}` | Assign referee to sport |
+| DELETE | `/admin/competitor/{call}/assign-sport/{id}` | Remove referee from sport |
+| POST | `/admin/competitor/{call}/disqualify` | Disqualify competitor globally |
+| POST | `/admin/competitor/{call}/reset-password` | Reset competitor password |
+| DELETE | `/admin/competitor/{call}` | Delete competitor |
+| GET | `/admin/teams` | List all teams |
+| POST | `/admin/team` | Create team |
+| DELETE | `/admin/team/{id}` | Delete team |
+| POST | `/admin/team/{id}/add/{call}` | Add member to team |
+| POST | `/admin/team/{id}/remove/{call}` | Remove member from team |
+| POST | `/admin/team/{id}/transfer/{call}` | Transfer team captain |
+
+---
+
+## Appendix B: Glossary
 
 | Term | Definition |
 |------|------------|
@@ -474,4 +701,4 @@ Administrators can customize the site appearance:
 
 ---
 
-*End of User Guide*
+*— End of Document —*

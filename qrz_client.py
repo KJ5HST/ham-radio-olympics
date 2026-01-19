@@ -357,13 +357,20 @@ async def verify_api_key(api_key: str, expected_callsign: str = None) -> bool:
         return True
 
 
-async def fetch_qsos(api_key: str, confirmed_only: bool = True) -> List[QSOData]:
+async def fetch_qsos(
+    api_key: str,
+    confirmed_only: bool = True,
+    since_date: Optional[datetime] = None,
+    until_date: Optional[datetime] = None,
+) -> List[QSOData]:
     """
-    Fetch all QSOs from QRZ Logbook API.
+    Fetch QSOs from QRZ Logbook API.
 
     Args:
         api_key: User's QRZ Logbook API key
         confirmed_only: If True, only fetch confirmed QSOs
+        since_date: If provided, only fetch QSOs from this date forward (inclusive)
+        until_date: If provided, only fetch QSOs until this date (inclusive)
 
     Returns:
         List of QSOData objects
@@ -379,6 +386,13 @@ async def fetch_qsos(api_key: str, confirmed_only: bool = True) -> List[QSOData]
             options = ["TYPE:ADIF", "MAX:250", f"AFTERLOGID:{last_logid}"]
             if confirmed_only:
                 options.append("STATUS:CONFIRMED")
+
+            # Add date range filtering if specified
+            # QRZ BETWEEN format: YYYYMMDD+YYYYMMDD
+            if since_date or until_date:
+                start_str = since_date.strftime("%Y%m%d") if since_date else "19000101"
+                end_str = until_date.strftime("%Y%m%d") if until_date else "20991231"
+                options.append(f"BETWEEN:{start_str}+{end_str}")
 
             data = {
                 "KEY": api_key,

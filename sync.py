@@ -362,6 +362,10 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     """
     Sync a single competitor's QSOs from QRZ using provided API key.
 
+    Uses incremental sync to reduce API calls:
+    - First sync: fetches QSOs from olympiad start date
+    - Subsequent syncs: fetches from 60 days before last sync to catch confirmations
+
     Args:
         callsign: Competitor callsign
         api_key: QRZ API key (not encrypted)
@@ -375,9 +379,43 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     except Exception as e:
         logger.warning(f"Failed to populate name for {callsign}: {e}")
 
-    # Fetch QSOs from QRZ
+    # Calculate date range for incremental sync
+    since_date = None
+    with get_db() as conn:
+        # Get competitor's last sync time
+        cursor = conn.execute(
+            "SELECT last_sync_at FROM competitors WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        competitor = cursor.fetchone()
+
+        # Get active olympiad start date
+        cursor = conn.execute(
+            "SELECT start_date FROM olympiads WHERE is_active = 1"
+        )
+        olympiad = cursor.fetchone()
+
+        if olympiad:
+            olympiad_start = datetime.fromisoformat(olympiad["start_date"])
+        else:
+            # No active olympiad, use a reasonable default (1 year ago)
+            olympiad_start = datetime.utcnow() - timedelta(days=365)
+
+        if competitor and competitor["last_sync_at"]:
+            # Incremental sync: go back 60 days from last sync to catch confirmations
+            last_sync = datetime.fromisoformat(competitor["last_sync_at"])
+            confirmation_window = last_sync - timedelta(days=60)
+            # Use the later of olympiad start or confirmation window
+            since_date = max(olympiad_start, confirmation_window)
+            logger.info(f"Incremental sync for {callsign}: fetching QSOs from {since_date.date()}")
+        else:
+            # First sync: start from olympiad start date
+            since_date = olympiad_start
+            logger.info(f"First sync for {callsign}: fetching QSOs from {since_date.date()}")
+
+    # Fetch QSOs from QRZ with date range
     try:
-        qsos = await fetch_qsos(api_key, confirmed_only=False)
+        qsos = await fetch_qsos(api_key, confirmed_only=False, since_date=since_date)
     except QRZAPIError as e:
         return {"error": str(e)}
 
@@ -462,6 +500,10 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     """
     Sync a competitor's QSOs from LoTW using provided credentials.
 
+    Uses incremental sync to reduce API calls:
+    - First sync: fetches QSOs from olympiad start date
+    - Subsequent syncs: fetches from 60 days before last sync to catch confirmations
+
     Args:
         callsign: Competitor callsign
         lotw_username: LoTW username
@@ -476,18 +518,47 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     except Exception as e:
         logger.warning(f"Failed to populate name for {callsign}: {e}")
 
-    # Verify competitor exists
+    # Calculate date range for incremental sync
+    start_date_str = None
     with get_db() as conn:
+        # Verify competitor exists and get last sync time
         cursor = conn.execute(
-            "SELECT 1 FROM competitors WHERE callsign = ?",
+            "SELECT last_sync_at FROM competitors WHERE callsign = ?",
             (callsign.upper(),)
         )
-        if not cursor.fetchone():
+        competitor = cursor.fetchone()
+        if not competitor:
             return {"error": f"Competitor {callsign} not found"}
 
-    # Fetch QSOs from LoTW
+        # Get active olympiad start date
+        cursor = conn.execute(
+            "SELECT start_date FROM olympiads WHERE is_active = 1"
+        )
+        olympiad = cursor.fetchone()
+
+        if olympiad:
+            olympiad_start = datetime.fromisoformat(olympiad["start_date"])
+        else:
+            # No active olympiad, use a reasonable default (1 year ago)
+            olympiad_start = datetime.utcnow() - timedelta(days=365)
+
+        if competitor["last_sync_at"]:
+            # Incremental sync: go back 60 days from last sync to catch confirmations
+            last_sync = datetime.fromisoformat(competitor["last_sync_at"])
+            confirmation_window = last_sync - timedelta(days=60)
+            # Use the later of olympiad start or confirmation window
+            since_date = max(olympiad_start, confirmation_window)
+            logger.info(f"Incremental LoTW sync for {callsign}: fetching QSOs from {since_date.date()}")
+        else:
+            # First sync: start from olympiad start date
+            since_date = olympiad_start
+            logger.info(f"First LoTW sync for {callsign}: fetching QSOs from {since_date.date()}")
+
+        start_date_str = since_date.strftime("%Y-%m-%d")
+
+    # Fetch QSOs from LoTW with date range
     try:
-        qsos = await fetch_lotw_qsos(lotw_username, lotw_password, confirmed_only=False)
+        qsos = await fetch_lotw_qsos(lotw_username, lotw_password, confirmed_only=False, start_date=start_date_str)
     except LoTWError as e:
         return {"error": str(e)}
 

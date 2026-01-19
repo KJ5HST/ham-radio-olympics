@@ -686,7 +686,13 @@ class TestSyncCompetitorWithKey:
 
         assert result["callsign"] == "W1TEST"
         assert result["new_qsos"] == 1
-        mock_fetch.assert_called_once_with("provided-api-key", confirmed_only=False)
+        # Verify fetch was called with correct API key and confirmed_only flag
+        # since_date is now passed for incremental sync optimization
+        mock_fetch.assert_called_once()
+        call_args = mock_fetch.call_args
+        assert call_args[0][0] == "provided-api-key"
+        assert call_args[1]["confirmed_only"] is False
+        assert "since_date" in call_args[1]  # Incremental sync uses date filtering
 
     @patch('sync.fetch_qsos')
     def test_sync_with_key_empty(self, mock_fetch, registered_competitor):
