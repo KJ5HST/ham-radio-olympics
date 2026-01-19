@@ -2,12 +2,15 @@
 QRZ Logbook API client for fetching QSO data.
 """
 
+import logging
 import re
 import time
 import httpx
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 QRZ_API_URL = "https://logbook.qrz.com/api"
@@ -417,9 +420,13 @@ async def fetch_qsos(
                 raise QRZAPIError("Authentication failed - invalid API key")
 
             if result.get("RESULT") == "FAIL":
-                reason = result.get("REASON", "Unknown error")
+                reason = result.get("REASON", "")
                 # "no result" is not an error, just no more data
                 if "no result" in reason.lower():
+                    break
+                # COUNT=0 with RESULT=FAIL means empty logbook (no QSOs match)
+                if result.get("COUNT") == "0" or reason == "":
+                    logger.info(f"QRZ returned no QSOs (COUNT=0 or empty response)")
                     break
                 raise QRZAPIError(f"API error: {reason}")
 
