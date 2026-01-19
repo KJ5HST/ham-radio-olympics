@@ -59,8 +59,8 @@
     </div>
 
     <!-- QRZ Modal -->
-    <div id="qrz-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 400px; width: 90%; margin: 20px;">
+    <div id="qrz-modal" class="modal-overlay">
+        <div class="modal-content">
             <h4 style="margin-top: 0;">Sync from QRZ</h4>
             <p style="color: #718096; font-size: 0.9em;">Enter your QRZ API key to sync your QSOs.</p>
             <div class="form-group">
@@ -76,8 +76,8 @@
     </div>
 
     <!-- LoTW Modal -->
-    <div id="lotw-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 25px; border-radius: 8px; max-width: 400px; width: 90%; margin: 20px;">
+    <div id="lotw-modal" class="modal-overlay">
+        <div class="modal-content">
             <h4 style="margin-top: 0;">Sync from LoTW</h4>
             <p style="color: #718096; font-size: 0.9em;">Enter your LoTW credentials to sync your QSOs.</p>
             <div class="form-group">
@@ -157,12 +157,12 @@
 
     // QRZ modal functions
     function showQrzModal() {
-        document.getElementById('qrz-modal').style.display = 'flex';
+        document.getElementById('qrz-modal').classList.add('show');
         document.getElementById('qrz-api-key').focus();
     }
 
     function hideQrzModal() {
-        document.getElementById('qrz-modal').style.display = 'none';
+        document.getElementById('qrz-modal').classList.remove('show');
         document.getElementById('qrz-api-key').value = '';
         document.getElementById('qrz-result').innerHTML = '';
     }
@@ -203,12 +203,12 @@
 
     // LoTW modal functions
     function showLotwModal() {
-        document.getElementById('lotw-modal').style.display = 'flex';
+        document.getElementById('lotw-modal').classList.add('show');
         document.getElementById('lotw-password').focus();
     }
 
     function hideLotwModal() {
-        document.getElementById('lotw-modal').style.display = 'none';
+        document.getElementById('lotw-modal').classList.remove('show');
         document.getElementById('lotw-password').value = '';
         document.getElementById('lotw-result').innerHTML = '';
     }
@@ -570,8 +570,8 @@ async function rejectInvite(teamId) {
         <tr>
             <th scope="col">Date/Time (UTC)</th>
             <th scope="col">DX Call</th>
-            <th scope="col">Band</th>
-            <th scope="col">Mode</th>
+            <th scope="col" class="hide-mobile">Band</th>
+            <th scope="col" class="hide-mobile">Mode</th>
             <th scope="col">Power</th>
             <th scope="col">QSO Race</th>
             <th scope="col">Cool Factor</th>
@@ -602,8 +602,8 @@ async function rejectInvite(teamId) {
                 {% endfor %}
                 {% endif %}
             </td>
-            <td>{{ qso.band or '-' }}</td>
-            <td>{{ qso.mode or '-' }}</td>
+            <td class="hide-mobile">{{ qso.band or '-' }}</td>
+            <td class="hide-mobile">{{ qso.mode or '-' }}</td>
             <td>{% if qso.tx_power_w %}{{ qso.tx_power_w }}W{% else %}-{% endif %}</td>
             <td>{{ qso.distance_km | format_distance(competitor.distance_unit or 'km') if qso.distance_km else '-' }}</td>
             <td>{{ "%.1f" | format(qso.cool_factor) if qso.cool_factor else '-' }}</td>
@@ -648,8 +648,8 @@ async function rejectInvite(teamId) {
 {% endif %}
 
 <!-- DQ History Modal -->
-<div id="qso-dq-history-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; margin: 20px; max-height: 80vh; overflow-y: auto; border: 1px solid var(--border-color);">
+<div id="qso-dq-history-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
         <h4 style="margin-top: 0;">Disqualification History</h4>
         <div id="qso-dq-history-content">Loading...</div>
         <div style="margin-top: 15px;">
@@ -659,8 +659,8 @@ async function rejectInvite(teamId) {
 </div>
 
 <!-- Refute Modal -->
-<div id="refute-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 500px; width: 90%; margin: 20px; border: 1px solid var(--border-color);">
+<div id="refute-modal" class="modal-overlay">
+    <div class="modal-content">
         <h4 style="margin-top: 0;">Refute Disqualification</h4>
         <p style="color: var(--text-secondary); font-size: 0.9em;">QSO with <strong id="refute-dx-call"></strong></p>
         <input type="hidden" id="refute-qso-id">
@@ -725,7 +725,7 @@ async function rejectInvite(teamId) {
 let currentRefuteSportId = null;
 
 async function viewQsoDqHistory(qsoId) {
-    document.getElementById('qso-dq-history-modal').style.display = 'flex';
+    document.getElementById('qso-dq-history-modal').classList.add('show');
     document.getElementById('qso-dq-history-content').innerHTML = '<p>Loading...</p>';
 
     try {
@@ -763,7 +763,7 @@ async function viewQsoDqHistory(qsoId) {
 }
 
 function hideQsoDqHistoryModal() {
-    document.getElementById('qso-dq-history-modal').style.display = 'none';
+    document.getElementById('qso-dq-history-modal').classList.remove('show');
 }
 
 async function showRefuteModal(qsoId, dxCall) {
@@ -772,7 +772,7 @@ async function showRefuteModal(qsoId, dxCall) {
     document.getElementById('refute-text').value = '';
     document.getElementById('refute-result').innerHTML = '';
     document.getElementById('refute-sports-list').innerHTML = '<p>Loading disqualifications...</p>';
-    document.getElementById('refute-modal').style.display = 'flex';
+    document.getElementById('refute-modal').classList.add('show');
 
     // Load disqualifications to let user select which to refute
     try {
@@ -812,7 +812,7 @@ async function showRefuteModal(qsoId, dxCall) {
 }
 
 function hideRefuteModal() {
-    document.getElementById('refute-modal').style.display = 'none';
+    document.getElementById('refute-modal').classList.remove('show');
     currentRefuteSportId = null;
 }
 

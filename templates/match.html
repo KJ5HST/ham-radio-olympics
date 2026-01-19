@@ -139,8 +139,8 @@
                             <tr>
                                 <th>Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
                                 <th>DX Call</th>
-                                <th>Mode</th>
-                                <th>Power</th>
+                                <th class="hide-mobile">Mode</th>
+                                <th class="hide-mobile">Power</th>
                                 <th>Distance</th>
                                 <th>Cool Factor</th>
                                 <th>Confirmed</th>
@@ -160,8 +160,8 @@
                                     <span class="badge badge-rq" title="Requalified - click for history" style="cursor: pointer;" onclick="viewDqHistory({{ qso.id }})">RQ</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ qso.mode or '-' }}</td>
-                                <td>{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                <td class="hide-mobile">{{ qso.mode or '-' }}</td>
+                                <td class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
                                 <td>{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
                                 <td>{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
                                 <td>
@@ -235,8 +235,8 @@ function toggleQsoDetails(callsign) {
 <p><a href="/olympiad/sport/{{ sport_id }}">Back to {{ sport_name }}</a></p>
 
 <!-- Disqualification Modal -->
-<div id="dq-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 500px; width: 90%; margin: 20px; border: 1px solid var(--border-color);">
+<div id="dq-modal" class="modal-overlay">
+    <div class="modal-content">
         <h4 style="margin-top: 0;">Disqualify QSO</h4>
         <p style="color: var(--text-secondary); font-size: 0.9em;">QSO with <strong id="dq-dx-call"></strong> will be excluded from scoring.</p>
         <input type="hidden" id="dq-qso-id">
@@ -253,8 +253,8 @@ function toggleQsoDetails(callsign) {
 </div>
 
 <!-- Requalify Modal -->
-<div id="rq-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 500px; width: 90%; margin: 20px; border: 1px solid var(--border-color);">
+<div id="rq-modal" class="modal-overlay">
+    <div class="modal-content">
         <h4 style="margin-top: 0;">Requalify QSO</h4>
         <p style="color: var(--text-secondary); font-size: 0.9em;">QSO with <strong id="rq-dx-call"></strong> will be included in scoring again.</p>
         <input type="hidden" id="rq-qso-id">
@@ -271,8 +271,8 @@ function toggleQsoDetails(callsign) {
 </div>
 
 <!-- DQ History Modal -->
-<div id="dq-history-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-primary); padding: 25px; border-radius: 8px; max-width: 600px; width: 90%; margin: 20px; max-height: 80vh; overflow-y: auto; border: 1px solid var(--border-color);">
+<div id="dq-history-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 600px;">
         <h4 style="margin-top: 0;">Disqualification History</h4>
         <div id="dq-history-content">Loading...</div>
         <div style="margin-top: 15px;">
@@ -330,12 +330,12 @@ function showDqModal(qsoId, dxCall) {
     document.getElementById('dq-dx-call').textContent = dxCall;
     document.getElementById('dq-reason').value = '';
     document.getElementById('dq-result').innerHTML = '';
-    document.getElementById('dq-modal').style.display = 'flex';
+    document.getElementById('dq-modal').classList.add('show');
     document.getElementById('dq-reason').focus();
 }
 
 function hideDqModal() {
-    document.getElementById('dq-modal').style.display = 'none';
+    document.getElementById('dq-modal').classList.remove('show');
 }
 
 async function submitDq() {
@@ -380,12 +380,12 @@ function showRqModal(qsoId, dxCall) {
     document.getElementById('rq-dx-call').textContent = dxCall;
     document.getElementById('rq-reason').value = '';
     document.getElementById('rq-result').innerHTML = '';
-    document.getElementById('rq-modal').style.display = 'flex';
+    document.getElementById('rq-modal').classList.add('show');
     document.getElementById('rq-reason').focus();
 }
 
 function hideRqModal() {
-    document.getElementById('rq-modal').style.display = 'none';
+    document.getElementById('rq-modal').classList.remove('show');
 }
 
 async function submitRq() {
@@ -426,7 +426,7 @@ async function submitRq() {
 }
 
 async function viewDqHistory(qsoId) {
-    document.getElementById('dq-history-modal').style.display = 'flex';
+    document.getElementById('dq-history-modal').classList.add('show');
     document.getElementById('dq-history-content').innerHTML = '<p>Loading...</p>';
 
     try {
@@ -464,7 +464,7 @@ async function viewDqHistory(qsoId) {
 }
 
 function hideDqHistoryModal() {
-    document.getElementById('dq-history-modal').style.display = 'none';
+    document.getElementById('dq-history-modal').classList.remove('show');
 }
 
 function formatTimestamp(isoString) {

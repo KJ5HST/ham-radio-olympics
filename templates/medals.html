@@ -45,9 +45,9 @@
                                 <th style="padding: 4px 8px;">Match</th>
                                 <th style="padding: 4px 8px;">Medal</th>
                                 <th style="padding: 4px 8px;">DX Call</th>
-                                <th style="padding: 4px 8px;">Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
-                                <th style="padding: 4px 8px;">Mode</th>
-                                <th style="padding: 4px 8px;">Power</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Mode</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Power</th>
                                 <th style="padding: 4px 8px;">Distance</th>
                                 <th style="padding: 4px 8px;">CF</th>
                             </tr>
@@ -65,9 +65,9 @@
                                     {% endif %}
                                 </td>
                                 <td style="padding: 4px 8px;"><strong>{{ qso.dx_callsign }}</strong></td>
-                                <td style="padding: 4px 8px;">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
-                                <td style="padding: 4px 8px;">{{ qso.mode or '-' }}</td>
-                                <td style="padding: 4px 8px;">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{{ qso.mode or '-' }}</td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
                                 <td style="padding: 4px 8px;">{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
                                 <td style="padding: 4px 8px;">{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
                             </tr>
