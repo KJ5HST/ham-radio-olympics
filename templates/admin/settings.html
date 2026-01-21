@@ -7,6 +7,26 @@
 <p><a href="/admin">&larr; Back to Dashboard</a></p>
 
 <div class="card">
+    <h3>Public Access</h3>
+    <p style="color: #718096; margin-bottom: 1rem;">
+        When enabled, visitors who are not logged in can view events, leaderboards, medals, records, teams, and competitor profiles.
+        This makes the competition more visible and can help attract new participants.
+    </p>
+    <form id="public-results-form">
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="public_results" {% if public_results %}checked{% endif %} style="width: auto;">
+                <span>Allow public viewing of results</span>
+            </label>
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Save</button>
+        </div>
+    </form>
+    <div id="public-results-result" style="margin-top: 1rem;"></div>
+</div>
+
+<div class="card">
     <h3>Site Theme</h3>
     <p style="color: #718096; margin-bottom: 1rem;">
         Choose the visual theme for your site. Changes take effect immediately for all users.
@@ -66,6 +86,30 @@
 </div>
 
 <script>
+// Public results form handler
+document.getElementById('public-results-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('public-results-result');
+    const enabled = document.getElementById('public_results').checked;
+
+    try {
+        const resp = await fetch('/admin/settings/public-results', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({ enabled })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
 // Theme form handler
 document.getElementById('theme-form').addEventListener('submit', async (e) => {
     e.preventDefault();

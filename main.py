@@ -939,6 +939,27 @@ def require_user(request: Request) -> User:
     return user
 
 
+def is_public_results_enabled() -> bool:
+    """Check if public results viewing is enabled."""
+    from database import get_setting
+    return get_setting("public_results") == "1"
+
+
+def optional_user(request: Request) -> Optional[User]:
+    """Get current user if logged in, otherwise return None."""
+    return get_current_user(request)
+
+
+def require_user_or_public(request: Request) -> Optional[User]:
+    """Require authenticated user OR public results must be enabled."""
+    user = get_current_user(request)
+    if user:
+        return user
+    if is_public_results_enabled():
+        return None
+    raise HTTPException(status_code=401, detail="Not authenticated")
+
+
 def get_display_prefs(user: Optional[User]) -> dict:
     """Get display preferences for a user. Returns defaults if no user or not found."""
     if not user:
@@ -974,7 +995,7 @@ def get_client_ip(request: Request) -> Optional[str]:
 async def landing_page(request: Request):
     """Landing page with active Olympiad info."""
     user = get_current_user(request)
-    if not user:
+    if not user and not is_public_results_enabled():
         return RedirectResponse(url="/login", status_code=303)
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM olympiads WHERE is_active = 1")
@@ -1046,7 +1067,7 @@ async def get_olympiad_sports(user: User = Depends(require_user)):
 
 
 @app.get("/olympiad/sport/{sport_id}", response_class=HTMLResponse)
-async def get_sport(request: Request, sport_id: int, page: int = 1, user: User = Depends(require_user)):
+async def get_sport(request: Request, sport_id: int, page: int = 1, user: Optional[User] = Depends(require_user_or_public)):
     """Get Sport details and standings."""
     MATCHES_PER_PAGE = 50
 
@@ -1287,7 +1308,7 @@ async def get_sport_participants(request: Request, sport_id: int, user: User = D
 
 
 @app.get("/olympiad/sport/{sport_id}/matches")
-async def get_sport_matches(sport_id: int, user: User = Depends(require_user)):
+async def get_sport_matches(sport_id: int, user: Optional[User] = Depends(require_user_or_public)):
     """List all Matches in a Sport."""
     with get_db() as conn:
         cursor = conn.execute(
@@ -1298,7 +1319,7 @@ async def get_sport_matches(sport_id: int, user: User = Depends(require_user)):
 
 
 @app.get("/olympiad/sport/{sport_id}/match/{match_id}", response_class=HTMLResponse)
-async def get_match(request: Request, sport_id: int, match_id: int, user: User = Depends(require_user)):
+async def get_match(request: Request, sport_id: int, match_id: int, user: Optional[User] = Depends(require_user_or_public)):
     """Get Match details and leaderboard."""
     with get_db() as conn:
         cursor = conn.execute(
@@ -1510,7 +1531,7 @@ async def leave_sport(sport_id: int, user: User = Depends(require_user)):
 
 
 @app.get("/records", response_class=HTMLResponse)
-async def get_records(request: Request, user: User = Depends(require_user)):
+async def get_records(request: Request, user: Optional[User] = Depends(require_user_or_public)):
     """Get world records page."""
     with get_db() as conn:
         # Global records (sport_id IS NULL, callsign IS NULL) with holder names and match info
@@ -1663,7 +1684,7 @@ async def get_records(request: Request, user: User = Depends(require_user)):
 
 
 @app.get("/medals", response_class=HTMLResponse)
-async def get_medals_page(request: Request, user: User = Depends(require_user)):
+async def get_medals_page(request: Request, user: Optional[User] = Depends(require_user_or_public)):
     """Get medal standings page showing all competitors sorted by medal count."""
     with get_db() as conn:
         cursor = conn.execute("""
@@ -1852,7 +1873,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
 async def get_competitor(
     request: Request,
     callsign: str,
-    user: User = Depends(require_user),
+    user: Optional[User] = Depends(require_user_or_public),
     band: Optional[str] = None,
     mode: Optional[str] = None,
     confirmed: Optional[str] = None,
@@ -5296,6 +5317,9 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     site_name = get_setting("site_name") or config.SITE_NAME
     site_tagline = get_setting("site_tagline") or config.SITE_TAGLINE
 
+    # Get public results setting
+    public_results = get_setting("public_results") == "1"
+
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
         "user": get_current_user(request),
@@ -5304,6 +5328,7 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
         "current_theme": current_theme,
         "site_name": site_name,
         "site_tagline": site_tagline,
+        "public_results": public_results,
     })
 
 
@@ -5407,6 +5432,22 @@ async def update_theme_settings(
         set_setting("site_tagline", tagline)
 
     return {"message": "Theme settings saved successfully"}
+
+
+@app.post("/admin/settings/public-results")
+async def update_public_results(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update public results setting."""
+    from database import set_setting
+
+    data = await request.json()
+    enabled = data.get("enabled", False)
+
+    set_setting("public_results", "1" if enabled else "0")
+
+    return {"message": f"Public results {'enabled' if enabled else 'disabled'}"}
 
 
 @app.post("/admin/recompute-records")
@@ -5790,7 +5831,7 @@ def get_team_members(conn, team_id: int):
 
 
 @app.get("/teams", response_class=HTMLResponse)
-async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, user: User = Depends(require_user)):
+async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, user: Optional[User] = Depends(require_user_or_public)):
     """List all active teams."""
     offset = (max(1, page) - 1) * per_page
 
@@ -6003,7 +6044,7 @@ async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, u
 
 
 @app.get("/team/{team_id}", response_class=HTMLResponse)
-async def team_profile_page(request: Request, team_id: int, user: User = Depends(require_user)):
+async def team_profile_page(request: Request, team_id: int, user: Optional[User] = Depends(require_user_or_public)):
     """Team profile page."""
 
     with get_db() as conn:
