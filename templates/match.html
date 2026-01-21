@@ -132,11 +132,12 @@
         </tr>
         {% if qso_details.get(medal.callsign) %}
         <tr class="qso-details-row" id="qso-details-{{ medal.callsign }}" style="display: none;">
-            <td colspan="7" style="padding: 0; background: var(--bg-primary);">
+            <td colspan="8" style="padding: 0; background: var(--bg-primary);">
                 <div style="padding: 10px 15px 10px 40px;">
                     <table style="margin: 0; font-size: 0.9em;">
                         <thead>
                             <tr>
+                                <th>Medal</th>
                                 <th>Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
                                 <th>DX Call</th>
                                 <th class="hide-mobile">Mode</th>
@@ -149,6 +150,7 @@
                         <tbody>
                             {% for qso in qso_details[medal.callsign] %}
                             <tr{% if qso.dq_status == 'disqualified' %} style="opacity: 0.5; text-decoration: line-through;"{% endif %}>
+                                <td><span class="medal-label">{{ qso.medal_type }}</span></td>
                                 <td>{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
                                 <td>
                                     <strong>{{ qso.dx_callsign }}</strong>{% if qso.park %} <span style="color: var(--text-secondary);">({{ qso.park }})</span>{% endif %}
@@ -224,6 +226,12 @@ function toggleQsoDetails(callsign) {
     font-weight: 600;
     color: var(--text-secondary);
     font-size: 0.85em;
+}
+.medal-label {
+    font-size: 0.8em;
+    font-weight: 600;
+    color: var(--accent-color);
+    white-space: nowrap;
 }
 </style>
 {% else %}

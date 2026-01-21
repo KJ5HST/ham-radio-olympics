@@ -1355,7 +1355,8 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
         target_type = match_dict.get("target_type") or (sport["target_type"] if sport else None)
         target_value = match_dict["target_value"]
 
-        qso_details = {}
+        # Collect all matching QSOs per competitor, then pick only medal-winning ones
+        all_qsos_by_callsign = {}
         # Parse allowed_modes for filtering
         allowed_modes = None
         if sport and sport["allowed_modes"]:
@@ -1378,9 +1379,9 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                     continue
 
             callsign = row["competitor_callsign"]
-            if callsign not in qso_details:
-                qso_details[callsign] = []
-            qso_details[callsign].append({
+            if callsign not in all_qsos_by_callsign:
+                all_qsos_by_callsign[callsign] = []
+            all_qsos_by_callsign[callsign].append({
                 "id": row["id"],  # QSO ID for disqualification actions
                 "dx_callsign": row["dx_callsign"],
                 "time": row["qso_datetime_utc"],
@@ -1395,6 +1396,38 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: User =
                 "my_grid": row["my_grid"],  # Competitor's grid for local time display
                 "dq_status": row["dq_status"],  # Disqualification status
             })
+
+        # Now pick only the medal-winning QSOs for each competitor:
+        # 1. First confirmed QSO (QSO Race) - already sorted by time ASC
+        # 2. Best cool factor QSO (Cool Factor medal)
+        qso_details = {}
+        for callsign, qsos in all_qsos_by_callsign.items():
+            # Filter to only non-disqualified QSOs for medal determination
+            valid_qsos = [q for q in qsos if q["dq_status"] != "disqualified"]
+            if not valid_qsos:
+                continue
+
+            medal_qsos = []
+            qso_ids_added = set()
+
+            # First QSO (QSO Race winner) - list is already sorted by time
+            first_qso = valid_qsos[0]
+            first_qso["medal_type"] = "QSO Race"
+            medal_qsos.append(first_qso)
+            qso_ids_added.add(first_qso["id"])
+
+            # Best cool factor QSO - find the one with highest cool_factor value
+            cf_qsos = [q for q in valid_qsos if q["cool_factor"] is not None and q["cool_factor"] > 0]
+            if cf_qsos:
+                best_cf_qso = max(cf_qsos, key=lambda q: q["cool_factor"])
+                if best_cf_qso["id"] not in qso_ids_added:
+                    best_cf_qso["medal_type"] = "Cool Factor"
+                    medal_qsos.append(best_cf_qso)
+                else:
+                    # Same QSO wins both - update the label
+                    first_qso["medal_type"] = "QSO Race + Cool Factor"
+
+            qso_details[callsign] = medal_qsos
 
         display_prefs = get_display_prefs(user)
         return templates.TemplateResponse("match.html", {
