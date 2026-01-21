@@ -774,12 +774,14 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             ))
         except sqlite3.IntegrityError:
             # Duplicate QSO - race condition. Find the existing record and merge.
-            logger.info(f"Duplicate detected, merging: {competitor_callsign} -> {qso.dx_callsign} at {qso.qso_datetime}")
+            # Note: my_sig_info is part of uniqueness (supports two-fers where same contact counts for multiple parks)
+            logger.info(f"Duplicate detected, merging: {competitor_callsign} -> {qso.dx_callsign} at {qso.qso_datetime} (park: {qso.my_sig_info})")
             cursor = conn.execute(
                 """SELECT id FROM qsos
                    WHERE competitor_callsign = ? AND dx_callsign = ?
+                   AND COALESCE(my_sig_info, '') = ?
                    AND ABS(CAST((julianday(qso_datetime_utc) - julianday(?)) * 86400 AS INTEGER)) <= 120""",
-                (competitor_callsign, qso.dx_callsign, qso.qso_datetime.isoformat())
+                (competitor_callsign, qso.dx_callsign, qso.my_sig_info or '', qso.qso_datetime.isoformat())
             )
             existing_row = cursor.fetchone()
             if existing_row:
@@ -848,26 +850,29 @@ def merge_duplicate_qsos() -> dict:
         # Get all QSOs grouped by competitor, dx_callsign, and mode, ordered by time
         # Mode must match to avoid merging FT4/FT8 or SSB/CW contacts
         cursor = conn.execute("""
-            SELECT id, competitor_callsign, dx_callsign, mode, qso_datetime_utc
+            SELECT id, competitor_callsign, dx_callsign, mode, qso_datetime_utc, my_sig_info
             FROM qsos
-            ORDER BY competitor_callsign, dx_callsign, mode, qso_datetime_utc
+            ORDER BY competitor_callsign, dx_callsign, mode, COALESCE(my_sig_info, ''), qso_datetime_utc
         """)
         all_qsos = [dict(row) for row in cursor.fetchall()]
 
-        # Find duplicates within 2-minute window (same callsigns AND same mode)
+        # Find duplicates within 2-minute window (same callsigns, mode, AND my_sig_info)
+        # Note: Different my_sig_info values = different QSOs (supports two-fers)
         duplicates_to_merge = []
         i = 0
         while i < len(all_qsos):
             qso = all_qsos[i]
             group = [qso["id"]]
 
-            # Look ahead for QSOs with same callsigns AND same mode within 2 minutes
+            # Look ahead for QSOs with same callsigns, mode, AND my_sig_info within 2 minutes
             j = i + 1
             while j < len(all_qsos):
                 next_qso = all_qsos[j]
+                # Must match on callsigns, mode, AND my_sig_info (treat NULL as empty string for comparison)
                 if (next_qso["competitor_callsign"] != qso["competitor_callsign"] or
                     next_qso["dx_callsign"] != qso["dx_callsign"] or
-                    next_qso["mode"] != qso["mode"]):
+                    next_qso["mode"] != qso["mode"] or
+                    (next_qso["my_sig_info"] or '') != (qso["my_sig_info"] or '')):
                     break
 
                 # Check time difference

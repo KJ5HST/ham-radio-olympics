@@ -5,11 +5,7 @@
 {% block content %}
 <h2>Teams</h2>
 
-{% if not user %}
-<div class="card">
-    <p><a href="/login">Log in</a> to view and create teams.</p>
-</div>
-{% else %}
+{% if user %}
 <div class="card" style="margin-bottom: 20px;">
     {% if user_team %}
     <p>You are a member of <a href="/team/{{ user_team.id }}"><strong>{{ user_team.name }}</strong></a>
@@ -21,6 +17,7 @@
     <button type="button" class="btn btn-success" onclick="showCreateTeamModal()">Create a Team</button>
     {% endif %}
 </div>
+{% endif %}
 
 {% if teams %}
 <div class="card">
@@ -229,6 +226,7 @@ function toggleSportQsos(sportRowId) {
 </div>
 {% endif %}
 
+{% if user %}
 <!-- Create Team Modal -->
 <div id="create-team-modal" class="modal" style="display: none;">
     <div class="modal-content">

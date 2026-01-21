@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Gold medal gradient -->
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD700"/>
+      <stop offset="50%" style="stop-color:#FFA500"/>
+      <stop offset="100%" style="stop-color:#FFD700"/>
+    </linearGradient>
+    <!-- Medal ribbon gradient -->
+    <linearGradient id="ribbonGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1a365d"/>
+      <stop offset="50%" style="stop-color:#2c5282"/>
+      <stop offset="100%" style="stop-color:#1a365d"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Medal ribbon -->
+  <path d="M200 20 L256 140 L312 20 L340 20 L256 180 L172 20 Z" fill="url(#ribbonGrad)"/>
+
+  <!-- Medal circle (gold) -->
+  <circle cx="256" cy="310" r="170" fill="url(#goldGrad)" stroke="#B8860B" stroke-width="8"/>
+
+  <!-- Inner medal ring -->
+  <circle cx="256" cy="310" r="140" fill="none" stroke="#B8860B" stroke-width="4"/>
+
+  <!-- Radio tower/antenna -->
+  <g fill="#1a365d">
+    <!-- Tower base -->
+    <polygon points="256,220 230,400 282,400"/>
+    <!-- Tower crossbars -->
+    <rect x="235" y="270" width="42" height="6" rx="2"/>
+    <rect x="240" y="310" width="32" height="6" rx="2"/>
+    <rect x="245" y="350" width="22" height="6" rx="2"/>
+  </g>
+
+  <!-- Radio waves emanating from antenna top -->
+  <g fill="none" stroke="#1a365d" stroke-width="6" stroke-linecap="round">
+    <!-- Left waves -->
+    <path d="M220 200 Q200 220 220 240" opacity="0.9"/>
+    <path d="M195 180 Q165 210 195 250" opacity="0.7"/>
+    <path d="M170 160 Q130 205 170 260" opacity="0.5"/>
+
+    <!-- Right waves -->
+    <path d="M292 200 Q312 220 292 240" opacity="0.9"/>
+    <path d="M317 180 Q347 210 317 250" opacity="0.7"/>
+    <path d="M342 160 Q382 205 342 260" opacity="0.5"/>
+  </g>
+
+  <!-- Antenna tip/ball -->
+  <circle cx="256" cy="210" r="12" fill="#1a365d"/>
+</svg>

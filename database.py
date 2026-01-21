@@ -616,6 +616,23 @@ def init_db():
                 conn.execute("PRAGMA foreign_keys = ON")
                 conn.commit()
 
+        # Migration: update QSO unique index to support two-fers (same contact from multiple parks)
+        # The old index only checked (competitor, dx_call, datetime), which would reject
+        # two-fer QSOs where the same contact counts for two different parks (my_sig_info)
+        if 'qsos' in tables:
+            # Check if old index exists (without my_sig_info)
+            old_index = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_qsos_unique'"
+            ).fetchone()
+            if old_index and 'my_sig_info' not in (old_index[0] or ''):
+                # Drop old index and create new one that includes my_sig_info
+                conn.execute("DROP INDEX IF EXISTS idx_qsos_unique")
+                conn.execute("""
+                    CREATE UNIQUE INDEX idx_qsos_unique
+                    ON qsos(competitor_callsign, dx_callsign, qso_datetime_utc, COALESCE(my_sig_info, ''))
+                """)
+                conn.commit()
+
         # Migration: clean up leftover _old tables from previous migrations
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         for leftover in ['qsos_old', 'sports_old', 'matches_old', 'medals_old', 'team_medals_old', 'team_medals_old2']:
@@ -943,9 +960,9 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_team_invites_team ON team_invites(team_id);
             CREATE INDEX IF NOT EXISTS idx_team_invites_callsign ON team_invites(callsign);
 
-            -- Unique constraint to prevent duplicate QSOs
+            -- Unique constraint to prevent duplicate QSOs (includes my_sig_info to support two-fers)
             CREATE UNIQUE INDEX IF NOT EXISTS idx_qsos_unique
-            ON qsos(competitor_callsign, dx_callsign, qso_datetime_utc);
+            ON qsos(competitor_callsign, dx_callsign, qso_datetime_utc, COALESCE(my_sig_info, ''));
 
             -- Performance index for records lookups
             CREATE INDEX IF NOT EXISTS idx_records_callsign ON records(callsign);

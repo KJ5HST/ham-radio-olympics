@@ -9,9 +9,9 @@ import sys
 sys.path.insert(0, "/app")
 os.chdir("/app")
 
-from email_service import create_email_verification_token, send_email_verification
+from email_service import create_email_verification_token, send_email_verification, APP_BASE_URL
 
-BASE_URL = "https://kd5dx.fly.dev"
+BASE_URL = APP_BASE_URL
 
 async def send_all_verifications():
     conn = sqlite3.connect("/data/ham_olympics.db")

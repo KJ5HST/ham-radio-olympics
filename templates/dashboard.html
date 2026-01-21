@@ -687,6 +687,7 @@ async function rejectInvite(teamId) {
 <h3>{% if is_own_profile %}QSO Log{% else %}QSOs{% endif %}</h3>
 <div class="card" style="margin-bottom: 15px;">
     <form method="get" id="qso-filter-form">
+        <input type="hidden" name="callsign" value="{{ competitor.callsign }}">
         <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
             <div class="form-group" style="margin-bottom: 0;">
                 <label for="band">Band</label>
@@ -816,9 +817,12 @@ function clearFilters() {
     var form = document.getElementById('qso-filter-form');
     if (!form) return;
 
-    // Reset all inputs
+    // Reset all inputs except hidden callsign field
     var inputs = form.querySelectorAll('input, select');
     inputs.forEach(function(input) {
+        if (input.type === 'hidden' && input.name === 'callsign') {
+            return; // Don't clear the callsign
+        }
         if (input.type === 'select-one') {
             input.selectedIndex = 0;
         } else {
@@ -893,7 +897,7 @@ function renderQsoTable(qsos, pagination) {
     }
 
     var html = '<div class="table-responsive"><table><thead><tr>';
-    html += '<th scope="col">Date/Time (UTC)</th>';
+    html += '<th scope="col">Date/Time</th>';
     html += '<th scope="col">DX Call</th>';
     html += '<th scope="col" class="hide-mobile">Band</th>';
     html += '<th scope="col" class="hide-mobile">Mode</th>';
@@ -905,7 +909,7 @@ function renderQsoTable(qsos, pagination) {
 
     qsos.forEach(function(qso) {
         html += '<tr>';
-        html += '<td>' + (qso.qso_datetime_utc || '-') + '</td>';
+        html += '<td>' + (qso.qso_datetime_formatted || qso.qso_datetime_utc || '-') + '</td>';
         html += '<td><span class="dx-callsign">';
         if (qso.country_flag) html += qso.country_flag + ' ';
         html += '<strong>' + qso.dx_callsign + '</strong></span>';
@@ -916,7 +920,7 @@ function renderQsoTable(qsos, pagination) {
         html += '<td class="hide-mobile">' + (qso.band || '-') + '</td>';
         html += '<td class="hide-mobile">' + (qso.mode || '-') + '</td>';
         html += '<td>' + (qso.tx_power_w ? qso.tx_power_w + 'W' : '-') + '</td>';
-        html += '<td>' + (qso.distance_km ? Math.round(qso.distance_km) + ' km' : '-') + '</td>';
+        html += '<td>' + (qso.distance_formatted || '-') + '</td>';
         html += '<td>' + (qso.cool_factor ? qso.cool_factor.toFixed(1) : '-') + '</td>';
         html += '<td>' + (qso.is_confirmed ? 'Yes' : 'No') + '</td>';
         html += '</tr>';
@@ -953,7 +957,7 @@ function renderQsoTable(qsos, pagination) {
 <div class="table-responsive"><table>
     <thead>
         <tr>
-            <th scope="col">Date/Time (UTC)</th>
+            <th scope="col">Date/Time{% if competitor.time_display == 'local' and competitor.home_grid %} (Local){% else %} (UTC){% endif %}</th>
             <th scope="col">DX Call</th>
             <th scope="col" class="hide-mobile">Band</th>
             <th scope="col" class="hide-mobile">Mode</th>

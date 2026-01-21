@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 RESET_TOKEN_EXPIRY_HOURS = 1
 
 # Base URL for the app (used in email links)
-APP_BASE_URL = "https://kd5dx.fly.dev"
+APP_BASE_URL = config.APP_BASE_URL
 
 
 def _get_email_footer_html() -> str:

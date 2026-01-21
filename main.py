@@ -262,6 +262,7 @@ def get_site_config():
         "theme": get_setting("site_theme") or config.SITE_THEME,
         "name": get_setting("site_name") or config.SITE_NAME,
         "tagline": get_setting("site_tagline") or config.SITE_TAGLINE,
+        "public_results": get_setting("public_results") == "1",
     }
 
 
@@ -1891,7 +1892,7 @@ async def get_competitor(
 ):
     """Get competitor's QSOs, medals, and personal bests."""
     callsign = callsign.upper()
-    is_own_profile = (callsign == user.callsign)
+    is_own_profile = user and (callsign == user.callsign)
     per_page = 50
 
     with get_db() as conn:
@@ -2127,19 +2128,20 @@ async def get_competitor(
         total_points = sum(m["total_points"] for m in medals)
 
         # Can sync if: viewing own profile with QRZ key, OR admin/referee viewing someone with QRZ key
-        can_sync = has_qrz_key and (is_own_profile or user.is_admin or user.is_referee)
+        can_sync = has_qrz_key and (is_own_profile or (user and (user.is_admin or user.is_referee)))
 
         # Get logged-in user's display preferences (used for displaying distances/times)
-        cursor = conn.execute(
-            "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
-            (user.callsign,)
-        )
-        user_prefs = cursor.fetchone()
-        if user_prefs:
-            # Add display preferences to competitor_dict so template can use them
-            competitor_dict["distance_unit"] = user_prefs["distance_unit"]
-            competitor_dict["time_display"] = user_prefs["time_display"]
-            competitor_dict["home_grid"] = user_prefs["home_grid"]
+        if user:
+            cursor = conn.execute(
+                "SELECT distance_unit, time_display, home_grid FROM competitors WHERE callsign = ?",
+                (user.callsign,)
+            )
+            user_prefs = cursor.fetchone()
+            if user_prefs:
+                # Add display preferences to competitor_dict so template can use them
+                competitor_dict["distance_unit"] = user_prefs["distance_unit"]
+                competitor_dict["time_display"] = user_prefs["time_display"]
+                competitor_dict["home_grid"] = user_prefs["home_grid"]
 
         # Get team info if viewing own profile
         user_team = None
@@ -2679,7 +2681,7 @@ async def logout(request: Request):
             ip_address=get_client_ip(request)
         )
 
-    response = RedirectResponse(url="/signup", status_code=303)
+    response = RedirectResponse(url="/", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     # Rotate CSRF token on logout
     new_csrf = generate_csrf_token()
@@ -3370,7 +3372,7 @@ async def update_display_preferences(
 @app.get("/api/qsos")
 async def get_filtered_qsos(
     request: Request,
-    user: User = Depends(require_user),
+    user: Optional[User] = Depends(require_user_or_public),
     callsign: Optional[str] = None,
     band: Optional[str] = None,
     mode: Optional[str] = None,
@@ -3389,6 +3391,8 @@ async def get_filtered_qsos(
 ):
     """Get filtered QSOs as JSON for AJAX requests."""
     # Use provided callsign or default to logged-in user
+    if not callsign and not user:
+        raise HTTPException(status_code=400, detail="Callsign required")
     target_callsign = (callsign or user.callsign).upper()
     per_page = 50
 
@@ -3468,6 +3472,16 @@ async def get_filtered_qsos(
         elif pota == "0":
             base_where += " AND dx_sig_info IS NULL AND my_sig_info IS NULL"
 
+        # Get competitor display preferences for formatting
+        prefs_cursor = conn.execute("""
+            SELECT home_grid, time_display, distance_unit
+            FROM competitors WHERE callsign = ?
+        """, (target_callsign,))
+        prefs_row = prefs_cursor.fetchone()
+        home_grid = prefs_row["home_grid"] if prefs_row else None
+        time_display = prefs_row["time_display"] if prefs_row else "utc"
+        distance_unit = prefs_row["distance_unit"] if prefs_row else "km"
+
         # Get total count for pagination
         cursor = conn.execute(f"SELECT COUNT(*) FROM qsos {base_where}", qso_params)
         total_qsos = cursor.fetchone()[0]
@@ -3490,6 +3504,19 @@ async def get_filtered_qsos(
             if qso.get("dx_dxcc"):
                 qso["dx_country"] = get_country_name(qso["dx_dxcc"])
                 qso["country_flag"] = get_country_flag(qso["dx_dxcc"])
+            # Format datetime using competitor's preferences
+            qso_grid = qso.get("my_grid") or home_grid
+            qso["qso_datetime_formatted"] = format_time_local(
+                qso.get("qso_datetime_utc"), qso_grid, time_display or "utc"
+            )
+            # Format distance using competitor's preferences
+            if qso.get("distance_km"):
+                if distance_unit == "mi":
+                    qso["distance_formatted"] = f"{int(qso['distance_km'] * 0.621371)} mi"
+                else:
+                    qso["distance_formatted"] = f"{int(qso['distance_km'])} km"
+            else:
+                qso["distance_formatted"] = "-"
             qsos.append(qso)
 
     return {

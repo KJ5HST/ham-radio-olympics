@@ -1,7 +1,8 @@
 # fly.toml - Fly.io configuration for Ham Radio Olympics
+# Copy this file to fly.toml and customize for your deployment
 
-app = "kd5dx"
-primary_region = "iad"
+app = "your-app-name"
+primary_region = "iad"  # Change to your preferred region
 
 [build]
   dockerfile = "Dockerfile"
@@ -35,5 +36,5 @@ primary_region = "iad"
     soft_limit = 20
 
 [mounts]
-  source = "ham_olympics_data"
+  source = "your_volume_name"  # Create with: fly volumes create your_volume_name --size 1
   destination = "/data"

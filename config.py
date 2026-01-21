@@ -35,6 +35,9 @@ class Config:
     SITE_NAME: str = os.getenv("SITE_NAME", "Ham Radio Olympics")
     SITE_TAGLINE: str = os.getenv("SITE_TAGLINE", "Compete. Connect. Conquer the Airwaves.")
 
+    # Base URL for the app (used in email links, etc.)
+    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:8080")
+
     # Database
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "ham_olympics.db")
 
