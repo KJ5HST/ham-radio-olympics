@@ -1175,11 +1175,14 @@
             });
         }
 
-        // Simple sort for nested tables (no detail rows to worry about)
+        // Sort for nested tables (handles detail rows that should stay with parent)
         function sortSimpleTable(table, colIndex, clickedTh) {
             var thead = table.querySelector('thead');
             var tbody = table.querySelector('tbody');
-            var rows = Array.from(tbody.querySelectorAll('tr'));
+            // Only get direct child rows, not rows from nested tables inside detail rows
+            var allRows = Array.from(tbody.children).filter(function(el) {
+                return el.tagName === 'TR';
+            });
             var headers = thead.querySelectorAll('th');
 
             // Determine sort direction
@@ -1196,10 +1199,27 @@
             clickedTh.classList.add('sort-' + direction);
             clickedTh.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
 
-            // Sort rows
-            rows.sort(function(rowA, rowB) {
-                var cellA = rowA.cells[colIndex];
-                var cellB = rowB.cells[colIndex];
+            // Group main rows with their detail rows (qso-details-row follows sport-row)
+            var rowGroups = [];
+            var currentGroup = null;
+
+            allRows.forEach(function(row) {
+                var isDetailRow = row.classList.contains('details-row') ||
+                                  row.classList.contains('qso-details-row');
+                if (isDetailRow) {
+                    if (currentGroup) {
+                        currentGroup.details.push(row);
+                    }
+                } else {
+                    currentGroup = { main: row, details: [] };
+                    rowGroups.push(currentGroup);
+                }
+            });
+
+            // Sort by main row values only
+            rowGroups.sort(function(groupA, groupB) {
+                var cellA = groupA.main.cells[colIndex];
+                var cellB = groupB.main.cells[colIndex];
                 if (!cellA || !cellB) return 0;
 
                 var valA = getCellSortValue(cellA);
@@ -1209,9 +1229,12 @@
                 return direction === 'asc' ? result : -result;
             });
 
-            // Re-append sorted rows
-            rows.forEach(function(row) {
-                tbody.appendChild(row);
+            // Re-append sorted rows, keeping details with their main rows
+            rowGroups.forEach(function(group) {
+                tbody.appendChild(group.main);
+                group.details.forEach(function(detailRow) {
+                    tbody.appendChild(detailRow);
+                });
             });
         }
 
