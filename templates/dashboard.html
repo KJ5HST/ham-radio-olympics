@@ -715,23 +715,20 @@ async function rejectInvite(teamId) {
                 </select>
             </div>
             <div class="btn-group">
-                <button type="button" class="btn" onclick="filterQsos(1)"><span class="icon">🔍</span> Filter</button>
-                {% set has_filters = request.query_params.get('band') or request.query_params.get('mode') or request.query_params.get('confirmed') or request.query_params.get('date_from') or request.query_params.get('date_to') or request.query_params.get('dx_call') or request.query_params.get('distance_min') or request.query_params.get('distance_max') or request.query_params.get('cf_min') or request.query_params.get('cf_max') or request.query_params.get('power_min') or request.query_params.get('power_max') or request.query_params.get('pota') %}
-                {% if has_filters %}
-                <a href="{{ request.url.path }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
-                {% endif %}
-                <button type="button" class="btn btn-secondary" onclick="toggleAdvancedFilters()"><span class="icon">⚙️</span> Advanced</button>
+                <button type="button" class="btn" onclick="filterQsos(1)" style="min-width: 80px;"><span class="icon">🔍</span> Filter</button>
+                <button type="button" class="btn btn-secondary" onclick="toggleAdvancedFilters()" style="min-width: 100px;"><span class="icon">⚙️</span> Advanced</button>
+                <button type="button" class="btn btn-secondary" onclick="clearFilters()" style="min-width: 70px;"><span class="icon">✕</span> Clear</button>
             </div>
             {% if is_own_profile %}
             <div class="btn-group" style="margin-left: auto;">
                 <div class="dropdown" style="position: relative; display: inline-block;">
-                    <button type="button" class="btn btn-info" onclick="toggleExportMenu()" id="export-qsos-btn"><span class="icon">📥</span> Export QSOs <span style="font-size: 0.8em;">▼</span></button>
+                    <button type="button" class="btn btn-info" onclick="toggleExportMenu()" id="export-qsos-btn" style="min-width: 120px;"><span class="icon">📥</span> Export <span style="font-size: 0.8em;">▼</span></button>
                     <div id="export-qsos-menu" class="dropdown-menu" style="display: none; position: absolute; top: 100%; right: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 120px;">
-                        <a href="/export/qsos?format=csv" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">CSV</a>
-                        <a href="/export/qsos?format=adif" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">ADIF</a>
+                        <a href="/export/qsos?format=csv" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">QSOs (CSV)</a>
+                        <a href="/export/qsos?format=adif" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">QSOs (ADIF)</a>
+                        <a href="/export/medals" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">Medals (CSV)</a>
                     </div>
                 </div>
-                <a href="/export/medals" class="btn btn-info"><span class="icon">📥</span> Export Medals</a>
             </div>
             {% endif %}
         </div>
@@ -756,8 +753,7 @@ async function rejectInvite(teamId) {
                     <label for="pota">POTA</label>
                     <select id="pota" name="pota" style="min-width: 100px;">
                         <option value="">All QSOs</option>
-                        <option value="1" {% if request.query_params.get('pota') == '1' %}selected{% endif %}>Has Park</option>
-                        <option value="0" {% if request.query_params.get('pota') == '0' %}selected{% endif %}>No Park</option>
+                        <option value="1" {% if request.query_params.get('pota') == '1' %}selected{% endif %}>POTA Only</option>
                     </select>
                 </div>
             </div>
@@ -814,6 +810,26 @@ document.addEventListener('click', function(e) {
         menu.style.display = 'none';
     }
 });
+
+// Clear all filters
+function clearFilters() {
+    var form = document.getElementById('qso-filter-form');
+    if (!form) return;
+
+    // Reset all inputs
+    var inputs = form.querySelectorAll('input, select');
+    inputs.forEach(function(input) {
+        if (input.type === 'select-one') {
+            input.selectedIndex = 0;
+        } else {
+            input.value = '';
+        }
+    });
+
+    // Update URL and reload QSOs
+    history.replaceState(null, '', window.location.pathname);
+    filterQsos(1);
+}
 
 // AJAX QSO filtering
 function filterQsos(page) {
