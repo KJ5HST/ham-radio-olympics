@@ -1,6 +1,6 @@
 {
   "name": "Ham Radio Olympics",
-  "short_name": "HRO",
+  "short_name": "Radio Olympics",
   "description": "Olympic-style amateur radio competition",
   "start_url": "/",
   "display": "standalone",
