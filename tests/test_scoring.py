@@ -406,6 +406,20 @@ class TestPOTABonus:
         assert should_award_pota_bonus("park", "work", True) == 2
         assert should_award_pota_bonus("park", "activate", True) == 2
 
+    def test_pota_target_type_gets_bonus(self):
+        """Test that 'pota' target type (any park) also awards POTA bonus.
+
+        The 'pota' target type is for 'any park' sports (vs 'park' which is
+        for a specific park). Both should award POTA bonus.
+        """
+        # 'pota' target without competitor at park - +1
+        assert should_award_pota_bonus("pota", "work", False) == 1
+        assert should_award_pota_bonus("pota", "activate", False) == 1
+
+        # 'pota' target with competitor at park (P2P) - +2
+        assert should_award_pota_bonus("pota", "work", True) == 2
+        assert should_award_pota_bonus("pota", "activate", True) == 2
+
 
 class TestDXCCContinent:
     """Test DXCC to continent mapping."""

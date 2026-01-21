@@ -628,3 +628,93 @@ class TestVerifyApiKey:
         result = await verify_api_key("valid-api-key", expected_callsign="W1ABC")
         assert result is True
 
+
+class TestRealQRZFormat:
+    """Test parsing with actual QRZ export format (from KJ5IRF data)."""
+
+    def test_parse_qrz_format_with_sig_info(self):
+        """Test parsing actual QRZ export format with SIG_INFO field.
+
+        This format comes from the kj5irf QRZ export file.
+        Fields are not in standard order and include QRZ-specific fields.
+        """
+        # Actual format from QRZ export (reformatted for readability)
+        raw = {
+            "CALL": "WI0O",
+            "QSO_DATE": "20241102",
+            "TIME_ON": "1824",
+            "BAND": "10m",
+            "MODE": "SSB",
+            "RST_SENT": "59",
+            "RST_RCVD": "59",
+            "TX_PWR": "20",
+            "GRIDSQUARE": "EN16jc",
+            "DXCC": "291",
+            "SIG_INFO": "US-8613",  # Park reference from QRZ
+            "MY_GRIDSQUARE": "EL09pk",
+            "MY_DXCC": "291",
+            "QSL_RCVD": "N",
+            "APP_QRZLOG_STATUS": "C",  # Confirmed
+            "APP_QRZLOG_LOGID": "1234567890",
+        }
+
+        result = parse_qso_data(raw)
+
+        assert result is not None
+        assert result.dx_callsign == "WI0O"
+        assert result.dx_sig_info == "US-8613"  # Park must be preserved
+        assert result.dx_grid == "EN16jc"
+        assert result.my_grid == "EL09pk"
+        assert result.tx_power == 20.0
+        assert result.is_confirmed == True  # APP_QRZLOG_STATUS=C means confirmed
+
+    def test_qth_field_not_used_for_park_extraction(self):
+        """Test that QTH field is NOT used for park extraction.
+
+        QTH is not a standard ADIF field for POTA park references.
+        Park references must be in SIG_INFO (or COMMENT as fallback).
+        WRL's non-standard use of QTH for parks is not supported.
+        """
+        raw = {
+            "CALL": "KD8OEY",
+            "QSO_DATE": "20241102",
+            "TIME_ON": "1835",
+            "BAND": "10m",
+            "MODE": "SSB",
+            "TX_PWR": "20",
+            "GRIDSQUARE": "EN71vt",
+            "DXCC": "291",
+            "QTH": "US-6780",  # Park in QTH field - NOT extracted
+            "MY_GRIDSQUARE": "EL09pk",
+            "QSL_RCVD": "N",
+            "APP_QRZLOG_STATUS": "C",
+        }
+
+        result = parse_qso_data(raw)
+
+        assert result is not None
+        assert result.dx_callsign == "KD8OEY"
+        assert result.dx_sig_info is None  # QTH is not used for park extraction
+        assert result.is_confirmed == True
+
+    def test_full_adif_round_trip_with_sig_info(self):
+        """Test full ADIF parsing to QSOData with SIG_INFO."""
+        # Actual ADIF line format from QRZ export
+        adif = """<call:4>WI0O<qso_date:8>20241102<time_on:4>1824<band:3>10m<mode:3>SSB
+<tx_pwr:2>20<gridsquare:6>EN16jc<dxcc:3>291<sig_info:7>US-8613
+<my_gridsquare:6>EL09pk<app_qrzlog_status:1>C<app_qrzlog_logid:10>1234567890<eor>"""
+
+        # Parse ADIF to raw dict
+        records = parse_adif(adif)
+        assert len(records) == 1
+
+        # Parse to QSOData
+        result = parse_qso_data(records[0])
+
+        assert result is not None
+        assert result.dx_callsign == "WI0O"
+        assert result.dx_sig_info == "US-8613"
+        assert result.dx_grid == "EN16jc"
+        assert result.my_grid == "EL09pk"
+        assert result.tx_power == 20.0
+        assert result.is_confirmed == True

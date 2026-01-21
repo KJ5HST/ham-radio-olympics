@@ -65,6 +65,7 @@ def normalize_mode(mode: str) -> str:
 
     Groups similar modes together:
     - USB, LSB -> SSB
+    - FSK -> RTTY
     - Various digital modes stay as-is
     """
     if not mode:
@@ -73,6 +74,9 @@ def normalize_mode(mode: str) -> str:
     # Normalize sideband modes to SSB
     if mode in ("USB", "LSB"):
         return "SSB"
+    # Normalize FSK to RTTY
+    if mode == "FSK":
+        return "RTTY"
     return mode
 
 
@@ -520,7 +524,7 @@ def should_award_pota_bonus(target_type: str, role: str, competitor_at_park: boo
     Returns:
         Bonus points (0, 1, or 2)
     """
-    is_pota_target = target_type == "park"
+    is_pota_target = target_type in ("park", "pota")
 
     if is_pota_target and competitor_at_park:
         # Park-to-Park: +2
@@ -961,63 +965,44 @@ def recompute_all_team_standings():
 
 def recompute_all_records():
     """
-    Recompute all records from scratch using only QSOs that qualified for matches.
+    Recompute all records from scratch.
 
-    This clears existing records and rebuilds them based on QSOs that actually
-    matched a target during an active match period.
+    Overall records include ALL confirmed QSOs from medal-holding competitors
+    during match periods, regardless of mode restrictions or strict target matching.
+    This matches the logic used for per-mode records on the records page.
     """
     with get_db() as conn:
         # Clear all existing records
         conn.execute("DELETE FROM records")
 
-        # Get all matches with their sport config
+        # Find all confirmed QSOs from medal-holding competitors during match periods
+        # This is intentionally permissive - same logic as per-mode records
         cursor = conn.execute("""
-            SELECT m.id as match_id, m.start_date, m.end_date, m.target_value,
-                   m.target_type as match_target_type,
-                   m.allowed_modes as match_allowed_modes, m.max_power_w,
-                   m.confirmation_deadline,
-                   s.id as sport_id, s.target_type as sport_target_type, s.work_enabled, s.activate_enabled,
-                   s.separate_pools, s.allowed_modes as sport_allowed_modes, o.qualifying_qsos
-            FROM matches m
-            JOIN sports s ON m.sport_id = s.id
-            JOIN olympiads o ON s.olympiad_id = o.id
+            WITH medal_competitor_matches AS (
+                -- Get all competitor/match pairs that have medals
+                SELECT DISTINCT med.callsign, med.match_id
+                FROM medals med
+                WHERE med.qualified = 1
+            )
+            SELECT DISTINCT q.id as qso_id, q.competitor_callsign, m.id as match_id
+            FROM medal_competitor_matches mcm
+            INNER JOIN matches m ON mcm.match_id = m.id
+            INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
+                             AND q.qso_datetime_utc >= m.start_date
+                             AND q.qso_datetime_utc <= m.end_date
+                             AND q.is_confirmed = 1
+            WHERE q.distance_km IS NOT NULL OR q.cool_factor IS NOT NULL
         """)
-        matches = [dict(row) for row in cursor.fetchall()]
+        qsos_to_process = cursor.fetchall()
 
-    # Process each match to find qualifying QSOs
-    seen_qsos = set()  # Track QSOs we've already processed for records
+    # Track QSOs we've processed to avoid duplicates
+    seen_qsos = set()
 
-    for match_data in matches:
-        start_date = datetime.fromisoformat(match_data["start_date"])
-        end_date = datetime.fromisoformat(match_data["end_date"])
-        confirmation_deadline = None
-        if match_data.get("confirmation_deadline"):
-            confirmation_deadline = datetime.fromisoformat(match_data["confirmation_deadline"])
+    for row in qsos_to_process:
+        qso_id = row["qso_id"]
+        callsign = row["competitor_callsign"]
+        match_id = row["match_id"]
 
-        sport_config = {
-            "target_type": match_data["sport_target_type"],
-            "work_enabled": bool(match_data["work_enabled"]),
-            "activate_enabled": bool(match_data["activate_enabled"]),
-            "separate_pools": bool(match_data["separate_pools"]),
-            "allowed_modes": match_data.get("sport_allowed_modes"),
-        }
-
-        # Get matching QSOs for this match
-        matching = get_matching_qsos(
-            match_data["match_id"],
-            sport_config,
-            match_data["target_value"],
-            start_date,
-            end_date,
-            sport_id=match_data["sport_id"],
-            match_allowed_modes=match_data.get("match_allowed_modes"),
-            max_power_w=match_data.get("max_power_w"),
-            match_target_type=match_data.get("match_target_type"),  # Match-level override
-            confirmation_deadline=confirmation_deadline,
-        )
-
-        # Update records for each matching QSO (only once per QSO)
-        for qso in matching:
-            if qso.qso_id not in seen_qsos:
-                seen_qsos.add(qso.qso_id)
-                update_records(qso.qso_id, qso.callsign, match_id=match_data["match_id"])
+        if qso_id not in seen_qsos:
+            seen_qsos.add(qso_id)
+            update_records(qso_id, callsign, match_id=match_id)

@@ -138,6 +138,7 @@ function toggleDetails(callsign) {
 <div class="table-responsive sport-table" id="sport-{{ sport_id }}" style="display: none;"><table>
     <thead>
         <tr>
+            <th scope="col" style="width: 30px;"></th>
             <th scope="col">Rank</th>
             <th scope="col">Competitor</th>
             <th scope="col">🥇</th>
@@ -148,7 +149,13 @@ function toggleDetails(callsign) {
     </thead>
     <tbody>
         {% for competitor in sport.competitors %}
-        <tr>
+        {% set sport_details = medal_details.get(competitor.callsign, []) | selectattr('sport_id', 'equalto', sport_id) | list %}
+        <tr class="standings-row">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleSportDetails('sport-{{ sport_id }}-{{ competitor.callsign }}')">
+                {% if sport_details %}
+                <span class="expand-icon" id="icon-sport-{{ sport_id }}-{{ competitor.callsign }}">▶</span>
+                {% endif %}
+            </td>
             <td>{{ loop.index }}</td>
             <td><a href="/competitor/{{ competitor.callsign }}">{{ competitor.first_name | competitor_display(competitor.callsign) }}</a>{% if competitor.role and competitor.role != 'combined' %} <span style="color: var(--text-secondary); font-size: 0.85em;">({{ competitor.role }})</span>{% endif %}</td>
             <td>{{ competitor.gold_count or '-' }}</td>
@@ -156,6 +163,50 @@ function toggleDetails(callsign) {
             <td>{{ competitor.bronze_count or '-' }}</td>
             <td><strong>{{ competitor.total_points }}</strong></td>
         </tr>
+        {% if sport_details %}
+        <tr class="details-row" id="sport-{{ sport_id }}-{{ competitor.callsign }}" style="display: none;">
+            <td colspan="7" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="padding: 4px 8px;">Match</th>
+                                <th style="padding: 4px 8px;">Medal</th>
+                                <th style="padding: 4px 8px;">DX Call</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Mode</th>
+                                <th style="padding: 4px 8px;" class="hide-mobile">Power</th>
+                                <th style="padding: 4px 8px;">Distance</th>
+                                <th style="padding: 4px 8px;">CF</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for detail in sport_details %}
+                            {% for qso in detail.qsos %}
+                            <tr>
+                                <td style="padding: 4px 8px;"><a href="/olympiad/sport/{{ detail.sport_id }}/match/{{ detail.match_id }}">{{ detail.target | pota_tooltip }}</a></td>
+                                <td style="padding: 4px 8px;">
+                                    {% if qso.medal_type == 'QSO Race' %}
+                                        {% if detail.qso_medal == 'gold' %}🥇{% elif detail.qso_medal == 'silver' %}🥈{% elif detail.qso_medal == 'bronze' %}🥉{% endif %} Race
+                                    {% else %}
+                                        {% if detail.cf_medal == 'gold' %}🥇{% elif detail.cf_medal == 'silver' %}🥈{% elif detail.cf_medal == 'bronze' %}🥉{% endif %} CF
+                                    {% endif %}
+                                </td>
+                                <td style="padding: 4px 8px;"><strong>{{ qso.dx_callsign }}</strong></td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{{ qso.mode or '-' }}</td>
+                                <td style="padding: 4px 8px;" class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
+                                <td style="padding: 4px 8px;">{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </td>
+        </tr>
+        {% endif %}
         {% endfor %}
     </tbody>
 </table></div>
@@ -172,6 +223,20 @@ function toggleSport(sportId) {
         icon.textContent = '▼';
     } else {
         table.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+
+function toggleSportDetails(detailsId) {
+    const detailsRow = document.getElementById(detailsId);
+    const icon = document.getElementById('icon-' + detailsId);
+    if (!detailsRow || !icon) return;
+
+    if (detailsRow.style.display === 'none') {
+        detailsRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        detailsRow.style.display = 'none';
         icon.textContent = '▶';
     }
 }

@@ -2,7 +2,7 @@
 
 **A Competition Platform for Amateur Radio Operators**
 
-*Version 1.2 — January 2026*
+*Version 1.4 — January 2026*
 
 ---
 
@@ -21,6 +21,7 @@
    - [Target Types](#32-target-types)
    - [Match Events](#33-match-events)
    - [QRP Competitions](#34-qrp-competitions)
+   - [QSO Disqualifications](#35-qso-disqualifications)
 4. [Scoring & Medals](#4-scoring--medals)
    - [Medal Point Values](#41-medal-point-values)
    - [POTA Bonuses](#42-pota-bonuses)
@@ -46,6 +47,7 @@
    - [Referee Role Overview](#81-referee-role-overview)
    - [Accessing the Referee Dashboard](#82-accessing-the-referee-dashboard)
    - [Managing Matches](#83-managing-matches)
+   - [QSO Disqualification](#84-qso-disqualification)
 9. [Administrator Guide](#9-administrator-guide)
    - [Admin Authentication](#91-admin-authentication)
    - [Creating an Olympiad](#92-creating-an-olympiad)
@@ -59,6 +61,9 @@
     - [Local Development](#102-local-development)
     - [Fly.io Deployment](#103-flyio-deployment)
     - [Running Tests](#104-running-tests)
+
+**Appendices:**
+
 - [Appendix A: API Reference](#appendix-a-api-reference)
 - [Appendix B: Glossary](#appendix-b-glossary)
 
@@ -209,11 +214,38 @@ For example:
 
 The three highest cool factor scores win medals. Ties are broken by earliest QSO time.
 
+**Important:** Unlike the QSO Race (where the first three confirmed contacts lock in the medals), Cool Factor is an ongoing competition that runs until the match ends. Medal standings can change throughout the match as new QSOs are logged. Even if someone currently holds a gold medal, you can knock them out of medal contention by logging a QSO with a higher cool factor. Keep trying until the match closes!
+
 ### 3.4 QRP Competitions
 
 Some matches may have a maximum power limit for QRP competitions. Only QSOs at or below the specified power will qualify for that match. Check the match details to see if there's a power restriction.
 
 QRP matches encourage low-power operating and reward efficient stations and skilled operators who can make long-distance contacts with minimal power.
+
+### 3.5 QSO Disqualifications
+
+Occasionally, a referee or the system may disqualify one of your QSOs from medal contention. This can happen for reasons such as:
+
+- Rule violations specific to a sport
+- Data anomalies (e.g., malformed park references like "K-11" instead of "K-0011")
+- Suspected logging errors
+
+**What happens when a QSO is disqualified:**
+
+- The QSO is removed from medal calculations for that specific sport
+- Medals are automatically recomputed
+- The disqualification only affects that sport—the same QSO may still count in other sports
+- You will see a disqualification indicator on the affected QSO
+
+**Refuting a disqualification:**
+
+If you believe a disqualification was made in error, you can submit a refutation:
+
+1. Navigate to the QSO's disqualification history
+2. Click "Refute" and provide your explanation
+3. A referee will review your refutation and may requalify the QSO
+
+All disqualification history, including your refutation and any referee responses, is publicly visible for transparency.
 
 ---
 
@@ -237,20 +269,66 @@ Park contacts earn bonus points in addition to any medals:
 | Target is a park OR you're at a park | +1 point |
 | No park involvement | +0 points |
 
+#### POTA Activation Requirements
+
+For **activate mode** competitions targeting parks, a valid activation requires **10 or more confirmed QSOs** from the same park on the same UTC day. This matches POTA's official activation rules.
+
+**Important:** Once a day qualifies as a valid activation (10+ QSOs), **all QSOs from that day count** toward medals—including the first 9. The 10-QSO threshold determines whether the day is valid, not which individual QSOs count.
+
+**Example:**
+- Monday: 8 QSOs from K-0001 → Day does NOT qualify (fewer than 10)
+- Tuesday: 15 QSOs from K-0001 → Day qualifies, ALL 15 QSOs count toward medals
+
+This requirement only applies to activate mode. Hunters (work mode) have no minimum QSO requirement.
+
 ### 4.3 Scoring Examples
 
-- **Example 1:** Gold in QSO Race (3) + Silver in Cool Factor (2) + Park-to-Park (2) = **7 points**
-- **Example 2:** Silver in QSO Race (2) + Bronze in Cool Factor (1) + Hunt a park (1) = **4 points**
-- **Example 3:** Bronze in QSO Race (1) + Gold in Cool Factor (3) + Activate a park (1) = **5 points**
+**Best possible score (Park-to-Park with double gold):**
+- Gold in QSO Race: 3 points
+- Gold in Cool Factor: 3 points
+- Park-to-Park bonus: +2 points
+- **Total: 8 points**
+
+**Strong performance with park bonus:**
+- Gold in QSO Race: 3 points
+- Silver in Cool Factor: 2 points
+- Hunting a park (or activating): +1 point
+- **Total: 6 points**
+
+**Solid showing without park involvement:**
+- Silver in QSO Race: 2 points
+- Bronze in Cool Factor: 1 point
+- No park bonus: +0 points
+- **Total: 3 points**
+
+**Efficiency specialist (low power, long distance):**
+- No QSO Race medal: 0 points
+- Gold in Cool Factor: 3 points
+- Activated from a park: +1 point
+- **Total: 4 points**
+
+**Speed demon (first to make contact):**
+- Gold in QSO Race: 3 points
+- No Cool Factor medal (high power): 0 points
+- Hunted a park: +1 point
+- **Total: 4 points**
 
 ### 4.4 Maximum Points Per Match
 
-- **Combined pools:** 7 points maximum (Gold + Gold + P2P bonus)
-- **Separate pools:** 14 points maximum (7 points per role)
+- **Combined pools:** 8 points maximum (Gold QSO Race + Gold Cool Factor + Park-to-Park bonus)
+- **Separate pools:** 16 points maximum (8 points per role when both hunting and activating)
 
 ### 4.5 Qualification Requirements
 
-The Olympiad administrator can set a minimum QSO threshold for medal eligibility. If you haven't met the minimum, you'll still appear in standings but won't be eligible to receive medals until you reach the threshold.
+The Olympiad administrator can set a minimum QSO threshold for medal eligibility. This prevents casual participants from claiming medals over competitors who are actively engaged in the competition.
+
+**Why this matters:** Without a qualification threshold, someone could make a single exceptional QRP contact (e.g., coast-to-coast on 100mW) and win the Cool Factor gold medal despite not participating in any other matches. The qualification requirement ensures medals go to competitors who are genuinely competing throughout the Olympiad.
+
+**How it works:**
+- You must have the minimum number of confirmed QSOs across all matches to be medal-eligible
+- You'll still appear in standings before reaching the threshold
+- Once you meet the minimum, you become eligible for medals in all matches
+- The threshold is set at the Olympiad level and applies to all sports
 
 ---
 
@@ -430,6 +508,31 @@ As a referee for a sport, you can:
 - Access detailed competitor information and QSO logs
 - Monitor match progress and standings
 - Disqualify competitors from your sport(s)
+- Disqualify or requalify individual QSOs
+
+### 8.4 QSO Disqualification
+
+Referees can disqualify individual QSOs that violate competition rules. This is different from disqualifying a competitor entirely—a QSO disqualification only affects that specific contact for that specific sport.
+
+**Key points about QSO disqualification:**
+
+- **Sport-specific:** A QSO can be disqualified in one sport but remain valid in another
+- **Requires reason:** You must provide a detailed reason (minimum 20 characters) explaining why the QSO is being disqualified
+- **Automatic medal update:** Medals are automatically recomputed after a disqualification
+- **Audit trail:** All disqualification actions are logged for transparency
+
+**To disqualify a QSO:**
+
+1. Navigate to the competitor's profile or the match standings
+2. Find the QSO in question
+3. Click the disqualify option and provide your reason
+4. The system will remove the QSO from medal contention and recompute standings
+
+**Competitor refutation:** After a QSO is disqualified, the competitor can submit a refutation explaining why they believe the QSO should be reinstated. Refutations appear in the disqualification history for review.
+
+**Requalifying a QSO:** If a disqualification was made in error, or after reviewing a competitor's refutation, referees can requalify the QSO. This restores the QSO to medal contention and triggers another medal recomputation.
+
+**Automatic disqualification:** The system may automatically disqualify QSOs with data anomalies, such as malformed POTA park references (e.g., "K-11" instead of "K-0011"). Competitors can refute these auto-disqualifications, and referees can requalify them after review.
 
 ---
 
@@ -629,6 +732,9 @@ These endpoints require referee role for the associated sport:
 | GET | `/admin/sport/{id}/matches` | Manage sport matches |
 | GET | `/admin/sport/{id}/competitors` | View sport competitors |
 | POST | `/admin/sport/{id}/competitor/{call}/disqualify` | Disqualify competitor from sport |
+| POST | `/referee/sport/{id}/qso/{qso_id}/disqualify` | Disqualify a QSO |
+| POST | `/referee/sport/{id}/qso/{qso_id}/requalify` | Requalify a disqualified QSO |
+| GET | `/qso/{qso_id}/disqualifications` | View QSO disqualification history (public) |
 
 ### A.4 Admin Endpoints
 

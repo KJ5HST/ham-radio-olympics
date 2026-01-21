@@ -233,7 +233,35 @@ class TestSyncCompetitor:
             sync_competitor("W1TEST")
         )
         assert "message" in result
-        assert "No QSOs found" in result["message"]
+        assert "No new QSOs found" in result["message"]
+
+    @patch('sync.fetch_qsos')
+    def test_sync_empty_logbook_still_updates_last_sync(self, mock_fetch, registered_competitor):
+        """Test that sync updates last_sync_at even when no QSOs are found.
+
+        This is critical for user feedback - if sync completes successfully
+        (even with no new QSOs), the user should see the updated timestamp.
+        """
+        mock_fetch.return_value = []
+
+        # Verify initial state - no last_sync_at
+        with get_db() as conn:
+            cursor = conn.execute("SELECT last_sync_at FROM competitors WHERE callsign = ?", ("W1TEST",))
+            initial_sync = cursor.fetchone()["last_sync_at"]
+        assert initial_sync is None
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor("W1TEST")
+        )
+        assert "message" in result
+        assert "No new QSOs found" in result["message"]
+
+        # Verify last_sync_at was updated despite no QSOs
+        with get_db() as conn:
+            cursor = conn.execute("SELECT last_sync_at FROM competitors WHERE callsign = ?", ("W1TEST",))
+            final_sync = cursor.fetchone()["last_sync_at"]
+        assert final_sync is not None, "last_sync_at should be updated even when no QSOs found"
 
     @patch('sync.fetch_qsos')
     def test_sync_with_qsos(self, mock_fetch, registered_competitor):
@@ -264,6 +292,103 @@ class TestSyncCompetitor:
         assert result["callsign"] == "W1TEST"
         assert result["new_qsos"] == 1
         assert result["total_fetched"] == 1
+
+    @patch('sync.validate_park_ids')
+    @patch('sync.fetch_qsos')
+    def test_sync_preserves_park_data(self, mock_fetch, mock_validate, registered_competitor):
+        """Test that sync preserves POTA park data (my_sig_info and dx_sig_info).
+
+        This is critical for POTA scoring - park references must survive
+        the sync process from QRZ API to database.
+        """
+        # Mock park validation to accept all park IDs
+        async def validate_all(park_ids):
+            return park_ids  # Return all as valid
+        mock_validate.side_effect = validate_all
+
+        mock_fetch.return_value = [
+            # Hunter QSO: competitor worked a station at a park
+            QSOData(
+                dx_callsign="N1POTA",
+                qso_datetime=datetime(2026, 1, 15, 12, 0, 0),
+                band="20M",
+                mode="SSB",
+                tx_power=5.0,
+                my_dxcc=291,
+                my_grid="EM12",
+                my_sig_info=None,  # Competitor NOT at a park
+                dx_dxcc=291,
+                dx_grid="FN31",
+                dx_sig_info="K-0001",  # DX station at park K-0001
+                is_confirmed=True,
+                qrz_logid="hunt1",
+            ),
+            # Activator QSO: competitor at a park working someone
+            QSOData(
+                dx_callsign="W2ABC",
+                qso_datetime=datetime(2026, 1, 15, 13, 0, 0),
+                band="20M",
+                mode="SSB",
+                tx_power=5.0,
+                my_dxcc=291,
+                my_grid="DN15",
+                my_sig_info="K-0002",  # Competitor at park K-0002
+                dx_dxcc=291,
+                dx_grid="CM87",
+                dx_sig_info=None,  # DX station NOT at a park
+                is_confirmed=True,
+                qrz_logid="act1",
+            ),
+            # Park-to-Park QSO: both at parks
+            QSOData(
+                dx_callsign="K3POTA",
+                qso_datetime=datetime(2026, 1, 15, 14, 0, 0),
+                band="20M",
+                mode="SSB",
+                tx_power=5.0,
+                my_dxcc=291,
+                my_grid="DN15",
+                my_sig_info="K-0002",  # Competitor at park K-0002
+                dx_dxcc=291,
+                dx_grid="EM85",
+                dx_sig_info="K-0003",  # DX station at park K-0003
+                is_confirmed=True,
+                qrz_logid="p2p1",
+            ),
+        ]
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            sync_competitor("W1TEST")
+        )
+
+        assert result["new_qsos"] == 3
+
+        # Verify park data was preserved in database
+        with get_db() as conn:
+            cursor = conn.execute("""
+                SELECT dx_callsign, my_sig_info, dx_sig_info
+                FROM qsos WHERE competitor_callsign = 'W1TEST'
+                ORDER BY qso_datetime_utc
+            """)
+            qsos = [dict(row) for row in cursor.fetchall()]
+
+        assert len(qsos) == 3
+
+        # Hunt QSO: dx_sig_info should be preserved
+        assert qsos[0]["dx_callsign"] == "N1POTA"
+        assert qsos[0]["my_sig_info"] is None
+        assert qsos[0]["dx_sig_info"] == "K-0001"
+
+        # Activation QSO: my_sig_info should be preserved
+        assert qsos[1]["dx_callsign"] == "W2ABC"
+        assert qsos[1]["my_sig_info"] == "K-0002"
+        assert qsos[1]["dx_sig_info"] is None
+
+        # P2P QSO: both should be preserved
+        assert qsos[2]["dx_callsign"] == "K3POTA"
+        assert qsos[2]["my_sig_info"] == "K-0002"
+        assert qsos[2]["dx_sig_info"] == "K-0003"
 
 
 class TestRecomputeMatches:
@@ -561,7 +686,7 @@ class TestSyncCompetitorLoTW:
             sync_competitor_lotw("W1TEST", "W1TEST", "lotwpass123")
         )
         assert "message" in result
-        assert "No QSOs found" in result["message"]
+        assert "No new QSOs found" in result["message"]
 
     @patch('sync.fetch_lotw_qsos')
     def test_sync_lotw_api_error(self, mock_fetch, competitor_with_lotw):
@@ -705,7 +830,7 @@ class TestSyncCompetitorWithKey:
         )
 
         assert "message" in result
-        assert "No QSOs found" in result["message"]
+        assert "No new QSOs found" in result["message"]
 
     @patch('sync.fetch_qsos')
     def test_sync_with_key_api_error(self, mock_fetch, registered_competitor):

@@ -21,6 +21,44 @@ from scoring import recompute_match_medals, compute_team_standings
 from dxcc import get_continent_from_callsign
 
 
+def delete_competitor_qsos(callsign: str) -> int:
+    """
+    Delete all QSOs and medals for a competitor.
+
+    This prepares for a full reload from QRZ/LoTW by clearing:
+    - All QSOs for the competitor
+    - All medals for the competitor
+    - The last_sync_at timestamp (forces full reload)
+
+    Args:
+        callsign: Competitor callsign
+
+    Returns:
+        Count of deleted QSOs
+    """
+    with get_db() as conn:
+        # Get count before deletion
+        count = conn.execute(
+            "SELECT COUNT(*) FROM qsos WHERE competitor_callsign = ?",
+            (callsign.upper(),)
+        ).fetchone()[0]
+
+        # Delete medals first (references qsos via foreign key relationship)
+        conn.execute("DELETE FROM medals WHERE callsign = ?", (callsign.upper(),))
+
+        # Delete QSOs
+        conn.execute("DELETE FROM qsos WHERE competitor_callsign = ?", (callsign.upper(),))
+
+        # Clear last_sync_at to force full reload
+        conn.execute(
+            "UPDATE competitors SET last_sync_at = NULL WHERE callsign = ?",
+            (callsign.upper(),)
+        )
+        conn.commit()
+
+    return count
+
+
 # Valid POTA park reference pattern: XX-NNNN or X-NNNN (country code, dash, 4+ digits with leading zeros)
 VALID_PARK_PATTERN = re.compile(r'^[A-Z]{1,2}-\d{4,}$')
 
@@ -421,7 +459,14 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         return {"error": str(e)}
 
     if not qsos:
-        return {"message": "No QSOs found in QRZ logbook", "new_qsos": 0, "updated_qsos": 0}
+        # Still update last_sync_at even when no QSOs found - the sync did complete successfully
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE competitors SET last_sync_at = ? WHERE callsign = ?",
+                (datetime.utcnow().isoformat(), callsign.upper())
+            )
+            conn.commit()
+        return {"message": "No new QSOs found in QRZ logbook", "new_qsos": 0, "updated_qsos": 0}
 
     # Validate park IDs against POTA API
     park_ids = _collect_park_ids(qsos)
@@ -571,7 +616,7 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
         return {"error": str(e)}
 
     if not qsos:
-        return {"message": "No QSOs found in LoTW", "new_qsos": 0, "updated_qsos": 0}
+        return {"message": "No new QSOs found in LoTW", "new_qsos": 0, "updated_qsos": 0}
 
     # Validate park IDs against POTA API
     park_ids = _collect_park_ids(qsos)

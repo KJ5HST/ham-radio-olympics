@@ -80,14 +80,52 @@
                         </thead>
                         <tbody>
                             {% for sport in team_sport_medals[team.id] %}
-                            <tr>
-                                <td><a href="/olympiad/sport/{{ sport.sport_id }}">{{ sport.sport_name }}</a></td>
+                            {% set sport_qsos = team_medal_qsos.get(team.id, {}).get(sport.sport_id, []) %}
+                            <tr class="sport-row">
+                                <td style="cursor: pointer;" onclick="toggleSportQsos('team-{{ team.id }}-sport-{{ sport.sport_id }}')">
+                                    {% if sport_qsos %}<span class="expand-icon" id="icon-team-{{ team.id }}-sport-{{ sport.sport_id }}">▶</span>{% endif %}
+                                    <a href="/olympiad/sport/{{ sport.sport_id }}" onclick="event.stopPropagation();">{{ sport.sport_name }}</a>
+                                </td>
                                 <td>{{ sport.total_points | round(1) }}</td>
                                 <td>{{ sport.gold_count or '-' }}</td>
                                 <td>{{ sport.silver_count or '-' }}</td>
                                 <td>{{ sport.bronze_count or '-' }}</td>
                                 <td>{% if sport.medal == 'gold' %}🥇{% elif sport.medal == 'silver' %}🥈{% elif sport.medal == 'bronze' %}🥉{% else %}-{% endif %}</td>
                             </tr>
+                            {% if sport_qsos %}
+                            <tr class="qso-details-row" id="team-{{ team.id }}-sport-{{ sport.sport_id }}" style="display: none;">
+                                <td colspan="6" style="padding: 0; background: var(--bg-primary);">
+                                    <table class="qso-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Competitor</th>
+                                                <th>Medal</th>
+                                                <th>DX Call</th>
+                                                <th class="hide-mobile">Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
+                                                <th class="hide-mobile">Mode</th>
+                                                <th class="hide-mobile">Power</th>
+                                                <th>Distance</th>
+                                                <th>CF</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for qso in sport_qsos %}
+                                            <tr>
+                                                <td><a href="/competitor/{{ qso.callsign }}">{{ qso.first_name | competitor_display(qso.callsign) }}</a></td>
+                                                <td>{% if qso.medal == 'gold' %}🥇{% elif qso.medal == 'silver' %}🥈{% elif qso.medal == 'bronze' %}🥉{% endif %} {{ qso.medal_type }}</td>
+                                                <td><strong>{{ qso.dx_callsign }}</strong></td>
+                                                <td class="hide-mobile">{{ qso.time | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
+                                                <td class="hide-mobile">{{ qso.mode or '-' }}</td>
+                                                <td class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                                <td>{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
+                                                <td>{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </td>
+                            </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -110,6 +148,20 @@ function toggleTeamDetails(teamId) {
         icon.textContent = '▼';
     } else {
         detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+
+function toggleSportQsos(sportRowId) {
+    const qsoRow = document.getElementById(sportRowId);
+    const icon = document.getElementById('icon-' + sportRowId);
+    if (!qsoRow || !icon) return;
+
+    if (qsoRow.style.display === 'none') {
+        qsoRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        qsoRow.style.display = 'none';
         icon.textContent = '▶';
     }
 }
@@ -137,6 +189,26 @@ function toggleTeamDetails(teamId) {
 .nested-table td {
     padding: 4px 8px;
     border-bottom: 1px solid var(--border-color);
+}
+.qso-table {
+    width: calc(100% - 70px);
+    margin: 8px 20px 8px 70px;
+    font-size: 0.85em;
+    border-collapse: collapse;
+}
+.qso-table th {
+    text-align: left;
+    padding: 3px 6px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+.qso-table td {
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--border-color);
+}
+.sport-row .expand-icon {
+    margin-right: 5px;
 }
 </style>
 

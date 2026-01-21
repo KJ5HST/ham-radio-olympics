@@ -47,6 +47,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+class SensitiveDataFilter(logging.Filter):
+    """Filter to redact sensitive data from log messages."""
+
+    # Patterns for sensitive query parameters (password, api key, etc.)
+    SENSITIVE_PATTERNS = [
+        (re.compile(r'([?&]password=)[^&\s"]+', re.IGNORECASE), r'\1[REDACTED]'),
+        (re.compile(r'([?&]api_key=)[^&\s"]+', re.IGNORECASE), r'\1[REDACTED]'),
+        (re.compile(r'([?&]key=)[^&\s"]+', re.IGNORECASE), r'\1[REDACTED]'),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.msg:
+            msg = str(record.msg)
+            for pattern, replacement in self.SENSITIVE_PATTERNS:
+                msg = pattern.sub(replacement, msg)
+            record.msg = msg
+        return True
+
+
+# Apply filter to httpx logger to redact passwords from URLs
+httpx_logger = logging.getLogger("httpx")
+httpx_logger.addFilter(SensitiveDataFilter())
+
 # Rate limiter - disabled in test mode
 def get_rate_limit_key(request: Request) -> str:
     """Get rate limit key, return empty string in test mode to disable."""
@@ -951,7 +975,7 @@ async def landing_page(request: Request):
     """Landing page with active Olympiad info."""
     user = get_current_user(request)
     if not user:
-        return RedirectResponse(url="/signup", status_code=303)
+        return RedirectResponse(url="/login", status_code=303)
     with get_db() as conn:
         cursor = conn.execute("SELECT * FROM olympiads WHERE is_active = 1")
         olympiad = cursor.fetchone()
@@ -1070,9 +1094,11 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
             SELECT m.callsign, m.match_id, ma.target_value, ma.start_date, ma.end_date,
                    m.qso_race_medal, m.qso_race_claim_time,
                    m.cool_factor_medal, m.cool_factor_value,
-                   m.pota_bonus, m.total_points
+                   m.pota_bonus, m.total_points,
+                   COALESCE(ma.allowed_modes, s.allowed_modes) as allowed_modes
             FROM medals m
             JOIN matches ma ON m.match_id = ma.id
+            JOIN sports s ON ma.sport_id = s.id
             WHERE ma.sport_id = ?
             ORDER BY ma.start_date DESC
         """, (sport_id,))
@@ -1080,14 +1106,15 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
 
         # Get all confirmed QSOs for competitors with medals in this sport
         callsigns = list(set(row["callsign"] for row in medal_rows))
-        qsos_by_callsign_match = {}
+        qsos_by_callsign = {}
         if callsigns:
-            from scoring import matches_target
+            from scoring import matches_target, is_mode_allowed
             placeholders = ",".join("?" * len(callsigns))
             cursor = conn.execute(f"""
                 SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                        q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
-                       q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc
+                       q.dx_grid, q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc,
+                       q.my_grid
                 FROM qsos q
                 WHERE q.competitor_callsign IN ({placeholders})
                   AND q.is_confirmed = 1
@@ -1096,60 +1123,89 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: User =
             all_qsos = [dict(row) for row in cursor.fetchall()]
 
             # Index QSOs by callsign for faster lookup
-            qsos_by_callsign = {}
             for qso in all_qsos:
                 cs = qso["competitor_callsign"]
                 if cs not in qsos_by_callsign:
                     qsos_by_callsign[cs] = []
                 qsos_by_callsign[cs].append(qso)
 
-            # Match QSOs to medals
-            for row in medal_rows:
-                callsign = row["callsign"]
-                match_id = row["match_id"]
-                target_value = row["target_value"]
-                start_date = row["start_date"]
-                end_date = row["end_date"]
-                key = (callsign, match_id)
-
-                matching_qsos = []
-                # Normalize dates for comparison (just the date part)
-                start_date_cmp = start_date[:10] if start_date else None
-                end_date_cmp = end_date[:10] if end_date else None
-                for qso in qsos_by_callsign.get(callsign, []):
-                    qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
-                    if qso_date and start_date_cmp and end_date_cmp and start_date_cmp <= qso_date <= end_date_cmp:
-                        # Check if QSO matches target (respecting sport's enabled modes)
-                        matches_work = sport_dict["work_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "work")
-                        matches_activate = sport_dict["activate_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "activate")
-                        if matches_work or matches_activate:
-                            matching_qsos.append({
-                                "dx_callsign": qso["dx_callsign"],
-                                "time": qso["qso_datetime_utc"],
-                                "mode": qso["mode"],
-                                "power": qso["tx_power_w"],
-                                "distance": qso["distance_km"],
-                                "cool_factor": qso["cool_factor"],
-                                "park": qso["dx_sig_info"] or qso["my_sig_info"]
-                            })
-                qsos_by_callsign_match[key] = matching_qsos
-
         medal_details = {}
         for row in medal_rows:
             callsign = row["callsign"]
+            match_id = row["match_id"]
+            target_value = row["target_value"]
+            start_date = row["start_date"]
+            end_date = row["end_date"]
+            qso_medal = row["qso_race_medal"]
+            cf_medal = row["cool_factor_medal"]
+            allowed_modes = row["allowed_modes"]
+
+            # Find QSOs that match this medal's target and date range
+            start_date_cmp = start_date[:10] if start_date else None
+            end_date_cmp = end_date[:10] if end_date else None
+            matching_qsos = []
+
+            for qso in qsos_by_callsign.get(callsign, []):
+                qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
+                if qso_date and start_date_cmp and end_date_cmp and start_date_cmp <= qso_date <= end_date_cmp:
+                    # Check if QSO mode is allowed for this sport/match
+                    if not is_mode_allowed(qso.get("mode"), allowed_modes):
+                        continue
+                    # Check if QSO matches target (respecting sport's enabled modes)
+                    matches_work = sport_dict["work_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "work")
+                    matches_activate = sport_dict["activate_enabled"] and matches_target(qso, sport_dict["target_type"], target_value, "activate")
+                    if matches_work or matches_activate:
+                        matching_qsos.append(qso)
+
+            # Build the specific medal-winning QSOs list (not all matching QSOs)
+            medal_qsos = []
+
+            # For QSO Race medal: the earliest QSO
+            if qso_medal and matching_qsos:
+                earliest = min(matching_qsos, key=lambda q: q["qso_datetime_utc"])
+                medal_qsos.append({
+                    "dx_callsign": earliest["dx_callsign"],
+                    "time": earliest["qso_datetime_utc"],
+                    "mode": earliest["mode"],
+                    "power": earliest["tx_power_w"],
+                    "distance": earliest["distance_km"],
+                    "cool_factor": earliest["cool_factor"],
+                    "medal_type": "QSO Race",
+                    "my_park": earliest.get("my_sig_info"),
+                    "my_grid": earliest.get("my_grid"),
+                })
+
+            # For Cool Factor medal: the QSO with highest cool_factor
+            # Always add as separate row even if same QSO won both medals
+            if cf_medal and matching_qsos:
+                qsos_with_cf = [q for q in matching_qsos if q["cool_factor"] and q["cool_factor"] > 0]
+                if qsos_with_cf:
+                    best_cf = max(qsos_with_cf, key=lambda q: q["cool_factor"])
+                    medal_qsos.append({
+                        "dx_callsign": best_cf["dx_callsign"],
+                        "time": best_cf["qso_datetime_utc"],
+                        "mode": best_cf["mode"],
+                        "power": best_cf["tx_power_w"],
+                        "distance": best_cf["distance_km"],
+                        "cool_factor": best_cf["cool_factor"],
+                        "medal_type": "Cool Factor",
+                        "my_park": best_cf.get("my_sig_info"),
+                        "my_grid": best_cf.get("my_grid"),
+                    })
+
             if callsign not in medal_details:
                 medal_details[callsign] = []
             medal_details[callsign].append({
-                "match_id": row["match_id"],
-                "target": format_target_display(row["target_value"], sport_dict["target_type"]),
-                "target_value": row["target_value"],
-                "qso_medal": row["qso_race_medal"],
+                "match_id": match_id,
+                "target": format_target_display(target_value, sport_dict["target_type"]),
+                "target_value": target_value,
+                "qso_medal": qso_medal,
                 "qso_time": row["qso_race_claim_time"],
-                "cf_medal": row["cool_factor_medal"],
+                "cf_medal": cf_medal,
                 "cf_value": row["cool_factor_value"],
                 "pota_bonus": row["pota_bonus"],
                 "points": row["total_points"],
-                "qsos": qsos_by_callsign_match.get((callsign, row["match_id"]), [])
+                "qsos": medal_qsos
             })
 
         # Check if user has entered this sport
@@ -1481,15 +1537,19 @@ async def get_records(request: Request, user: User = Depends(require_user)):
         from scoring import is_mode_allowed
 
         # Build mode records (filtering by allowed_modes for each sport/match)
+        from scoring import normalize_mode
         mode_best = {}
         for qso in candidate_qsos:
             qso_dict = dict(qso)
-            mode = qso_dict['mode']
+            raw_mode = qso_dict['mode']
 
             # Skip QSOs whose mode isn't allowed for the sport/match
             allowed_modes = qso_dict.get('allowed_modes')
-            if not is_mode_allowed(mode, allowed_modes):
+            if not is_mode_allowed(raw_mode, allowed_modes):
                 continue
+
+            # Normalize mode (USB/LSB -> SSB, etc.)
+            mode = normalize_mode(raw_mode)
 
             if mode not in mode_best:
                 mode_best[mode] = {'max_distance': 0, 'max_cool_factor': 0}
@@ -1594,7 +1654,8 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                        m.cool_factor_value, m.pota_bonus, m.total_points,
                        ma.target_value, ma.start_date, ma.end_date,
                        s.id as sport_id, s.name as sport_name, s.target_type,
-                       s.work_enabled, s.activate_enabled
+                       s.work_enabled, s.activate_enabled,
+                       COALESCE(ma.allowed_modes, s.allowed_modes) as allowed_modes
                 FROM medals m
                 JOIN matches ma ON m.match_id = ma.id
                 JOIN sports s ON ma.sport_id = s.id
@@ -1605,7 +1666,7 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
             medal_rows = cursor.fetchall()
 
             # Get QSOs for these competitors
-            from scoring import matches_target
+            from scoring import matches_target, is_mode_allowed
             cursor = conn.execute(f"""
                 SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                        q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
@@ -1638,11 +1699,15 @@ async def get_medals_page(request: Request, user: User = Depends(require_user)):
                 target_type = row["target_type"]
                 work_enabled = row["work_enabled"]
                 activate_enabled = row["activate_enabled"]
+                allowed_modes = row["allowed_modes"]
 
                 all_matching = []
                 for qso in qsos_by_callsign.get(callsign, []):
                     qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
                     if qso_date and start_date and end_date and start_date <= qso_date <= end_date:
+                        # Check if QSO mode is allowed for this sport/match
+                        if not is_mode_allowed(qso.get("mode"), allowed_modes):
+                            continue
                         matches_work = work_enabled and matches_target(qso, target_type, target_value, "work")
                         matches_activate = activate_enabled and matches_target(qso, target_type, target_value, "activate")
                         if matches_work or matches_activate:
@@ -2112,6 +2177,182 @@ async def trigger_lotw_sync_stored(request: Request):
         raise HTTPException(status_code=400, detail=result["error"])
 
     return result
+
+
+# ============================================================
+# QSO RESET ENDPOINTS
+# ============================================================
+
+
+class QSOResetRequest(BaseModel):
+    """Request body for QSO reset with provided credentials."""
+    qrz_api_key: Optional[str] = None
+    lotw_username: Optional[str] = None
+    lotw_password: Optional[str] = None
+
+
+@app.post("/qsos/reset/preflight")
+async def qso_reset_preflight(request: Request):
+    """
+    Check what credentials a competitor has stored.
+
+    Returns whether they can reset (have at least one credential source).
+    """
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT qrz_api_key_encrypted, lotw_username_encrypted, lotw_password_encrypted
+               FROM competitors WHERE callsign = ?""",
+            (user.callsign,)
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    has_qrz = bool(row["qrz_api_key_encrypted"])
+    has_lotw = bool(row["lotw_username_encrypted"] and row["lotw_password_encrypted"])
+
+    return {
+        "has_qrz": has_qrz,
+        "has_lotw": has_lotw,
+        "can_reset": has_qrz or has_lotw
+    }
+
+
+@app.post("/qsos/reset")
+async def qso_reset(request: Request):
+    """
+    Reset QSOs for the logged-in competitor using stored credentials.
+
+    Deletes all QSOs and medals, then triggers a full sync.
+    Requires at least one stored credential (QRZ or LoTW).
+    """
+    from sync import delete_competitor_qsos
+
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Check stored credentials
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT qrz_api_key_encrypted, lotw_username_encrypted, lotw_password_encrypted
+               FROM competitors WHERE callsign = ?""",
+            (user.callsign,)
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    has_qrz = bool(row["qrz_api_key_encrypted"])
+    has_lotw = bool(row["lotw_username_encrypted"] and row["lotw_password_encrypted"])
+
+    if not has_qrz and not has_lotw:
+        raise HTTPException(
+            status_code=400,
+            detail="No stored credentials. Please provide QRZ API key or LoTW credentials."
+        )
+
+    # Delete all QSOs and medals
+    deleted_count = delete_competitor_qsos(user.callsign)
+
+    # Sync from stored credentials
+    results = {"deleted_qsos": deleted_count}
+
+    if has_qrz:
+        qrz_result = await sync_competitor(user.callsign)
+        results["qrz_sync"] = qrz_result
+
+    if has_lotw:
+        lotw_result = await sync_competitor_lotw_stored(user.callsign)
+        results["lotw_sync"] = lotw_result
+
+    return results
+
+
+@app.post("/qsos/reset-with-key")
+async def qso_reset_with_key(request: Request, reset_data: QSOResetRequest):
+    """
+    Reset QSOs with provided credentials (when none are stored).
+
+    Validates credentials, stores them encrypted, deletes QSOs, and triggers full sync.
+    At least one credential source (QRZ key OR LoTW username+password) is required.
+    """
+    from sync import delete_competitor_qsos
+
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    has_qrz = reset_data.qrz_api_key and reset_data.qrz_api_key.strip()
+    has_lotw = reset_data.lotw_username and reset_data.lotw_password
+
+    if not has_qrz and not has_lotw:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide QRZ API key and/or LoTW credentials"
+        )
+
+    # Validate credentials before deleting anything
+    if has_qrz:
+        is_valid = await verify_api_key(reset_data.qrz_api_key, user.callsign)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid QRZ API key. Please verify your API key is correct."
+            )
+
+    if has_lotw:
+        is_valid = await verify_lotw_credentials(
+            reset_data.lotw_username, reset_data.lotw_password, user.callsign
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid LoTW credentials or username does not match callsign."
+            )
+
+    # Store credentials
+    with get_db() as conn:
+        if has_qrz:
+            encrypted_key = encrypt_api_key(reset_data.qrz_api_key)
+            conn.execute(
+                "UPDATE competitors SET qrz_api_key_encrypted = ? WHERE callsign = ?",
+                (encrypted_key, user.callsign)
+            )
+        if has_lotw:
+            encrypted_username = encrypt_api_key(reset_data.lotw_username)
+            encrypted_password = encrypt_api_key(reset_data.lotw_password)
+            conn.execute(
+                """UPDATE competitors SET
+                   lotw_username_encrypted = ?, lotw_password_encrypted = ?
+                   WHERE callsign = ?""",
+                (encrypted_username, encrypted_password, user.callsign)
+            )
+        conn.commit()
+
+    # Delete all QSOs and medals
+    deleted_count = delete_competitor_qsos(user.callsign)
+
+    # Sync from provided credentials
+    results = {"deleted_qsos": deleted_count}
+
+    if has_qrz:
+        qrz_result = await sync_competitor_with_key(user.callsign, reset_data.qrz_api_key)
+        results["qrz_sync"] = qrz_result
+
+    if has_lotw:
+        lotw_result = await sync_competitor_lotw(
+            user.callsign, reset_data.lotw_username, reset_data.lotw_password
+        )
+        results["lotw_sync"] = lotw_result
+
+    return results
 
 
 # ============================================================
@@ -4477,6 +4718,116 @@ async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
     return {"message": f"Competitor {callsign.upper()} deleted"}
 
 
+@app.post("/admin/competitor/{callsign}/reset-qsos")
+async def admin_reset_competitor_qsos(
+    request: Request,
+    callsign: str,
+    _: bool = Depends(verify_admin)
+):
+    """
+    Admin endpoint to reset a competitor's QSOs.
+
+    Deletes all QSOs and medals for the specified competitor, then triggers
+    a full sync using their stored credentials.
+    """
+    from sync import delete_competitor_qsos
+    from audit import log_action
+
+    callsign = callsign.upper()
+
+    # Verify competitor exists and has stored credentials
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT qrz_api_key_encrypted, lotw_username_encrypted, lotw_password_encrypted
+               FROM competitors WHERE callsign = ?""",
+            (callsign,)
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    has_qrz = bool(row["qrz_api_key_encrypted"])
+    has_lotw = bool(row["lotw_username_encrypted"] and row["lotw_password_encrypted"])
+
+    if not has_qrz and not has_lotw:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Competitor {callsign} has no stored credentials. Cannot sync after reset."
+        )
+
+    # Delete all QSOs and medals
+    deleted_count = delete_competitor_qsos(callsign)
+
+    # Log the action
+    admin_user = get_current_user(request)
+    log_action(
+        admin_user.callsign if admin_user else "ADMIN",
+        "admin_reset_qsos",
+        f"Reset QSOs for {callsign}. Deleted {deleted_count} QSOs."
+    )
+
+    # Sync from stored credentials
+    results = {"deleted_qsos": deleted_count, "callsign": callsign}
+
+    if has_qrz:
+        qrz_result = await sync_competitor(callsign)
+        results["qrz_sync"] = qrz_result
+
+    if has_lotw:
+        lotw_result = await sync_competitor_lotw_stored(callsign)
+        results["lotw_sync"] = lotw_result
+
+    return results
+
+
+@app.post("/admin/competitor/{callsign}/sync")
+async def admin_sync_competitor(
+    request: Request,
+    callsign: str,
+    _: bool = Depends(verify_admin)
+):
+    """
+    Admin endpoint to trigger an incremental sync for a competitor.
+
+    Uses their stored credentials for a normal incremental sync.
+    """
+    callsign = callsign.upper()
+
+    # Verify competitor exists
+    with get_db() as conn:
+        cursor = conn.execute(
+            """SELECT qrz_api_key_encrypted, lotw_username_encrypted, lotw_password_encrypted
+               FROM competitors WHERE callsign = ?""",
+            (callsign,)
+        )
+        row = cursor.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Competitor not found")
+
+    has_qrz = bool(row["qrz_api_key_encrypted"])
+    has_lotw = bool(row["lotw_username_encrypted"] and row["lotw_password_encrypted"])
+
+    if not has_qrz and not has_lotw:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Competitor {callsign} has no stored credentials."
+        )
+
+    results = {"callsign": callsign}
+
+    if has_qrz:
+        qrz_result = await sync_competitor(callsign)
+        results["qrz_sync"] = qrz_result
+
+    if has_lotw:
+        lotw_result = await sync_competitor_lotw_stored(callsign)
+        results["lotw_sync"] = lotw_result
+
+    return results
+
+
 # ============================================================
 # ADMIN SETTINGS ENDPOINTS
 # ============================================================
@@ -5046,10 +5397,149 @@ async def teams_list_page(request: Request, page: int = 1, per_page: int = 20, u
                     team_sport_medals[team_id] = []
                 team_sport_medals[team_id].append(dict(row))
 
+        # Get medal-winning QSOs for each team's sports
+        team_medal_qsos = {}
+        if team_ids:
+            from scoring import matches_target, is_mode_allowed
+
+            # Get team members for each team
+            cursor = conn.execute(f"""
+                SELECT tm.team_id, tm.callsign, c.first_name
+                FROM team_members tm
+                JOIN competitors c ON tm.callsign = c.callsign
+                WHERE tm.team_id IN ({placeholders})
+            """, team_ids)
+            team_members_map = {}
+            all_member_callsigns = set()
+            for row in cursor.fetchall():
+                tid = row["team_id"]
+                if tid not in team_members_map:
+                    team_members_map[tid] = {}
+                team_members_map[tid][row["callsign"]] = row["first_name"]
+                all_member_callsigns.add(row["callsign"])
+
+            if all_member_callsigns:
+                member_placeholders = ",".join("?" * len(all_member_callsigns))
+                member_list = list(all_member_callsigns)
+
+                # Get medals for team members
+                cursor = conn.execute(f"""
+                    SELECT m.callsign, m.match_id, m.qso_race_medal, m.cool_factor_medal,
+                           ma.target_value, ma.start_date, ma.end_date,
+                           s.id as sport_id, s.target_type, s.work_enabled, s.activate_enabled,
+                           COALESCE(ma.allowed_modes, s.allowed_modes) as allowed_modes
+                    FROM medals m
+                    JOIN matches ma ON m.match_id = ma.id
+                    JOIN sports s ON ma.sport_id = s.id
+                    WHERE m.callsign IN ({member_placeholders})
+                      AND (m.qso_race_medal IS NOT NULL OR m.cool_factor_medal IS NOT NULL)
+                """, member_list)
+                member_medals = cursor.fetchall()
+
+                # Get QSOs for team members
+                cursor = conn.execute(f"""
+                    SELECT q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
+                           q.mode, q.tx_power_w, q.distance_km, q.cool_factor,
+                           q.dx_sig_info, q.my_sig_info, q.dx_dxcc, q.my_dxcc, q.my_grid
+                    FROM qsos q
+                    WHERE q.competitor_callsign IN ({member_placeholders})
+                      AND q.is_confirmed = 1
+                    ORDER BY q.qso_datetime_utc ASC
+                """, member_list)
+                all_qsos = [dict(row) for row in cursor.fetchall()]
+
+                # Index QSOs by callsign
+                qsos_by_callsign = {}
+                for qso in all_qsos:
+                    cs = qso["competitor_callsign"]
+                    if cs not in qsos_by_callsign:
+                        qsos_by_callsign[cs] = []
+                    qsos_by_callsign[cs].append(qso)
+
+                # Build medal QSOs per team per sport
+                for row in member_medals:
+                    callsign = row["callsign"]
+                    sport_id = row["sport_id"]
+                    start_date = row["start_date"][:10] if row["start_date"] else None
+                    end_date = row["end_date"][:10] if row["end_date"] else None
+                    target_value = row["target_value"]
+                    target_type = row["target_type"]
+                    work_enabled = row["work_enabled"]
+                    activate_enabled = row["activate_enabled"]
+                    allowed_modes = row["allowed_modes"]
+
+                    # Find which team this member belongs to
+                    member_team_id = None
+                    member_first_name = None
+                    for tid, members in team_members_map.items():
+                        if callsign in members:
+                            member_team_id = tid
+                            member_first_name = members[callsign]
+                            break
+
+                    if not member_team_id:
+                        continue
+
+                    # Find matching QSOs
+                    matching_qsos = []
+                    for qso in qsos_by_callsign.get(callsign, []):
+                        qso_date = qso["qso_datetime_utc"][:10] if qso["qso_datetime_utc"] else None
+                        if qso_date and start_date and end_date and start_date <= qso_date <= end_date:
+                            if not is_mode_allowed(qso.get("mode"), allowed_modes):
+                                continue
+                            matches_work = work_enabled and matches_target(qso, target_type, target_value, "work")
+                            matches_activate = activate_enabled and matches_target(qso, target_type, target_value, "activate")
+                            if matches_work or matches_activate:
+                                matching_qsos.append(qso)
+
+                    # Build medal QSOs
+                    if member_team_id not in team_medal_qsos:
+                        team_medal_qsos[member_team_id] = {}
+                    if sport_id not in team_medal_qsos[member_team_id]:
+                        team_medal_qsos[member_team_id][sport_id] = []
+
+                    # QSO Race medal
+                    if row["qso_race_medal"] and matching_qsos:
+                        earliest = min(matching_qsos, key=lambda q: q["qso_datetime_utc"] or "")
+                        team_medal_qsos[member_team_id][sport_id].append({
+                            "callsign": callsign,
+                            "first_name": member_first_name,
+                            "dx_callsign": earliest["dx_callsign"],
+                            "time": earliest["qso_datetime_utc"],
+                            "mode": earliest["mode"],
+                            "power": earliest["tx_power_w"],
+                            "distance": earliest["distance_km"],
+                            "cool_factor": earliest["cool_factor"],
+                            "medal_type": "Race",
+                            "medal": row["qso_race_medal"],
+                        })
+
+                    # Cool Factor medal
+                    if row["cool_factor_medal"] and matching_qsos:
+                        best_cf = max((q for q in matching_qsos if q.get("cool_factor")),
+                                      key=lambda q: q["cool_factor"] or 0, default=None)
+                        if best_cf:
+                            team_medal_qsos[member_team_id][sport_id].append({
+                                "callsign": callsign,
+                                "first_name": member_first_name,
+                                "dx_callsign": best_cf["dx_callsign"],
+                                "time": best_cf["qso_datetime_utc"],
+                                "mode": best_cf["mode"],
+                                "power": best_cf["tx_power_w"],
+                                "distance": best_cf["distance_km"],
+                                "cool_factor": best_cf["cool_factor"],
+                                "medal_type": "CF",
+                                "medal": row["cool_factor_medal"],
+                            })
+
+        display_prefs = get_display_prefs(user)
+
         return templates.TemplateResponse("teams.html", {
             "request": request,
             "teams": teams,
             "team_sport_medals": team_sport_medals,
+            "team_medal_qsos": team_medal_qsos,
+            "display_prefs": display_prefs,
             "user_team": user_team,
             "user": user,
             "csrf_token": request.state.csrf_token,
@@ -6286,6 +6776,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         request.url.path.startswith("/api/") or
         request.url.path.startswith("/admin/") or
         request.url.path.startswith("/sync") or
+        request.url.path.startswith("/qsos/") or
         request.url.path.startswith("/sport/") or
         request.url.path.startswith("/olympiad/sports") or
         "application/json" in accept_header or

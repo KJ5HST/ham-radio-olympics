@@ -197,6 +197,38 @@ class TestParseLotWQSO:
         result = parse_lotw_qso(raw)
         assert result.dx_callsign == "W1ABC"
 
+    def test_qth_field_not_used_for_park_extraction(self):
+        """Test that QTH field is NOT used for park extraction.
+
+        QTH is not a standard ADIF field for POTA park references.
+        Park references must be in SIG_INFO (or COMMENT as fallback).
+        """
+        raw = {
+            "CALL": "W1ABC",
+            "QSO_DATE": "20260115",
+            "TIME_ON": "1423",
+            "QTH": "US-8613",  # Park in QTH - NOT extracted
+        }
+
+        result = parse_lotw_qso(raw)
+
+        assert result is not None
+        assert result.dx_sig_info is None  # QTH is not used for park extraction
+
+    def test_my_qth_field_not_used_for_park_extraction(self):
+        """Test that MY_QTH field is NOT used for park extraction."""
+        raw = {
+            "CALL": "W1ABC",
+            "QSO_DATE": "20260115",
+            "TIME_ON": "1423",
+            "MY_QTH": "K-4556",  # Park in MY_QTH - NOT extracted
+        }
+
+        result = parse_lotw_qso(raw)
+
+        assert result is not None
+        assert result.my_sig_info is None  # MY_QTH is not used for park extraction
+
 
 class TestVerifyLoTWCredentials:
     """Test LoTW credential verification."""
@@ -429,3 +461,136 @@ class TestFetchLoTWQSOs:
 
         assert len(result) == 1
         assert result[0].dx_callsign == "W1ABC"
+
+
+class TestSensitiveDataFilter:
+    """Test that sensitive data is redacted from logs."""
+
+    def test_password_redacted_from_log_message(self):
+        """Test password query parameter is redacted."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg='HTTP Request: GET https://lotw.arrl.org/lotwreport.adi?login=W1ABC&password=secret123&qso_query=1 "HTTP/1.1 200 OK"',
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert "secret123" not in record.msg
+        assert "password=[REDACTED]" in record.msg
+        assert "login=W1ABC" in record.msg  # Non-sensitive params preserved
+
+    def test_api_key_redacted(self):
+        """Test api_key query parameter is redacted."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg='HTTP Request: GET https://api.example.com?api_key=abc123xyz&data=test "HTTP/1.1 200 OK"',
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert "abc123xyz" not in record.msg
+        assert "api_key=[REDACTED]" in record.msg
+
+    def test_key_param_redacted(self):
+        """Test key query parameter is redacted."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg='HTTP Request: POST https://logbook.qrz.com/api?key=myapikey123 "HTTP/1.1 200 OK"',
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert "myapikey123" not in record.msg
+        assert "key=[REDACTED]" in record.msg
+
+    def test_case_insensitive_redaction(self):
+        """Test redaction is case insensitive."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg='GET https://example.com?PASSWORD=Secret123&API_KEY=key456',
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert "Secret123" not in record.msg
+        assert "key456" not in record.msg
+
+    def test_multiple_sensitive_params(self):
+        """Test multiple sensitive params in same URL are all redacted."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg='GET https://example.com?password=pass1&api_key=key2&key=key3',
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert "pass1" not in record.msg
+        assert "key2" not in record.msg
+        assert "key3" not in record.msg
+        assert record.msg.count("[REDACTED]") == 3
+
+    def test_non_sensitive_message_unchanged(self):
+        """Test non-sensitive messages pass through unchanged."""
+        import logging
+        from main import SensitiveDataFilter
+
+        filter = SensitiveDataFilter()
+        original_msg = 'HTTP Request: GET https://example.com/data?page=1&limit=10 "HTTP/1.1 200 OK"'
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=original_msg,
+            args=(),
+            exc_info=None,
+        )
+
+        filter.filter(record)
+
+        assert record.msg == original_msg

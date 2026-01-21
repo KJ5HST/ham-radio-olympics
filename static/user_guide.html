@@ -129,6 +129,21 @@
             margin: 0.25rem 0;
         }
 
+        /* Nested list styling for table of contents */
+        ol > li {
+            margin: 0.5rem 0;
+        }
+
+        ol > li > ul {
+            margin-top: 0.25rem;
+            list-style-type: none;
+            padding-left: 1.5rem;
+        }
+
+        ol > li > ul > li {
+            margin: 0.15rem 0;
+        }
+
         hr {
             border: none;
             border-top: 1px solid var(--border-color);
@@ -161,110 +176,118 @@
 </head>
 <body>
     <div class="container">
-<h1>Ham Radio Olympics User Guide</h1>
+<h1 id="ham-radio-olympics-user-guide">Ham Radio Olympics User Guide</h1>
 
 <p>
 <strong>A Competition Platform for Amateur Radio Operators</strong>
 </p>
 
 <p>
-<em>Version 1.2 — January 2026</em>
+<em>Version 1.4 — January 2026</em>
 </p>
 
 <hr>
 
-<h2>Table of Contents</h2>
+<h2 id="table-of-contents">Table of Contents</h2>
 
 <ol>
-<li><a href="#1-introduction">Introduction</a></li>
-</ol>   - <a href="#11-what-is-ham-radio-olympics">What is Ham Radio Olympics?</a>
+<li><a href="#1-introduction">Introduction</a>
+<ul>
+<li><a href="#11-what-is-ham-radio-olympics">What is Ham Radio Olympics?</a></li>
+<li><a href="#12-key-concepts">Key Concepts</a></li>
+<li><a href="#13-competition-modes">Competition Modes</a></li>
+</ul>
+</li>
+<li><a href="#2-getting-started-competitors">Getting Started (Competitors)</a>
+<ul>
+<li><a href="#21-registration">Registration</a></li>
+<li><a href="#22-syncing-your-qsos">Syncing Your QSOs</a></li>
+<li><a href="#23-your-dashboard-and-profile">Your Dashboard and Profile</a></li>
+</ul>
+</li>
+<li><a href="#3-competing">Competing</a>
+<ul>
+<li><a href="#31-finding-active-competitions">Finding Active Competitions</a></li>
+<li><a href="#32-target-types">Target Types</a></li>
+<li><a href="#33-match-events">Match Events</a></li>
+<li><a href="#34-qrp-competitions">QRP Competitions</a></li>
+<li><a href="#35-qso-disqualifications">QSO Disqualifications</a></li>
+</ul>
+</li>
+<li><a href="#4-scoring--medals">Scoring & Medals</a>
+<ul>
+<li><a href="#41-medal-point-values">Medal Point Values</a></li>
+<li><a href="#42-pota-bonuses">POTA Bonuses</a></li>
+<li><a href="#43-scoring-examples">Scoring Examples</a></li>
+<li><a href="#44-maximum-points-per-match">Maximum Points Per Match</a></li>
+<li><a href="#45-qualification-requirements">Qualification Requirements</a></li>
+</ul>
+</li>
+<li><a href="#5-teams">Teams</a>
+<ul>
+<li><a href="#51-team-competition">Team Competition</a></li>
+<li><a href="#52-creating-a-team">Creating a Team</a></li>
+<li><a href="#53-joining-a-team">Joining a Team</a></li>
+<li><a href="#54-captain-responsibilities">Captain Responsibilities</a></li>
+<li><a href="#55-leaving-a-team">Leaving a Team</a></li>
+</ul>
+</li>
+<li><a href="#6-records--personal-bests">Records & Personal Bests</a>
+<ul>
+<li><a href="#61-world-records">World Records</a></li>
+<li><a href="#62-personal-bests">Personal Bests</a></li>
+<li><a href="#63-medal-standings">Medal Standings</a></li>
+</ul>
+</li>
+<li><a href="#7-settings--preferences">Settings & Preferences</a>
+<ul>
+<li><a href="#71-account-settings">Account Settings</a></li>
+<li><a href="#72-display-preferences">Display Preferences</a></li>
+<li><a href="#73-email-notifications">Email Notifications</a></li>
+<li><a href="#74-dark-mode">Dark Mode</a></li>
+</ul>
+</li>
+<li><a href="#8-referee-guide">Referee Guide</a>
+<ul>
+<li><a href="#81-referee-role-overview">Referee Role Overview</a></li>
+<li><a href="#82-accessing-the-referee-dashboard">Accessing the Referee Dashboard</a></li>
+<li><a href="#83-managing-matches">Managing Matches</a></li>
+<li><a href="#84-qso-disqualification">QSO Disqualification</a></li>
+</ul>
+</li>
+<li><a href="#9-administrator-guide">Administrator Guide</a>
+<ul>
+<li><a href="#91-admin-authentication">Admin Authentication</a></li>
+<li><a href="#92-creating-an-olympiad">Creating an Olympiad</a></li>
+<li><a href="#93-creating-sports">Creating Sports</a></li>
+<li><a href="#94-creating-matches">Creating Matches</a></li>
+<li><a href="#95-managing-competitors">Managing Competitors</a></li>
+<li><a href="#96-managing-teams">Managing Teams</a></li>
+<li><a href="#97-site-settings">Site Settings</a></li>
+</ul>
+</li>
+<li><a href="#10-deployment--configuration">Deployment & Configuration</a>
+<ul>
+<li><a href="#101-environment-variables">Environment Variables</a></li>
+<li><a href="#102-local-development">Local Development</a></li>
+<li><a href="#103-flyio-deployment">Fly.io Deployment</a></li>
+<li><a href="#104-running-tests">Running Tests</a></li>
+</ul>
+</li>
+</ol>
 <p>
-   - <a href="#12-key-concepts">Key Concepts</a>
-   - <a href="#13-competition-modes">Competition Modes</a>
+<strong>Appendices:</strong>
 </p>
-<ol>
-<li><a href="#2-getting-started-competitors">Getting Started (Competitors)</a></li>
-</ol>   - <a href="#21-registration">Registration</a>
-<p>
-   - <a href="#22-syncing-your-qsos">Syncing Your QSOs</a>
-   - <a href="#23-your-dashboard-and-profile">Your Dashboard and Profile</a>
-</p>
-<ol>
-<li><a href="#3-competing">Competing</a></li>
-</ol>   - <a href="#31-finding-active-competitions">Finding Active Competitions</a>
-<p>
-   - <a href="#32-target-types">Target Types</a>
-   - <a href="#33-match-events">Match Events</a>
-   - <a href="#34-qrp-competitions">QRP Competitions</a>
-</p>
-<ol>
-<li><a href="#4-scoring--medals">Scoring & Medals</a></li>
-</ol>   - <a href="#41-medal-point-values">Medal Point Values</a>
-<p>
-   - <a href="#42-pota-bonuses">POTA Bonuses</a>
-   - <a href="#43-scoring-examples">Scoring Examples</a>
-   - <a href="#44-maximum-points-per-match">Maximum Points Per Match</a>
-   - <a href="#45-qualification-requirements">Qualification Requirements</a>
-</p>
-<ol>
-<li><a href="#5-teams">Teams</a></li>
-</ol>   - <a href="#51-team-competition">Team Competition</a>
-<p>
-   - <a href="#52-creating-a-team">Creating a Team</a>
-   - <a href="#53-joining-a-team">Joining a Team</a>
-   - <a href="#54-captain-responsibilities">Captain Responsibilities</a>
-   - <a href="#55-leaving-a-team">Leaving a Team</a>
-</p>
-<ol>
-<li><a href="#6-records--personal-bests">Records & Personal Bests</a></li>
-</ol>   - <a href="#61-world-records">World Records</a>
-<p>
-   - <a href="#62-personal-bests">Personal Bests</a>
-   - <a href="#63-medal-standings">Medal Standings</a>
-</p>
-<ol>
-<li><a href="#7-settings--preferences">Settings & Preferences</a></li>
-</ol>   - <a href="#71-account-settings">Account Settings</a>
-<p>
-   - <a href="#72-display-preferences">Display Preferences</a>
-   - <a href="#73-email-notifications">Email Notifications</a>
-   - <a href="#74-dark-mode">Dark Mode</a>
-</p>
-<ol>
-<li><a href="#8-referee-guide">Referee Guide</a></li>
-</ol>   - <a href="#81-referee-role-overview">Referee Role Overview</a>
-<p>
-   - <a href="#82-accessing-the-referee-dashboard">Accessing the Referee Dashboard</a>
-   - <a href="#83-managing-matches">Managing Matches</a>
-</p>
-<ol>
-<li><a href="#9-administrator-guide">Administrator Guide</a></li>
-</ol>   - <a href="#91-admin-authentication">Admin Authentication</a>
-<p>
-   - <a href="#92-creating-an-olympiad">Creating an Olympiad</a>
-   - <a href="#93-creating-sports">Creating Sports</a>
-   - <a href="#94-creating-matches">Creating Matches</a>
-   - <a href="#95-managing-competitors">Managing Competitors</a>
-   - <a href="#96-managing-teams">Managing Teams</a>
-   - <a href="#97-site-settings">Site Settings</a>
-</p>
-<ol>
-<li><a href="#10-deployment--configuration">Deployment & Configuration</a></li>
-</ol>    - <a href="#101-environment-variables">Environment Variables</a>
-<p>
-    - <a href="#102-local-development">Local Development</a>
-    - <a href="#103-flyio-deployment">Fly.io Deployment</a>
-    - <a href="#104-running-tests">Running Tests</a>
-</p>
+
 <ul>
 <li><a href="#appendix-a-api-reference">Appendix A: API Reference</a></li>
 <li><a href="#appendix-b-glossary">Appendix B: Glossary</a></li>
 </ul>
 <hr>
 
-<h2>1. Introduction</h2>
+<h2 id="1-introduction">1. Introduction</h2>
 
-<h3>1.1 What is Ham Radio Olympics?</h3>
+<h3 id="11-what-is-ham-radio-olympics">1.1 What is Ham Radio Olympics?</h3>
 
 <p>
 Ham Radio Olympics is a web-based competition platform designed for amateur radio clubs to organize and track radio contests throughout a season. Think of it like the actual Olympics: your club runs an "Olympiad" (a competition season), which contains multiple "Sports" (categories of competition like POTA activations or DX hunting), each with individual "Matches" (specific timed events).
@@ -274,23 +297,23 @@ Ham Radio Olympics is a web-based competition platform designed for amateur radi
 The platform integrates directly with QRZ.com and Logbook of The World (LoTW) to automatically sync your QSO logs, calculate scores, and award medals based on both speed (who made the first qualifying contact) and efficiency (best power-to-distance ratio).
 </p>
 
-<h3>1.2 Key Concepts</h3>
+<h3 id="12-key-concepts">1.2 Key Concepts</h3>
 
-<h4>The Olympic Hierarchy</h4>
+<h4 id="the-olympic-hierarchy">The Olympic Hierarchy</h4>
 
 <ul>
 <li><strong>Olympiad:</strong> The overall competition season (e.g., "2026 Ham Radio Olympics"). Spans a defined date range, typically a calendar year.</li>
 <li><strong>Sport:</strong> A category of competition within the Olympiad (e.g., "POTA Challenge," "DX Hunt," "Grid Square Marathon"). Each sport has its own rules for what counts as a qualifying contact.</li>
 <li><strong>Match:</strong> A specific timed event within a sport. For example, a monthly POTA match might target K-1234, while the next month targets K-5678.</li>
 </ul>
-<h4>User Roles</h4>
+<h4 id="user-roles">User Roles</h4>
 
 <ul>
 <li><strong>Competitor:</strong> Any registered amateur radio operator participating in competitions. Can view standings, sync QSOs, join teams, and track personal records.</li>
 <li><strong>Referee:</strong> A competitor with elevated privileges for specific sports. Can manage matches and view detailed competitor information within their assigned sport(s).</li>
 <li><strong>Administrator:</strong> Full system access. Can create Olympiads, Sports, and Matches; manage all competitors and teams; and grant referee roles.</li>
 </ul>
-<h3>1.3 Competition Modes</h3>
+<h3 id="13-competition-modes">1.3 Competition Modes</h3>
 
 <p>
 Each sport can enable one or both competition modes:
@@ -306,55 +329,58 @@ Sports can award medals to hunters and activators in either combined pools (ever
 
 <hr>
 
-<h2>2. Getting Started (Competitors)</h2>
+<h2 id="2-getting-started-competitors">2. Getting Started (Competitors)</h2>
 
-<h3>2.1 Registration</h3>
+<h3 id="21-registration">2.1 Registration</h3>
 
 <p>
 To participate in Ham Radio Olympics, you need to register with your callsign and connect at least one logging service (QRZ.com or LoTW).
 </p>
 
-<h4>Step-by-Step Registration</h4>
+<h4 id="step-by-step-registration">Step-by-Step Registration</h4>
 
 <ol>
-<li>Navigate to the Ham Radio Olympics website</li>
-<li>Click the "Sign Up" button on the landing page</li>
-<li>Enter your amateur radio callsign (e.g., W1ABC)</li>
-<li>Create a password for your account</li>
-<li>Provide your QRZ.com API key and/or LoTW credentials (at least one required)</li>
-<li>Optionally provide an email address for notifications and password recovery</li>
-<li>Submit your registration</li>
+<li>Navigate to the Ham Radio Olympics website
+<li>Click the "Sign Up" button on the landing page
+<li>Enter your amateur radio callsign (e.g., W1ABC)
+<li>Create a password for your account
+<li>Provide your QRZ.com API key and/or LoTW credentials (at least one required)
+<li>Optionally provide an email address for notifications and password recovery
+<li>Submit your registration
+</li>
 </ol>
-<h4>Getting Your QRZ.com API Key</h4>
+<h4 id="getting-your-qrzcom-api-key">Getting Your QRZ.com API Key</h4>
 
 <ol>
-<li>Log in to QRZ.com</li>
-<li>Navigate to My Logbook > Settings > API tab (requires QRZ XML subscription)</li>
-<li>Generate or copy your existing API key</li>
-<li>Your API key is encrypted before storage in Ham Radio Olympics</li>
+<li>Log in to QRZ.com
+<li>Navigate to My Logbook > Settings > API tab (requires QRZ XML subscription)
+<li>Generate or copy your existing API key
+<li>Your API key is encrypted before storage in Ham Radio Olympics
+</li>
 </ol>
-<h3>2.2 Syncing Your QSOs</h3>
+<h3 id="22-syncing-your-qsos">2.2 Syncing Your QSOs</h3>
 
 <p>
 Ham Radio Olympics automatically pulls your QSO data from QRZ.com and/or LoTW. This includes confirmation status, which is required for medal eligibility.
 </p>
 
-<h4>Manual Sync</h4>
+<h4 id="manual-sync">Manual Sync</h4>
 
 <p>
 To manually trigger a sync of your QSOs:
 </p>
 
 <ol>
-<li>Navigate to your dashboard or the Sync page (<code>/sync</code>)</li>
-<li>Click the "Sync QSOs" button</li>
-<li>Wait for the sync to complete (this may take a moment depending on log size)</li>
+<li>Navigate to your dashboard or the Sync page (<code>/sync</code>)
+<li>Click the "Sync QSOs" button
+<li>Wait for the sync to complete (this may take a moment depending on log size)
+</li>
 </ol>
 <p>
 The system will fetch all QSOs from your connected services and match them against active matches in the current Olympiad.
 </p>
 
-<h4>World Radio League (WRL) Users - IMPORTANT</h4>
+<h4 id="world-radio-league-wrl-users---important">World Radio League (WRL) Users - IMPORTANT</h4>
 
 <blockquote><strong>WARNING:</strong> Do NOT use the direct WRL → QRZ integration. There is a bug that strips POTA data (SIG/SIG_INFO fields) during the automatic sync, causing your park hunts and activations to not be credited.</blockquote>
 
@@ -363,15 +389,16 @@ The system will fetch all QSOs from your connected services and match them again
 </p>
 
 <ol>
-<li><strong>In WRL:</strong> Export your log to an ADIF file (File → Export → ADIF)</li>
-<li><strong>In QRZ:</strong> Import that ADIF file manually (My Logbook → Import → Choose File)</li>
-<li><strong>In Ham Radio Olympics:</strong> Click "Sync to QRZ" from your Dashboard</li>
+<li><strong>In WRL:</strong> Export your log to an ADIF file (File → Export → ADIF)
+<li><strong>In QRZ:</strong> Import that ADIF file manually (My Logbook → Import → Choose File)
+<li><strong>In Ham Radio Olympics:</strong> Click "Sync to QRZ" from your Dashboard
+</li>
 </ol>
 <p>
 This manual export/import process preserves all POTA park references (MY_SIG_INFO for activations, SIG_INFO for hunts) and ensures your contacts are properly credited for competitions.
 </p>
 
-<h3>2.3 Your Dashboard and Profile</h3>
+<h3 id="23-your-dashboard-and-profile">2.3 Your Dashboard and Profile</h3>
 
 <p>
 After logging in, your <strong>Dashboard</strong> (<code>/dashboard</code>) is your home base, displaying:
@@ -391,21 +418,22 @@ Your <strong>public profile</strong> is visible to other competitors at <code>/c
 
 <hr>
 
-<h2>3. Competing</h2>
+<h2 id="3-competing">3. Competing</h2>
 
-<h3>3.1 Finding Active Competitions</h3>
+<h3 id="31-finding-active-competitions">3.1 Finding Active Competitions</h3>
 
 <p>
 From the main page, you can browse the current Olympiad's sports and matches:
 </p>
 
 <ol>
-<li>Click "Olympiad" to view the current competition season</li>
-<li>Browse available sports under "Sports"</li>
-<li>Select a sport to see its matches and rules</li>
-<li>Click on a specific match to view the leaderboard and target details</li>
+<li>Click "Olympiad" to view the current competition season
+<li>Browse available sports under "Sports"
+<li>Select a sport to see its matches and rules
+<li>Click on a specific match to view the leaderboard and target details
+</li>
 </ol>
-<h3>3.2 Target Types</h3>
+<h3 id="32-target-types">3.2 Target Types</h3>
 
 <p>
 Each sport defines what type of target counts as a qualifying contact:
@@ -445,13 +473,13 @@ Each sport defines what type of target counts as a qualifying contact:
 </tr>
 </tbody>
 </table>
-<h3>3.3 Match Events</h3>
+<h3 id="33-match-events">3.3 Match Events</h3>
 
 <p>
 Every match has two separate medal events:
 </p>
 
-<h4>QSO Race</h4>
+<h4 id="qso-race">QSO Race</h4>
 
 <p>
 The QSO Race rewards the first three competitors to log a confirmed qualifying contact with the match target. Speed matters! The first confirmed QSO wins gold, second wins silver, third wins bronze.
@@ -461,7 +489,7 @@ The QSO Race rewards the first three competitors to log a confirmed qualifying c
 Your QSO must be confirmed (via QRZ or LoTW) to count for medals.
 </p>
 
-<h4>Cool Factor (Power Efficiency)</h4>
+<h4 id="cool-factor-power-efficiency">Cool Factor (Power Efficiency)</h4>
 
 <p>
 The Cool Factor event rewards efficient operating. Your score is calculated as:
@@ -482,7 +510,11 @@ For example:
 The three highest cool factor scores win medals. Ties are broken by earliest QSO time.
 </p>
 
-<h3>3.4 QRP Competitions</h3>
+<p>
+<strong>Important:</strong> Unlike the QSO Race (where the first three confirmed contacts lock in the medals), Cool Factor is an ongoing competition that runs until the match ends. Medal standings can change throughout the match as new QSOs are logged. Even if someone currently holds a gold medal, you can knock them out of medal contention by logging a QSO with a higher cool factor. Keep trying until the match closes!
+</p>
+
+<h3 id="34-qrp-competitions">3.4 QRP Competitions</h3>
 
 <p>
 Some matches may have a maximum power limit for QRP competitions. Only QSOs at or below the specified power will qualify for that match. Check the match details to see if there's a power restriction.
@@ -492,11 +524,50 @@ Some matches may have a maximum power limit for QRP competitions. Only QSOs at o
 QRP matches encourage low-power operating and reward efficient stations and skilled operators who can make long-distance contacts with minimal power.
 </p>
 
+<h3 id="35-qso-disqualifications">3.5 QSO Disqualifications</h3>
+
+<p>
+Occasionally, a referee or the system may disqualify one of your QSOs from medal contention. This can happen for reasons such as:
+</p>
+
+<ul>
+<li>Rule violations specific to a sport</li>
+<li>Data anomalies (e.g., malformed park references like "K-11" instead of "K-0011")</li>
+<li>Suspected logging errors</li>
+</ul>
+<p>
+<strong>What happens when a QSO is disqualified:</strong>
+</p>
+
+<ul>
+<li>The QSO is removed from medal calculations for that specific sport</li>
+<li>Medals are automatically recomputed</li>
+<li>The disqualification only affects that sport—the same QSO may still count in other sports</li>
+<li>You will see a disqualification indicator on the affected QSO</li>
+</ul>
+<p>
+<strong>Refuting a disqualification:</strong>
+</p>
+
+<p>
+If you believe a disqualification was made in error, you can submit a refutation:
+</p>
+
+<ol>
+<li>Navigate to the QSO's disqualification history
+<li>Click "Refute" and provide your explanation
+<li>A referee will review your refutation and may requalify the QSO
+</li>
+</ol>
+<p>
+All disqualification history, including your refutation and any referee responses, is publicly visible for transparency.
+</p>
+
 <hr>
 
-<h2>4. Scoring & Medals</h2>
+<h2 id="4-scoring--medals">4. Scoring & Medals</h2>
 
-<h3>4.1 Medal Point Values</h3>
+<h3 id="41-medal-point-values">4.1 Medal Point Values</h3>
 
 <table>
 <thead>
@@ -520,7 +591,7 @@ QRP matches encourage low-power operating and reward efficient stations and skil
 </tr>
 </tbody>
 </table>
-<h3>4.2 POTA Bonuses</h3>
+<h3 id="42-pota-bonuses">4.2 POTA Bonuses</h3>
 
 <p>
 Park contacts earn bonus points in addition to any medals:
@@ -548,85 +619,162 @@ Park contacts earn bonus points in addition to any medals:
 </tr>
 </tbody>
 </table>
-<h3>4.3 Scoring Examples</h3>
-
-<ul>
-<li><strong>Example 1:</strong> Gold in QSO Race (3) + Silver in Cool Factor (2) + Park-to-Park (2) = <strong>7 points</strong></li>
-<li><strong>Example 2:</strong> Silver in QSO Race (2) + Bronze in Cool Factor (1) + Hunt a park (1) = <strong>4 points</strong></li>
-<li><strong>Example 3:</strong> Bronze in QSO Race (1) + Gold in Cool Factor (3) + Activate a park (1) = <strong>5 points</strong></li>
-</ul>
-<h3>4.4 Maximum Points Per Match</h3>
-
-<ul>
-<li><strong>Combined pools:</strong> 7 points maximum (Gold + Gold + P2P bonus)</li>
-<li><strong>Separate pools:</strong> 14 points maximum (7 points per role)</li>
-</ul>
-<h3>4.5 Qualification Requirements</h3>
+<h4 id="pota-activation-requirements">POTA Activation Requirements</h4>
 
 <p>
-The Olympiad administrator can set a minimum QSO threshold for medal eligibility. If you haven't met the minimum, you'll still appear in standings but won't be eligible to receive medals until you reach the threshold.
+For <strong>activate mode</strong> competitions targeting parks, a valid activation requires <strong>10 or more confirmed QSOs</strong> from the same park on the same UTC day. This matches POTA's official activation rules.
 </p>
 
+<p>
+<strong>Important:</strong> Once a day qualifies as a valid activation (10+ QSOs), <strong>all QSOs from that day count</strong> toward medals—including the first 9. The 10-QSO threshold determines whether the day is valid, not which individual QSOs count.
+</p>
+
+<p>
+<strong>Example:</strong>
+</p>
+<ul>
+<li>Monday: 8 QSOs from K-0001 → Day does NOT qualify (fewer than 10)</li>
+<li>Tuesday: 15 QSOs from K-0001 → Day qualifies, ALL 15 QSOs count toward medals</li>
+</ul>
+<p>
+This requirement only applies to activate mode. Hunters (work mode) have no minimum QSO requirement.
+</p>
+
+<h3 id="43-scoring-examples">4.3 Scoring Examples</h3>
+
+<p>
+<strong>Best possible score (Park-to-Park with double gold):</strong>
+</p>
+<ul>
+<li>Gold in QSO Race: 3 points</li>
+<li>Gold in Cool Factor: 3 points</li>
+<li>Park-to-Park bonus: +2 points</li>
+<li><strong>Total: 8 points</strong></li>
+</ul>
+<p>
+<strong>Strong performance with park bonus:</strong>
+</p>
+<ul>
+<li>Gold in QSO Race: 3 points</li>
+<li>Silver in Cool Factor: 2 points</li>
+<li>Hunting a park (or activating): +1 point</li>
+<li><strong>Total: 6 points</strong></li>
+</ul>
+<p>
+<strong>Solid showing without park involvement:</strong>
+</p>
+<ul>
+<li>Silver in QSO Race: 2 points</li>
+<li>Bronze in Cool Factor: 1 point</li>
+<li>No park bonus: +0 points</li>
+<li><strong>Total: 3 points</strong></li>
+</ul>
+<p>
+<strong>Efficiency specialist (low power, long distance):</strong>
+</p>
+<ul>
+<li>No QSO Race medal: 0 points</li>
+<li>Gold in Cool Factor: 3 points</li>
+<li>Activated from a park: +1 point</li>
+<li><strong>Total: 4 points</strong></li>
+</ul>
+<p>
+<strong>Speed demon (first to make contact):</strong>
+</p>
+<ul>
+<li>Gold in QSO Race: 3 points</li>
+<li>No Cool Factor medal (high power): 0 points</li>
+<li>Hunted a park: +1 point</li>
+<li><strong>Total: 4 points</strong></li>
+</ul>
+<h3 id="44-maximum-points-per-match">4.4 Maximum Points Per Match</h3>
+
+<ul>
+<li><strong>Combined pools:</strong> 8 points maximum (Gold QSO Race + Gold Cool Factor + Park-to-Park bonus)</li>
+<li><strong>Separate pools:</strong> 16 points maximum (8 points per role when both hunting and activating)</li>
+</ul>
+<h3 id="45-qualification-requirements">4.5 Qualification Requirements</h3>
+
+<p>
+The Olympiad administrator can set a minimum QSO threshold for medal eligibility. This prevents casual participants from claiming medals over competitors who are actively engaged in the competition.
+</p>
+
+<p>
+<strong>Why this matters:</strong> Without a qualification threshold, someone could make a single exceptional QRP contact (e.g., coast-to-coast on 100mW) and win the Cool Factor gold medal despite not participating in any other matches. The qualification requirement ensures medals go to competitors who are genuinely competing throughout the Olympiad.
+</p>
+
+<p>
+<strong>How it works:</strong>
+</p>
+<ul>
+<li>You must have the minimum number of confirmed QSOs across all matches to be medal-eligible</li>
+<li>You'll still appear in standings before reaching the threshold</li>
+<li>Once you meet the minimum, you become eligible for medals in all matches</li>
+<li>The threshold is set at the Olympiad level and applies to all sports</li>
+</ul>
 <hr>
 
-<h2>5. Teams</h2>
+<h2 id="5-teams">5. Teams</h2>
 
-<h3>5.1 Team Competition</h3>
+<h3 id="51-team-competition">5.1 Team Competition</h3>
 
 <p>
 Teams add a collaborative dimension to Ham Radio Olympics. Team standings are calculated by summing the points of all team members across all sports. You can only be a member of one team at a time.
 </p>
 
-<h3>5.2 Creating a Team</h3>
+<h3 id="52-creating-a-team">5.2 Creating a Team</h3>
 
 <p>
 Any registered competitor can create a team:
 </p>
 
 <ol>
-<li>Navigate to the Teams page (<code>/teams</code>)</li>
-<li>Click "Create Team"</li>
-<li>Enter a team name and optional description</li>
-<li>Submit to create the team</li>
+<li>Navigate to the Teams page (<code>/teams</code>)
+<li>Click "Create Team"
+<li>Enter a team name and optional description
+<li>Submit to create the team
+</li>
 </ol>
 <p>
 When you create a team, you automatically become the <strong>team captain</strong> with special management privileges.
 </p>
 
-<h3>5.3 Joining a Team</h3>
+<h3 id="53-joining-a-team">5.3 Joining a Team</h3>
 
 <p>
 There are two ways to join a team:
 </p>
 
-<h4>Requesting to Join</h4>
+<h4 id="requesting-to-join">Requesting to Join</h4>
 
 <ol>
-<li>Browse existing teams at <code>/teams</code></li>
-<li>Click on the team you want to join</li>
-<li>Click "Request to Join"</li>
-<li>Wait for the team captain to approve your request</li>
+<li>Browse existing teams at <code>/teams</code>
+<li>Click on the team you want to join
+<li>Click "Request to Join"
+<li>Wait for the team captain to approve your request
+</li>
 </ol>
 <p>
 If the captain has already sent you an invitation, your join request is automatically accepted.
 </p>
 
-<h4>Accepting an Invitation</h4>
+<h4 id="accepting-an-invitation">Accepting an Invitation</h4>
 
 <p>
 Team captains can invite you directly:
 </p>
 
 <ol>
-<li>When invited, you'll see the invitation on your dashboard or the team page</li>
-<li>Click "Accept" to join the team, or "Reject" to decline</li>
-<li>If you accept, you immediately become a team member</li>
+<li>When invited, you'll see the invitation on your dashboard or the team page
+<li>Click "Accept" to join the team, or "Reject" to decline
+<li>If you accept, you immediately become a team member
+</li>
 </ol>
 <p>
 If you've already sent a join request to that team, accepting the invitation is automatic.
 </p>
 
-<h3>5.4 Captain Responsibilities</h3>
+<h3 id="54-captain-responsibilities">5.4 Captain Responsibilities</h3>
 
 <p>
 As a team captain, you have additional management capabilities:
@@ -670,16 +818,17 @@ As a team captain, you have additional management capabilities:
 To manage your team, navigate to your team's profile page at <code>/team/{id}</code>.
 </p>
 
-<h3>5.5 Leaving a Team</h3>
+<h3 id="55-leaving-a-team">5.5 Leaving a Team</h3>
 
 <p>
 To leave your current team:
 </p>
 
 <ol>
-<li>Navigate to the team profile page</li>
-<li>Click "Leave Team"</li>
-<li>Confirm your decision</li>
+<li>Navigate to the team profile page
+<li>Click "Leave Team"
+<li>Confirm your decision
+</li>
 </ol>
 <p>
 Your individual scores remain intact, but they will no longer contribute to the team total.
@@ -691,9 +840,9 @@ Your individual scores remain intact, but they will no longer contribute to the 
 
 <hr>
 
-<h2>6. Records & Personal Bests</h2>
+<h2 id="6-records--personal-bests">6. Records & Personal Bests</h2>
 
-<h3>6.1 World Records</h3>
+<h3 id="61-world-records">6.1 World Records</h3>
 
 <p>
 Ham Radio Olympics automatically tracks world records across all competitions. Records are tracked for achievements like:
@@ -709,7 +858,7 @@ Ham Radio Olympics automatically tracks world records across all competitions. R
 View current records at <code>/records</code>.
 </p>
 
-<h3>6.2 Personal Bests</h3>
+<h3 id="62-personal-bests">6.2 Personal Bests</h3>
 
 <p>
 Your competitor profile tracks your personal best performances:
@@ -723,7 +872,7 @@ Your competitor profile tracks your personal best performances:
 These are displayed on your dashboard alongside your medal count and total points, allowing you to measure your improvement over time.
 </p>
 
-<h3>6.3 Medal Standings</h3>
+<h3 id="63-medal-standings">6.3 Medal Standings</h3>
 
 <p>
 The Medal Standings page (<code>/medals</code>) displays all competitors ranked by their total medal count. The leaderboard shows:
@@ -740,13 +889,13 @@ This provides a quick overview of who's leading the competition across all sport
 
 <hr>
 
-<h2>7. Settings & Preferences</h2>
+<h2 id="7-settings--preferences">7. Settings & Preferences</h2>
 
 <p>
 Access your settings from the dropdown menu in the navigation bar.
 </p>
 
-<h3>7.1 Account Settings</h3>
+<h3 id="71-account-settings">7.1 Account Settings</h3>
 
 <p>
 Manage your account information:
@@ -783,7 +932,7 @@ Manage your account information:
 <ul>
 <li>Add, update, or remove your Logbook of The World credentials</li>
 </ul>
-<h3>7.2 Display Preferences</h3>
+<h3 id="72-display-preferences">7.2 Display Preferences</h3>
 
 <p>
 Customize how information is displayed throughout the site:
@@ -803,7 +952,7 @@ Customize how information is displayed throughout the site:
 <li><strong>UTC:</strong> All times shown in Coordinated Universal Time</li>
 <li><strong>Local Time:</strong> Times are converted to local time based on the QSO's grid square location</li>
 </ul>
-<h3>7.3 Email Notifications</h3>
+<h3 id="73-email-notifications">7.3 Email Notifications</h3>
 
 <p>
 If you've added and verified an email address, you can receive notifications for:
@@ -818,7 +967,7 @@ If you've added and verified an email address, you can receive notifications for
 You can enable or disable each notification type individually, or turn off all notifications at once.
 </p>
 
-<h3>7.4 Dark Mode</h3>
+<h3 id="74-dark-mode">7.4 Dark Mode</h3>
 
 <p>
 Use the moon/sun icon in the navigation bar to toggle between light and dark mode. The site also respects your system's color scheme preference.
@@ -826,21 +975,21 @@ Use the moon/sun icon in the navigation bar to toggle between light and dark mod
 
 <hr>
 
-<h2>8. Referee Guide</h2>
+<h2 id="8-referee-guide">8. Referee Guide</h2>
 
-<h3>8.1 Referee Role Overview</h3>
+<h3 id="81-referee-role-overview">8.1 Referee Role Overview</h3>
 
 <p>
 Referees are competitors with elevated privileges for specific sports. The referee role is granted by an administrator and allows you to manage matches and view detailed competitor information within your assigned sport(s).
 </p>
 
-<h3>8.2 Accessing the Referee Dashboard</h3>
+<h3 id="82-accessing-the-referee-dashboard">8.2 Accessing the Referee Dashboard</h3>
 
 <p>
 Once granted referee status, you can access the referee dashboard at <code>/referee</code>. This provides an overview of your assigned sports and any pending tasks.
 </p>
 
-<h3>8.3 Managing Matches</h3>
+<h3 id="83-managing-matches">8.3 Managing Matches</h3>
 
 <p>
 As a referee for a sport, you can:
@@ -854,42 +1003,84 @@ As a referee for a sport, you can:
 <li>Access detailed competitor information and QSO logs</li>
 <li>Monitor match progress and standings</li>
 <li>Disqualify competitors from your sport(s)</li>
+<li>Disqualify or requalify individual QSOs</li>
 </ul>
+<h3 id="84-qso-disqualification">8.4 QSO Disqualification</h3>
+
+<p>
+Referees can disqualify individual QSOs that violate competition rules. This is different from disqualifying a competitor entirely—a QSO disqualification only affects that specific contact for that specific sport.
+</p>
+
+<p>
+<strong>Key points about QSO disqualification:</strong>
+</p>
+
+<ul>
+<li><strong>Sport-specific:</strong> A QSO can be disqualified in one sport but remain valid in another</li>
+<li><strong>Requires reason:</strong> You must provide a detailed reason (minimum 20 characters) explaining why the QSO is being disqualified</li>
+<li><strong>Automatic medal update:</strong> Medals are automatically recomputed after a disqualification</li>
+<li><strong>Audit trail:</strong> All disqualification actions are logged for transparency</li>
+</ul>
+<p>
+<strong>To disqualify a QSO:</strong>
+</p>
+
+<ol>
+<li>Navigate to the competitor's profile or the match standings
+<li>Find the QSO in question
+<li>Click the disqualify option and provide your reason
+<li>The system will remove the QSO from medal contention and recompute standings
+</li>
+</ol>
+<p>
+<strong>Competitor refutation:</strong> After a QSO is disqualified, the competitor can submit a refutation explaining why they believe the QSO should be reinstated. Refutations appear in the disqualification history for review.
+</p>
+
+<p>
+<strong>Requalifying a QSO:</strong> If a disqualification was made in error, or after reviewing a competitor's refutation, referees can requalify the QSO. This restores the QSO to medal contention and triggers another medal recomputation.
+</p>
+
+<p>
+<strong>Automatic disqualification:</strong> The system may automatically disqualify QSOs with data anomalies, such as malformed POTA park references (e.g., "K-11" instead of "K-0011"). Competitors can refute these auto-disqualifications, and referees can requalify them after review.
+</p>
+
 <hr>
 
-<h2>9. Administrator Guide</h2>
+<h2 id="9-administrator-guide">9. Administrator Guide</h2>
 
-<h3>9.1 Admin Authentication</h3>
+<h3 id="91-admin-authentication">9.1 Admin Authentication</h3>
 
 <p>
 Administrator access can be granted in two ways:
 </p>
 
 <ol>
-<li><strong>Admin User Account:</strong> A competitor account with admin privileges. Admins can grant admin status to other users via the admin dashboard.</li>
-<li><strong>API Key Header:</strong> For programmatic access, include the <code>X-Admin-Key</code> header with requests. This key is configured as an environment variable (<code>ADMIN_KEY</code>) during deployment.</li>
+<li><strong>Admin User Account:</strong> A competitor account with admin privileges. Admins can grant admin status to other users via the admin dashboard.
+<li><strong>API Key Header:</strong> For programmatic access, include the <code>X-Admin-Key</code> header with requests. This key is configured as an environment variable (<code>ADMIN_KEY</code>) during deployment.
+</li>
 </ol>
 <p>
 To access the admin dashboard, log in with an admin account and navigate to <code>/admin</code>.
 </p>
 
-<h3>9.2 Creating an Olympiad</h3>
+<h3 id="92-creating-an-olympiad">9.2 Creating an Olympiad</h3>
 
 <p>
 An Olympiad is the top-level container for a competition season. To create one:
 </p>
 
 <ol>
-<li>Access the admin dashboard at <code>/admin</code></li>
-<li>Click "Create Olympiad"</li>
-<li>Provide name, start date, end date, and qualifying QSO minimum</li>
-<li>After creation, activate the Olympiad to make it current</li>
+<li>Access the admin dashboard at <code>/admin</code>
+<li>Click "Create Olympiad"
+<li>Provide name, start date, end date, and qualifying QSO minimum
+<li>After creation, activate the Olympiad to make it current
+</li>
 </ol>
 <p>
 Only one Olympiad can be active at a time.
 </p>
 
-<h3>9.3 Creating Sports</h3>
+<h3 id="93-creating-sports">9.3 Creating Sports</h3>
 
 <p>
 Sports define categories of competition. Configuration options include:
@@ -925,7 +1116,7 @@ Sports define categories of competition. Configuration options include:
 </tr>
 </tbody>
 </table>
-<h3>9.4 Creating Matches</h3>
+<h3 id="94-creating-matches">9.4 Creating Matches</h3>
 
 <p>
 Matches are timed events within a sport. Each match requires:
@@ -944,7 +1135,7 @@ Optional match settings:
 <li><strong>Allowed Modes:</strong> Override sport-level mode restrictions for this match only (e.g., "CW,SSB")</li>
 <li><strong>Max Power (watts):</strong> Limit the match to QRP contacts — only QSOs at or below this power will qualify</li>
 </ul>
-<h3>9.5 Managing Competitors</h3>
+<h3 id="95-managing-competitors">9.5 Managing Competitors</h3>
 
 <p>
 Administrators can:
@@ -959,7 +1150,7 @@ Administrators can:
 <li>Reset competitor passwords</li>
 <li>Remove competitors if necessary</li>
 </ul>
-<h3>9.6 Managing Teams</h3>
+<h3 id="96-managing-teams">9.6 Managing Teams</h3>
 
 <p>
 Administrators have full team management capabilities:
@@ -972,7 +1163,7 @@ Administrators have full team management capabilities:
 <li>Transfer team captaincy</li>
 <li>Delete teams if necessary</li>
 </ul>
-<h3>9.7 Site Settings</h3>
+<h3 id="97-site-settings">9.7 Site Settings</h3>
 
 <p>
 Administrators can customize the site appearance:
@@ -986,9 +1177,9 @@ Administrators can customize the site appearance:
 </ul>
 <hr>
 
-<h2>10. Deployment & Configuration</h2>
+<h2 id="10-deployment--configuration">10. Deployment & Configuration</h2>
 
-<h3>10.1 Environment Variables</h3>
+<h3 id="101-environment-variables">10.1 Environment Variables</h3>
 
 <table>
 <thead>
@@ -1021,34 +1212,36 @@ Administrators can customize the site appearance:
 </tr>
 </tbody>
 </table>
-<h3>10.2 Local Development</h3>
+<h3 id="102-local-development">10.2 Local Development</h3>
 
 <p>
 To run Ham Radio Olympics locally for development or testing:
 </p>
 
 <ol>
-<li>Clone the repository from GitHub</li>
-<li>Install dependencies: <code>pip install -r requirements.txt</code></li>
-<li>Set environment variables (<code>ENCRYPTION_KEY</code>, <code>ADMIN_KEY</code>)</li>
-<li>Run: <code>python -m uvicorn main:app --reload</code></li>
-<li>Open http://localhost:8000 in your browser</li>
+<li>Clone the repository from GitHub
+<li>Install dependencies: <code>pip install -r requirements.txt</code>
+<li>Set environment variables (<code>ENCRYPTION_KEY</code>, <code>ADMIN_KEY</code>)
+<li>Run: <code>python -m uvicorn main:app --reload</code>
+<li>Open http://localhost:8000 in your browser
+</li>
 </ol>
-<h3>10.3 Fly.io Deployment</h3>
+<h3 id="103-flyio-deployment">10.3 Fly.io Deployment</h3>
 
 <p>
 Ham Radio Olympics includes a Dockerfile and <code>fly.toml</code> for easy deployment to Fly.io:
 </p>
 
 <ol>
-<li>Install flyctl: <code>curl -L https://fly.io/install.sh | sh</code></li>
-<li>Login: <code>fly auth login</code></li>
-<li>Create app: <code>fly launch --name ham-radio-olympics</code></li>
-<li>Create persistent volume: <code>fly volumes create ham_olympics_data --size 1 --region iad</code></li>
-<li>Set secrets: <code>fly secrets set ENCRYPTION_KEY="..." ADMIN_KEY="..."</code></li>
-<li>Deploy: <code>fly deploy</code></li>
+<li>Install flyctl: <code>curl -L https://fly.io/install.sh | sh</code>
+<li>Login: <code>fly auth login</code>
+<li>Create app: <code>fly launch --name ham-radio-olympics</code>
+<li>Create persistent volume: <code>fly volumes create ham_olympics_data --size 1 --region iad</code>
+<li>Set secrets: <code>fly secrets set ENCRYPTION_KEY="..." ADMIN_KEY="..."</code>
+<li>Deploy: <code>fly deploy</code>
+</li>
 </ol>
-<h3>10.4 Running Tests</h3>
+<h3 id="104-running-tests">10.4 Running Tests</h3>
 
 <p>
 The project includes a comprehensive test suite. Run tests with:
@@ -1058,9 +1251,9 @@ The project includes a comprehensive test suite. Run tests with:
 
 <hr>
 
-<h2>Appendix A: API Reference</h2>
+<h2 id="appendix-a-api-reference">Appendix A: API Reference</h2>
 
-<h3>A.1 Public Endpoints (No Authentication Required)</h3>
+<h3 id="a1-public-endpoints-no-authentication-required">A.1 Public Endpoints (No Authentication Required)</h3>
 
 <table>
 <thead>
@@ -1128,7 +1321,7 @@ The project includes a comprehensive test suite. Run tests with:
 </tr>
 </tbody>
 </table>
-<h3>A.2 Authenticated User Endpoints</h3>
+<h3 id="a2-authenticated-user-endpoints">A.2 Authenticated User Endpoints</h3>
 
 <p>
 These endpoints require a logged-in user:
@@ -1340,7 +1533,7 @@ These endpoints require a logged-in user:
 </tr>
 </tbody>
 </table>
-<h3>A.3 Referee Endpoints</h3>
+<h3 id="a3-referee-endpoints">A.3 Referee Endpoints</h3>
 
 <p>
 These endpoints require referee role for the associated sport:
@@ -1375,9 +1568,24 @@ These endpoints require referee role for the associated sport:
 <td><code>/admin/sport/{id}/competitor/{call}/disqualify</code></td>
 <td>Disqualify competitor from sport</td>
 </tr>
+<tr>
+<td>POST</td>
+<td><code>/referee/sport/{id}/qso/{qso_id}/disqualify</code></td>
+<td>Disqualify a QSO</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/referee/sport/{id}/qso/{qso_id}/requalify</code></td>
+<td>Requalify a disqualified QSO</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/qso/{qso_id}/disqualifications</code></td>
+<td>View QSO disqualification history (public)</td>
+</tr>
 </tbody>
 </table>
-<h3>A.4 Admin Endpoints</h3>
+<h3 id="a4-admin-endpoints">A.4 Admin Endpoints</h3>
 
 <p>
 These endpoints require administrator privileges (admin user login or <code>X-Admin-Key</code> header):
@@ -1606,7 +1814,7 @@ These endpoints require administrator privileges (admin user login or <code>X-Ad
 </table>
 <hr>
 
-<h2>Appendix B: Glossary</h2>
+<h2 id="appendix-b-glossary">Appendix B: Glossary</h2>
 
 <table>
 <thead>

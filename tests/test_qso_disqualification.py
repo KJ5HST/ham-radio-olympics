@@ -713,3 +713,362 @@ class TestAuditLogging:
             )
             log = cursor.fetchone()
             assert log is not None
+
+
+class TestAutoDisqualificationParkAnomalies:
+    """Test automatic disqualification for park reference format anomalies."""
+
+    def test_detect_park_anomaly_valid_formats(self):
+        """Test that valid park formats are not flagged."""
+        from sync import detect_park_anomaly
+
+        # Valid formats
+        assert detect_park_anomaly("US-0001") is None
+        assert detect_park_anomaly("K-0001") is None
+        assert detect_park_anomaly("VE-1234") is None
+        assert detect_park_anomaly("US-10001") is None  # 5 digits ok
+        assert detect_park_anomaly("") is None
+        assert detect_park_anomaly(None) is None
+
+    def test_detect_park_anomaly_missing_zeros(self):
+        """Test detection of park numbers without leading zeros."""
+        from sync import detect_park_anomaly
+
+        # K-11 should be K-0011
+        anomaly = detect_park_anomaly("K-11")
+        assert anomaly is not None
+        assert "leading zeros" in anomaly
+        assert "K-0011" in anomaly
+
+        # US-1 should be US-0001
+        anomaly = detect_park_anomaly("US-1")
+        assert anomaly is not None
+        assert "leading zeros" in anomaly
+        assert "US-0001" in anomaly
+
+    def test_detect_park_anomaly_missing_dash(self):
+        """Test detection of park refs missing dash."""
+        from sync import detect_park_anomaly
+
+        anomaly = detect_park_anomaly("US0001")
+        assert anomaly is not None
+        assert "Missing dash" in anomaly
+
+        anomaly = detect_park_anomaly("K1234")
+        assert anomaly is not None
+        assert "Missing dash" in anomaly
+
+    def test_detect_park_anomaly_missing_prefix(self):
+        """Test detection of park refs missing country prefix."""
+        from sync import detect_park_anomaly
+
+        anomaly = detect_park_anomaly("0001")
+        assert anomaly is not None
+        assert "Missing country prefix" in anomaly
+
+        anomaly = detect_park_anomaly("1234")
+        assert anomaly is not None
+        assert "Missing country prefix" in anomaly
+
+    def test_auto_disqualify_creates_system_comment(self, client, admin_headers):
+        """Test that auto-disqualification creates a SYSTEM author comment."""
+        from sync import auto_disqualify_qso
+
+        signup_user(client, "W1ABC")
+        client.cookies.clear()
+
+        # Create olympiad with POTA sport
+        now = datetime.utcnow()
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+        end = (now + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+
+        resp = client.post("/admin/olympiad", json={
+            "name": "Test Olympics",
+            "start_date": start,
+            "end_date": end,
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        olympiad_id = resp.json()["id"]
+        client.post(f"/admin/olympiad/{olympiad_id}/activate", headers=admin_headers)
+
+        resp = client.post(f"/admin/olympiad/{olympiad_id}/sport", json={
+            "name": "POTA Challenge",
+            "target_type": "park",
+            "work_enabled": True,
+            "activate_enabled": True
+        }, headers=admin_headers)
+        sport_id = resp.json()["id"]
+
+        # Create QSO
+        qso_id = create_test_qso("W1ABC")
+
+        # Auto-disqualify
+        result = auto_disqualify_qso(qso_id, sport_id, "Auto-flagged: Park format anomaly")
+        assert result is True
+
+        # Verify the comment has SYSTEM as author
+        with get_db() as conn:
+            cursor = conn.execute("""
+                SELECT c.author_callsign, c.comment, c.comment_type
+                FROM qso_disqualification_comments c
+                JOIN qso_disqualifications d ON c.disqualification_id = d.id
+                WHERE d.qso_id = ? AND d.sport_id = ?
+            """, (qso_id, sport_id))
+            comment = cursor.fetchone()
+            assert comment is not None
+            assert comment["author_callsign"] == "SYSTEM"
+            assert comment["comment_type"] == "disqualify"
+            assert "Auto-flagged" in comment["comment"]
+
+    def test_competitor_can_refute_auto_disqualification(self, client, admin_headers):
+        """Test that a competitor can refute an auto-disqualification."""
+        from sync import auto_disqualify_qso
+
+        signup_user(client, "W1ABC")
+        client.cookies.clear()
+
+        # Create olympiad with POTA sport
+        now = datetime.utcnow()
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+        end = (now + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+
+        resp = client.post("/admin/olympiad", json={
+            "name": "Test Olympics",
+            "start_date": start,
+            "end_date": end,
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        olympiad_id = resp.json()["id"]
+        client.post(f"/admin/olympiad/{olympiad_id}/activate", headers=admin_headers)
+
+        resp = client.post(f"/admin/olympiad/{olympiad_id}/sport", json={
+            "name": "POTA Challenge",
+            "target_type": "park",
+            "work_enabled": True
+        }, headers=admin_headers)
+        sport_id = resp.json()["id"]
+
+        # Create QSO
+        qso_id = create_test_qso("W1ABC")
+
+        # Auto-disqualify (simulating what sync would do)
+        auto_disqualify_qso(qso_id, sport_id, "Auto-flagged: Park number needs leading zeros: 'K-11' (expected: K-0011)")
+
+        # Login as owner and refute
+        login_user(client, "W1ABC")
+        resp = client.post(
+            f"/qso/{qso_id}/sport/{sport_id}/refute",
+            json={"refutation": "The park ID K-11 was entered correctly in my logging software, this is how it exported"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "refuted"
+
+        # Verify refutation comment was added
+        with get_db() as conn:
+            cursor = conn.execute("""
+                SELECT c.author_callsign, c.comment_type, c.comment
+                FROM qso_disqualification_comments c
+                JOIN qso_disqualifications d ON c.disqualification_id = d.id
+                WHERE d.qso_id = ? AND d.sport_id = ?
+                ORDER BY c.created_at
+            """, (qso_id, sport_id))
+            comments = cursor.fetchall()
+            assert len(comments) == 2
+            assert comments[0]["author_callsign"] == "SYSTEM"
+            assert comments[0]["comment_type"] == "disqualify"
+            assert comments[1]["author_callsign"] == "W1ABC"
+            assert comments[1]["comment_type"] == "refute"
+
+    def test_referee_can_requalify_auto_disqualification(self, client, admin_headers):
+        """Test that a referee can requalify an auto-disqualified QSO."""
+        from sync import auto_disqualify_qso
+
+        signup_user(client, "W1ABC")
+        client.cookies.clear()
+
+        # Create olympiad with POTA sport
+        now = datetime.utcnow()
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+        end = (now + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+
+        resp = client.post("/admin/olympiad", json={
+            "name": "Test Olympics",
+            "start_date": start,
+            "end_date": end,
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        olympiad_id = resp.json()["id"]
+        client.post(f"/admin/olympiad/{olympiad_id}/activate", headers=admin_headers)
+
+        resp = client.post(f"/admin/olympiad/{olympiad_id}/sport", json={
+            "name": "POTA Challenge",
+            "target_type": "park",
+            "work_enabled": True
+        }, headers=admin_headers)
+        sport_id = resp.json()["id"]
+
+        # Create QSO
+        qso_id = create_test_qso("W1ABC")
+
+        # Auto-disqualify
+        auto_disqualify_qso(qso_id, sport_id, "Auto-flagged: Park format anomaly")
+
+        # Requalify as admin/referee
+        resp = client.post(
+            f"/referee/sport/{sport_id}/qso/{qso_id}/requalify",
+            json={"reason": "Park ID verified as valid, format accepted by POTA"},
+            headers=admin_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "QSO requalified"
+
+        # Verify status
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+                (qso_id, sport_id)
+            )
+            dq = cursor.fetchone()
+            assert dq["status"] == "requalified"
+
+    def test_full_auto_disqualify_refute_requalify_flow(self, client, admin_headers):
+        """Test complete flow: auto-DQ -> refute -> requalify."""
+        from sync import auto_disqualify_qso
+
+        signup_user(client, "W1ABC")
+        client.cookies.clear()
+
+        # Create olympiad with POTA sport
+        now = datetime.utcnow()
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+        end = (now + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+
+        resp = client.post("/admin/olympiad", json={
+            "name": "Test Olympics",
+            "start_date": start,
+            "end_date": end,
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        olympiad_id = resp.json()["id"]
+        client.post(f"/admin/olympiad/{olympiad_id}/activate", headers=admin_headers)
+
+        resp = client.post(f"/admin/olympiad/{olympiad_id}/sport", json={
+            "name": "POTA Challenge",
+            "target_type": "park",
+            "work_enabled": True
+        }, headers=admin_headers)
+        sport_id = resp.json()["id"]
+
+        # Create QSO
+        qso_id = create_test_qso("W1ABC")
+
+        # 1. Auto-disqualify (what sync does for malformed parks)
+        auto_disqualify_qso(
+            qso_id, sport_id,
+            "Auto-flagged: Park number needs leading zeros: 'K-11' (expected: K-0011)"
+        )
+
+        # 2. Competitor refutes
+        login_user(client, "W1ABC")
+        resp = client.post(
+            f"/qso/{qso_id}/sport/{sport_id}/refute",
+            json={"refutation": "My logging software exports K-11, but POTA recognizes this as K-0011"}
+        )
+        assert resp.status_code == 200
+        client.cookies.clear()
+
+        # 3. Referee requalifies
+        resp = client.post(
+            f"/referee/sport/{sport_id}/qso/{qso_id}/requalify",
+            json={"reason": "Verified K-11 maps to K-0011 in POTA system, requalifying"},
+            headers=admin_headers
+        )
+        assert resp.status_code == 200
+
+        # 4. Verify full history
+        resp = client.get(f"/qso/{qso_id}/disqualifications")
+        data = resp.json()
+        assert len(data["disqualifications"]) == 1
+        assert data["disqualifications"][0]["status"] == "requalified"
+
+        comments = data["disqualifications"][0]["comments"]
+        assert len(comments) == 3
+        assert comments[0]["comment_type"] == "disqualify"
+        assert comments[0]["author_callsign"] == "SYSTEM"
+        assert "leading zeros" in comments[0]["comment"]
+        assert comments[1]["comment_type"] == "refute"
+        assert comments[1]["author_callsign"] == "W1ABC"
+        assert comments[2]["comment_type"] == "requalify"
+
+    def test_check_and_disqualify_park_anomalies_integration(self, client, admin_headers):
+        """Test the check_and_disqualify_park_anomalies function with real QSO data."""
+        from sync import check_and_disqualify_park_anomalies
+
+        signup_user(client, "W1ABC")
+        client.cookies.clear()
+
+        # Create olympiad with POTA sport
+        now = datetime.utcnow()
+        start = (now - timedelta(days=30)).strftime("%Y-%m-%dT00:00:00")
+        end = (now + timedelta(days=30)).strftime("%Y-%m-%dT23:59:59")
+
+        resp = client.post("/admin/olympiad", json={
+            "name": "Test Olympics",
+            "start_date": start,
+            "end_date": end,
+            "qualifying_qsos": 0
+        }, headers=admin_headers)
+        olympiad_id = resp.json()["id"]
+        client.post(f"/admin/olympiad/{olympiad_id}/activate", headers=admin_headers)
+
+        resp = client.post(f"/admin/olympiad/{olympiad_id}/sport", json={
+            "name": "POTA Challenge",
+            "target_type": "park",
+            "work_enabled": True,
+            "activate_enabled": True
+        }, headers=admin_headers)
+        sport_id = resp.json()["id"]
+
+        # Create QSO with malformed park reference
+        with get_db() as conn:
+            cursor = conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    dx_dxcc, dx_grid, dx_sig_info, distance_km, tx_power_w, cool_factor,
+                    is_confirmed, mode, band
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                "W1ABC", "K1ABC", now.isoformat(),
+                "291", "FN31", "K-11",  # Malformed - should be K-0011
+                1000, 100, 10.0,
+                1, "SSB", "20m"
+            ))
+            qso_id = cursor.lastrowid
+            conn.commit()
+
+        # Run the anomaly check
+        stats = check_and_disqualify_park_anomalies()
+
+        # Verify stats
+        assert stats["anomalies_found"] >= 1
+        assert stats["qsos_disqualified"] >= 1
+
+        # Verify QSO was disqualified
+        with get_db() as conn:
+            cursor = conn.execute(
+                "SELECT status FROM qso_disqualifications WHERE qso_id = ? AND sport_id = ?",
+                (qso_id, sport_id)
+            )
+            dq = cursor.fetchone()
+            assert dq is not None
+            assert dq["status"] == "disqualified"
+
+            # Verify comment has the anomaly details
+            cursor = conn.execute("""
+                SELECT comment FROM qso_disqualification_comments c
+                JOIN qso_disqualifications d ON c.disqualification_id = d.id
+                WHERE d.qso_id = ?
+            """, (qso_id,))
+            comment = cursor.fetchone()
+            assert "K-11" in comment["comment"]
+            assert "K-0011" in comment["comment"]

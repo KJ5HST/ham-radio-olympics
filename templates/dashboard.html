@@ -53,8 +53,19 @@
             <button onclick="showLotwModal()" id="sync-lotw-btn" class="btn btn-purple"><span class="icon">🔄</span> Sync from LoTW</button>
             {% endif %}
         </div>
-        <p style="margin-top: 10px; font-size: 0.9em; color: #718096;">
+        <p style="margin-top: 10px; font-size: 0.85em; color: #718096;">
+            Sync checks for new and updated QSOs from the last 60 days to catch recent confirmations.
             <a href="/settings">Manage stored credentials</a>
+        </p>
+    </div>
+
+    <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+        <strong>Reset QSOs:</strong>
+        <div style="margin-top: 8px;">
+            <button onclick="resetQsos()" id="reset-qsos-btn" class="btn btn-warning"><span class="icon">🔄</span> Reset & Reload QSOs</button>
+        </div>
+        <p style="margin-top: 8px; font-size: 0.85em; color: #718096;">
+            This will delete all your QSOs and reload them from scratch. Use this if your QSO data seems incorrect or out of sync.
         </p>
     </div>
 
@@ -93,6 +104,46 @@
                 <button onclick="hideLotwModal()" class="btn btn-secondary" style="flex: 1;"><span class="icon">✕</span> Cancel</button>
             </div>
             <div id="lotw-result" style="margin-top: 10px;"></div>
+        </div>
+    </div>
+
+    <!-- Reset Credentials Modal (shown when no credentials stored) -->
+    <div id="reset-credentials-modal" class="modal-overlay">
+        <div class="modal-content" style="max-width: 500px;">
+            <h4 style="margin-top: 0;">Enter Logbook Credentials</h4>
+            <p style="color: #718096; font-size: 0.9em;">
+                Enter at least one credential source to reload your QSOs.
+                Your credentials will be stored for future syncs.
+            </p>
+
+            <fieldset style="border: 1px solid var(--border-color); border-radius: 4px; padding: 15px; margin-bottom: 15px;">
+                <legend style="padding: 0 10px; font-weight: bold;">QRZ Logbook</legend>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="reset-qrz-api-key">QRZ API Key</label>
+                    <input type="text" id="reset-qrz-api-key" placeholder="XXXX-XXXX-XXXX-XXXX">
+                </div>
+                <p style="font-size: 0.8em; color: #718096; margin-top: 5px;">
+                    Get your API key from qrz.com &rarr; Logbook &rarr; Settings
+                </p>
+            </fieldset>
+
+            <fieldset style="border: 1px solid var(--border-color); border-radius: 4px; padding: 15px; margin-bottom: 15px;">
+                <legend style="padding: 0 10px; font-weight: bold;">LoTW (Logbook of the World)</legend>
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <label for="reset-lotw-username">LoTW Username</label>
+                    <input type="text" id="reset-lotw-username" placeholder="Your callsign" value="{{ competitor.callsign }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="reset-lotw-password">LoTW Password</label>
+                    <input type="password" id="reset-lotw-password" placeholder="Your LoTW password">
+                </div>
+            </fieldset>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="submitResetWithCredentials()" id="reset-submit-btn" class="btn btn-warning" style="flex: 1;"><span class="icon">🔄</span> Reset & Reload</button>
+                <button onclick="hideResetCredentialsModal()" class="btn btn-secondary" style="flex: 1;"><span class="icon">✕</span> Cancel</button>
+            </div>
+            <div id="reset-credentials-result" style="margin-top: 10px;"></div>
         </div>
     </div>
 
@@ -248,11 +299,124 @@
         }
     }
 
+    // Reset QSOs functions
+    async function resetQsos() {
+        const btn = document.getElementById('reset-qsos-btn');
+
+        // First check if we have stored credentials
+        try {
+            const preflightResp = await fetch('/qsos/reset/preflight', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin'
+            });
+            const preflight = await preflightResp.json();
+
+            if (!preflightResp.ok) {
+                showToast('Error: ' + (preflight.detail || 'Failed to check credentials'), 'error');
+                return;
+            }
+
+            if (preflight.can_reset) {
+                // Has stored credentials - confirm and reset
+                if (!confirm('This will delete all your QSOs and reload them from scratch.\n\nAre you sure you want to continue?')) {
+                    return;
+                }
+
+                setButtonLoading(btn, true);
+                const resetResp = await fetch('/qsos/reset', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'same-origin'
+                });
+                const resetData = await resetResp.json();
+
+                if (!resetResp.ok) {
+                    showToast('Reset failed: ' + (resetData.detail || 'Unknown error'), 'error');
+                    setButtonLoading(btn, false);
+                } else {
+                    showToast('Reset complete! Deleted ' + resetData.deleted_qsos + ' QSOs and reloaded.', 'success');
+                    setTimeout(() => location.reload(), 2000);
+                }
+            } else {
+                // No stored credentials - show modal to enter them
+                showResetCredentialsModal();
+            }
+        } catch (e) {
+            showToast('Error: ' + e.message, 'error');
+        }
+    }
+
+    function showResetCredentialsModal() {
+        document.getElementById('reset-credentials-modal').classList.add('show');
+        document.getElementById('reset-qrz-api-key').focus();
+    }
+
+    function hideResetCredentialsModal() {
+        document.getElementById('reset-credentials-modal').classList.remove('show');
+        document.getElementById('reset-qrz-api-key').value = '';
+        document.getElementById('reset-lotw-password').value = '';
+        document.getElementById('reset-credentials-result').innerHTML = '';
+    }
+
+    async function submitResetWithCredentials() {
+        const btn = document.getElementById('reset-submit-btn');
+        const result = document.getElementById('reset-credentials-result');
+
+        const qrzApiKey = document.getElementById('reset-qrz-api-key').value.trim();
+        const lotwUsername = document.getElementById('reset-lotw-username').value.trim();
+        const lotwPassword = document.getElementById('reset-lotw-password').value;
+
+        const hasQrz = qrzApiKey.length > 0;
+        const hasLotw = lotwUsername.length > 0 && lotwPassword.length > 0;
+
+        if (!hasQrz && !hasLotw) {
+            result.innerHTML = '<div class="alert alert-error">Please enter QRZ API key and/or LoTW credentials</div>';
+            return;
+        }
+
+        if (!confirm('This will delete all your QSOs and reload them from scratch.\n\nAre you sure you want to continue?')) {
+            return;
+        }
+
+        setButtonLoading(btn, true);
+        result.innerHTML = '';
+
+        try {
+            const body = {};
+            if (hasQrz) body.qrz_api_key = qrzApiKey;
+            if (hasLotw) {
+                body.lotw_username = lotwUsername;
+                body.lotw_password = lotwPassword;
+            }
+
+            const resp = await fetch('/qsos/reset-with-key', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            });
+            const data = await resp.json();
+
+            if (resp.ok) {
+                hideResetCredentialsModal();
+                showToast('Reset complete! Deleted ' + data.deleted_qsos + ' QSOs and reloaded.', 'success');
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                result.innerHTML = '<div class="alert alert-error">' + (data.detail || 'Reset failed') + '</div>';
+                setButtonLoading(btn, false);
+            }
+        } catch (e) {
+            result.innerHTML = '<div class="alert alert-error">Reset failed: ' + e.message + '</div>';
+            setButtonLoading(btn, false);
+        }
+    }
+
     // Close modals on escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             hideQrzModal();
             hideLotwModal();
+            hideResetCredentialsModal();
         }
     });
     </script>

@@ -124,6 +124,8 @@
                     <button type="button" onclick="disqualifyCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-purple" title="Disqualify"><span class="icon">🚫</span></button>
                     {% endif %}
                     <button type="button" onclick="resetPassword('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-info" title="Reset Password"><span class="icon">🔑</span></button>
+                    <button type="button" onclick="syncCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-success" title="Sync QSOs"><span class="icon">🔄</span></button>
+                    <button type="button" onclick="resetCompetitorQsos('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-warning" title="Reset QSOs"><span class="icon">♻️</span></button>
                     <button type="button" onclick="deleteCompetitor('{{ c.callsign }}')" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -300,6 +302,51 @@ async function resetPassword(callsign) {
         showToast('Password reset successful', 'success');
     } else {
         showToast('Error: ' + data.detail, 'error');
+    }
+}
+
+async function syncCompetitor(callsign) {
+    if (!confirm('Sync QSOs for ' + callsign + ' from their stored credentials?')) return;
+    try {
+        const response = await fetch('/admin/competitor/' + callsign + '/sync', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (response.ok) {
+            let msg = 'Sync complete for ' + callsign;
+            if (data.qrz_sync) msg += ' (QRZ: ' + (data.qrz_sync.new_qsos || 0) + ' new, ' + (data.qrz_sync.updated_qsos || 0) + ' updated)';
+            if (data.lotw_sync) msg += ' (LoTW: ' + (data.lotw_sync.new_qsos || 0) + ' new, ' + (data.lotw_sync.updated_qsos || 0) + ' updated)';
+            showToast(msg, 'success');
+        } else {
+            showToast('Error: ' + (data.detail || 'Sync failed'), 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+    }
+}
+
+async function resetCompetitorQsos(callsign) {
+    if (!confirm('Reset all QSOs for ' + callsign + '?\n\nThis will delete all their QSOs and medals, then reload from their stored credentials.')) return;
+    if (!confirm('Are you SURE? This will delete all QSOs and medals for ' + callsign + '.')) return;
+    try {
+        const response = await fetch('/admin/competitor/' + callsign + '/reset-qsos', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (response.ok) {
+            let msg = 'Reset complete for ' + callsign + '. Deleted ' + data.deleted_qsos + ' QSOs.';
+            if (data.qrz_sync) msg += ' QRZ: ' + (data.qrz_sync.new_qsos || 0) + ' new.';
+            if (data.lotw_sync) msg += ' LoTW: ' + (data.lotw_sync.new_qsos || 0) + ' new.';
+            showToast(msg, 'success');
+        } else {
+            showToast('Error: ' + (data.detail || 'Reset failed'), 'error');
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
     }
 }
 

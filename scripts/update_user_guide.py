@@ -28,11 +28,21 @@ def markdown_to_html(md_content: str) -> str:
     # Convert inline code (`code`)
     html = re.sub(r'`([^`]+)`', r'<code>\1</code>', html)
 
-    # Convert headers
-    html = re.sub(r'^#### (.+)$', r'<h4>\1</h4>', html, flags=re.MULTILINE)
-    html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
-    html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
-    html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
+    # Convert headers with id attributes for anchor links
+    def header_with_id(match, tag):
+        text = match.group(1)
+        # Generate id to match the manually-written TOC links in markdown
+        # " & " becomes "  " (double space) which becomes "--" (double hyphen)
+        header_id = text.lower()
+        header_id = re.sub(r'[^\w\s-]', '', header_id)  # remove special chars (including &)
+        header_id = re.sub(r'\s', '-', header_id)  # each space to hyphen (preserves doubles)
+        header_id = header_id.strip('-')
+        return f'<{tag} id="{header_id}">{text}</{tag}>'
+
+    html = re.sub(r'^#### (.+)$', lambda m: header_with_id(m, 'h4'), html, flags=re.MULTILINE)
+    html = re.sub(r'^### (.+)$', lambda m: header_with_id(m, 'h3'), html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.+)$', lambda m: header_with_id(m, 'h2'), html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.+)$', lambda m: header_with_id(m, 'h1'), html, flags=re.MULTILINE)
 
     # Convert bold and italic
     html = re.sub(r'\*\*\*(.+?)\*\*\*', r'<strong><em>\1</em></strong>', html)
@@ -82,7 +92,49 @@ def markdown_to_html(md_content: str) -> str:
         html
     )
 
-    # Convert unordered lists
+    # Convert nested lists (handles numbered lists with indented sub-items)
+    def convert_nested_list(match):
+        lines = match.group(0).rstrip('\n').split('\n')
+        result = []
+        in_sublist = False
+
+        for line in lines:
+            # Check for numbered list item (no indent)
+            numbered_match = re.match(r'^(\d+)\.\s+(.+)$', line)
+            # Check for indented sub-item (3+ spaces or tab, then - or *)
+            sub_match = re.match(r'^(\s{2,}|\t)[\-\*]\s+(.+)$', line)
+
+            if numbered_match:
+                if in_sublist:
+                    result.append('</ul>')
+                    result.append('</li>')
+                    in_sublist = False
+                elif result and not result[-1].endswith('</li>'):
+                    # Close previous item if needed
+                    pass
+                result.append(f'<li>{numbered_match.group(2)}')
+            elif sub_match:
+                if not in_sublist:
+                    result.append('<ul>')
+                    in_sublist = True
+                result.append(f'<li>{sub_match.group(2)}</li>')
+
+        if in_sublist:
+            result.append('</ul>')
+        if result:
+            result.append('</li>')
+
+        return '<ol>\n' + '\n'.join(result) + '\n</ol>'
+
+    # Match numbered lists with optional indented sub-items
+    html = re.sub(
+        r'(^\d+\.\s+.+\n(?:(?:\s{2,}|\t)[\-\*]\s+.+\n)*)+',
+        convert_nested_list,
+        html,
+        flags=re.MULTILINE
+    )
+
+    # Convert standalone unordered lists (not indented, not part of numbered list)
     def convert_list(match):
         items = match.group(0).strip().split('\n')
         html_list = '<ul>\n'
@@ -94,19 +146,6 @@ def markdown_to_html(md_content: str) -> str:
         return html_list
 
     html = re.sub(r'(^[\-\*] .+\n?)+', convert_list, html, flags=re.MULTILINE)
-
-    # Convert numbered lists
-    def convert_numbered_list(match):
-        items = match.group(0).strip().split('\n')
-        html_list = '<ol>\n'
-        for item in items:
-            item_text = re.sub(r'^\d+\.\s+', '', item.strip())
-            if item_text:
-                html_list += f'<li>{item_text}</li>\n'
-        html_list += '</ol>'
-        return html_list
-
-    html = re.sub(r'(^\d+\. .+\n?)+', convert_numbered_list, html, flags=re.MULTILINE)
 
     # Convert links [text](url)
     html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
@@ -284,6 +323,21 @@ def generate_html(content: str) -> str:
 
         li {{
             margin: 0.25rem 0;
+        }}
+
+        /* Nested list styling for table of contents */
+        ol > li {{
+            margin: 0.5rem 0;
+        }}
+
+        ol > li > ul {{
+            margin-top: 0.25rem;
+            list-style-type: none;
+            padding-left: 1.5rem;
+        }}
+
+        ol > li > ul > li {{
+            margin: 0.15rem 0;
         }}
 
         hr {{

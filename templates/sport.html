@@ -100,17 +100,22 @@ async function leaveSport() {
                     <table style="margin: 0; font-size: 0.9em;">
                         <thead>
                             <tr>
+                                <th style="width: 25px;"></th>
                                 <th>Match</th>
                                 <th>QSO Race</th>
                                 <th>Cool Factor</th>
                                 <th>POTA</th>
                                 <th>Pts</th>
-                                <th>QSOs</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for detail in medal_details[standing.callsign] %}
                             <tr>
+                                <td style="cursor: pointer; text-align: center;" onclick="toggleQsoDetails('qsos-{{ standing.callsign }}-{{ detail.match_id }}')">
+                                    {% if detail.qsos %}
+                                    <span class="expand-icon" id="icon-qsos-{{ standing.callsign }}-{{ detail.match_id }}">▶</span>
+                                    {% endif %}
+                                </td>
                                 <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ detail.match_id }}">{{ detail.target | pota_tooltip }}</a></td>
                                 <td>
                                     {% if detail.qso_medal == 'gold' %}🥇
@@ -127,12 +132,47 @@ async function leaveSport() {
                                 </td>
                                 <td>{% if detail.pota_bonus %}+{{ detail.pota_bonus }}{% else %}-{% endif %}</td>
                                 <td><strong>{{ detail.points }}</strong></td>
-                                <td>
-                                    {% if detail.qsos %}
-                                        {{ detail.qsos | length }} QSO{% if detail.qsos | length != 1 %}s{% endif %}
-                                    {% else %}-{% endif %}
+                            </tr>
+                            {% if detail.qsos %}
+                            <tr class="qso-details-row" id="qsos-{{ standing.callsign }}-{{ detail.match_id }}" style="display: none;">
+                                <td colspan="6" style="padding: 0; background: var(--bg-secondary);">
+                                    <div style="padding: 8px 15px 8px 35px;">
+                                        <table style="margin: 0; font-size: 0.85em; width: 100%;">
+                                            <thead>
+                                                <tr>
+                                                    <th style="padding: 3px 6px;">Medal</th>
+                                                    <th style="padding: 3px 6px;">DX Call</th>
+                                                    <th style="padding: 3px 6px;" class="hide-mobile">Time{% if display_prefs.time_display == 'local' and display_prefs.home_grid %} (Local){% else %} (UTC){% endif %}</th>
+                                                    <th style="padding: 3px 6px;" class="hide-mobile">Mode</th>
+                                                    <th style="padding: 3px 6px;" class="hide-mobile">Power</th>
+                                                    <th style="padding: 3px 6px;">Distance</th>
+                                                    <th style="padding: 3px 6px;">CF</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for qso in detail.qsos %}
+                                                <tr>
+                                                    <td style="padding: 3px 6px;">
+                                                        {% if qso.medal_type == 'QSO Race' %}
+                                                            {% if detail.qso_medal == 'gold' %}🥇{% elif detail.qso_medal == 'silver' %}🥈{% elif detail.qso_medal == 'bronze' %}🥉{% endif %} Race
+                                                        {% else %}
+                                                            {% if detail.cf_medal == 'gold' %}🥇{% elif detail.cf_medal == 'silver' %}🥈{% elif detail.cf_medal == 'bronze' %}🥉{% endif %} CF
+                                                        {% endif %}
+                                                    </td>
+                                                    <td style="padding: 3px 6px;"><strong>{{ qso.dx_callsign }}</strong></td>
+                                                    <td style="padding: 3px 6px;" class="hide-mobile">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                                    <td style="padding: 3px 6px;" class="hide-mobile">{{ qso.mode or '-' }}</td>
+                                                    <td style="padding: 3px 6px;" class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
+                                                    <td style="padding: 3px 6px;">{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
+                                                    <td style="padding: 3px 6px;">{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </td>
                             </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -155,6 +195,20 @@ function toggleDetails(callsign) {
         icon.textContent = '▼';
     } else {
         detailsRow.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+
+function toggleQsoDetails(qsoId) {
+    const qsoRow = document.getElementById(qsoId);
+    const icon = document.getElementById('icon-' + qsoId);
+    if (!qsoRow || !icon) return;
+
+    if (qsoRow.style.display === 'none') {
+        qsoRow.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        qsoRow.style.display = 'none';
         icon.textContent = '▶';
     }
 }
@@ -182,6 +236,18 @@ function toggleDetails(callsign) {
     font-weight: 600;
     color: var(--text-secondary);
     font-size: 0.85em;
+}
+.qso-details-row table {
+    border-collapse: collapse;
+}
+.qso-details-row th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+.qso-details-row td {
+    border-bottom: 1px solid var(--border-color);
 }
 </style>
 {% else %}
