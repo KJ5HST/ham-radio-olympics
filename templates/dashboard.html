@@ -686,48 +686,253 @@ async function rejectInvite(teamId) {
 
 <h3>{% if is_own_profile %}QSO Log{% else %}QSOs{% endif %}</h3>
 <div class="card" style="margin-bottom: 15px;">
-    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
-        <div class="form-group" style="margin-bottom: 0;">
-            <label for="band">Band</label>
-            <select id="band" name="band" style="min-width: 100px;">
-                <option value="">All Bands</option>
-                {% for b in ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'] %}
-                <option value="{{ b }}" {% if request.query_params.get('band') == b %}selected{% endif %}>{{ b }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group" style="margin-bottom: 0;">
-            <label for="mode">Mode</label>
-            <select id="mode" name="mode" style="min-width: 100px;">
-                <option value="">All Modes</option>
-                {% for m in ['SSB', 'CW', 'FT8', 'FT4', 'RTTY', 'PSK31', 'FM', 'AM', 'DIGI'] %}
-                <option value="{{ m }}" {% if request.query_params.get('mode') == m %}selected{% endif %}>{{ m }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group" style="margin-bottom: 0;">
-            <label for="confirmed">Status</label>
-            <select id="confirmed" name="confirmed" style="min-width: 120px;">
-                <option value="">All QSOs</option>
-                <option value="1" {% if request.query_params.get('confirmed') == '1' %}selected{% endif %}>Confirmed</option>
-                <option value="0" {% if request.query_params.get('confirmed') == '0' %}selected{% endif %}>Unconfirmed</option>
-            </select>
-        </div>
-        <div class="btn-group">
-            <button type="submit" class="btn"><span class="icon">🔍</span> Filter</button>
-            {% if request.query_params.get('band') or request.query_params.get('mode') or request.query_params.get('confirmed') %}
-            <a href="{{ request.url.path }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+    <form method="get" id="qso-filter-form">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="band">Band</label>
+                <select id="band" name="band" style="min-width: 100px;">
+                    <option value="">All Bands</option>
+                    {% for b in ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'] %}
+                    <option value="{{ b }}" {% if request.query_params.get('band') == b %}selected{% endif %}>{{ b }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="mode">Mode</label>
+                <select id="mode" name="mode" style="min-width: 100px;">
+                    <option value="">All Modes</option>
+                    {% for m in ['SSB', 'CW', 'FT8', 'FT4', 'RTTY', 'PSK31', 'FM', 'AM', 'DIGI'] %}
+                    <option value="{{ m }}" {% if request.query_params.get('mode') == m %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="confirmed">Status</label>
+                <select id="confirmed" name="confirmed" style="min-width: 120px;">
+                    <option value="">All QSOs</option>
+                    <option value="1" {% if request.query_params.get('confirmed') == '1' %}selected{% endif %}>Confirmed</option>
+                    <option value="0" {% if request.query_params.get('confirmed') == '0' %}selected{% endif %}>Unconfirmed</option>
+                </select>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn" onclick="filterQsos(1)"><span class="icon">🔍</span> Filter</button>
+                {% set has_filters = request.query_params.get('band') or request.query_params.get('mode') or request.query_params.get('confirmed') or request.query_params.get('date_from') or request.query_params.get('date_to') or request.query_params.get('dx_call') or request.query_params.get('distance_min') or request.query_params.get('distance_max') or request.query_params.get('cf_min') or request.query_params.get('cf_max') or request.query_params.get('power_min') or request.query_params.get('power_max') or request.query_params.get('pota') %}
+                {% if has_filters %}
+                <a href="{{ request.url.path }}" class="btn btn-secondary"><span class="icon">✕</span> Clear</a>
+                {% endif %}
+                <button type="button" class="btn btn-secondary" onclick="toggleAdvancedFilters()"><span class="icon">⚙️</span> Advanced</button>
+            </div>
+            {% if is_own_profile %}
+            <div class="btn-group" style="margin-left: auto;">
+                <div class="dropdown" style="position: relative; display: inline-block;">
+                    <button type="button" class="btn btn-info" onclick="toggleExportMenu()" id="export-qsos-btn"><span class="icon">📥</span> Export QSOs <span style="font-size: 0.8em;">▼</span></button>
+                    <div id="export-qsos-menu" class="dropdown-menu" style="display: none; position: absolute; top: 100%; right: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 1000; min-width: 120px;">
+                        <a href="/export/qsos?format=csv" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">CSV</a>
+                        <a href="/export/qsos?format=adif" class="dropdown-item" style="display: block; padding: 8px 12px; text-decoration: none; color: var(--text-primary);">ADIF</a>
+                    </div>
+                </div>
+                <a href="/export/medals" class="btn btn-info"><span class="icon">📥</span> Export Medals</a>
+            </div>
             {% endif %}
         </div>
-        {% if is_own_profile %}
-        <div class="btn-group" style="margin-left: auto;">
-            <a href="/export/qsos" class="btn btn-info"><span class="icon">📥</span> Export QSOs</a>
-            <a href="/export/medals" class="btn btn-info"><span class="icon">📥</span> Export Medals</a>
+
+        <!-- Advanced Filters (hidden by default) -->
+        {% set has_advanced = request.query_params.get('date_from') or request.query_params.get('date_to') or request.query_params.get('dx_call') or request.query_params.get('distance_min') or request.query_params.get('distance_max') or request.query_params.get('cf_min') or request.query_params.get('cf_max') or request.query_params.get('power_min') or request.query_params.get('power_max') or request.query_params.get('pota') %}
+        <div id="advanced-filters" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border-color); {% if not has_advanced %}display: none;{% endif %}">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-bottom: 10px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="dx_call">DX Callsign</label>
+                    <input type="text" id="dx_call" name="dx_call" placeholder="e.g. W1AW" style="width: 100px;" value="{{ request.query_params.get('dx_call', '') }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="date_from">Date From</label>
+                    <input type="date" id="date_from" name="date_from" style="width: 140px;" value="{{ request.query_params.get('date_from', '') }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="date_to">Date To</label>
+                    <input type="date" id="date_to" name="date_to" style="width: 140px;" value="{{ request.query_params.get('date_to', '') }}">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="pota">POTA</label>
+                    <select id="pota" name="pota" style="min-width: 100px;">
+                        <option value="">All QSOs</option>
+                        <option value="1" {% if request.query_params.get('pota') == '1' %}selected{% endif %}>Has Park</option>
+                        <option value="0" {% if request.query_params.get('pota') == '0' %}selected{% endif %}>No Park</option>
+                    </select>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: end;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Distance (km)</label>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <input type="number" id="distance_min" name="distance_min" placeholder="Min" style="width: 70px;" value="{{ request.query_params.get('distance_min', '') }}" min="0">
+                        <span>-</span>
+                        <input type="number" id="distance_max" name="distance_max" placeholder="Max" style="width: 70px;" value="{{ request.query_params.get('distance_max', '') }}" min="0">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Cool Factor</label>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <input type="number" id="cf_min" name="cf_min" placeholder="Min" style="width: 70px;" value="{{ request.query_params.get('cf_min', '') }}" min="0" step="0.1">
+                        <span>-</span>
+                        <input type="number" id="cf_max" name="cf_max" placeholder="Max" style="width: 70px;" value="{{ request.query_params.get('cf_max', '') }}" min="0" step="0.1">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Power (W)</label>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <input type="number" id="power_min" name="power_min" placeholder="Min" style="width: 70px;" value="{{ request.query_params.get('power_min', '') }}" min="0">
+                        <span>-</span>
+                        <input type="number" id="power_max" name="power_max" placeholder="Max" style="width: 70px;" value="{{ request.query_params.get('power_max', '') }}" min="0">
+                    </div>
+                </div>
+            </div>
         </div>
-        {% endif %}
     </form>
 </div>
 
+<script>
+function toggleAdvancedFilters() {
+    var panel = document.getElementById('advanced-filters');
+    if (!panel) return;
+    var isHidden = window.getComputedStyle(panel).display === 'none';
+    panel.style.display = isHidden ? 'block' : 'none';
+}
+
+function toggleExportMenu() {
+    var menu = document.getElementById('export-qsos-menu');
+    if (!menu) return;
+    var isHidden = window.getComputedStyle(menu).display === 'none';
+    menu.style.display = isHidden ? 'block' : 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    var menu = document.getElementById('export-qsos-menu');
+    var btn = document.getElementById('export-qsos-btn');
+    if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+        menu.style.display = 'none';
+    }
+});
+
+// AJAX QSO filtering
+function filterQsos(page) {
+    var form = document.getElementById('qso-filter-form');
+    if (!form) {
+        console.error('Filter form not found');
+        return;
+    }
+
+    var params = new URLSearchParams();
+
+    // Collect all form inputs
+    var inputs = form.querySelectorAll('input, select');
+    inputs.forEach(function(input) {
+        if (input.name && input.value) {
+            params.append(input.name, input.value);
+        }
+    });
+    params.set('page', page || 1);
+
+    // Update URL without reload (for bookmarking)
+    var newUrl = window.location.pathname + '?' + params.toString();
+    history.replaceState(null, '', newUrl);
+
+    // Show loading state
+    var container = document.getElementById('qso-table-container');
+    if (container) {
+        container.style.opacity = '0.5';
+    }
+
+    // Fetch filtered QSOs
+    fetch('/api/qsos?' + params.toString(), {
+        credentials: 'same-origin'
+    })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        })
+        .then(function(data) {
+            renderQsoTable(data.qsos, data.pagination);
+            if (container) container.style.opacity = '1';
+        })
+        .catch(function(err) {
+            console.error('Filter error:', err);
+            if (container) {
+                container.style.opacity = '1';
+                container.innerHTML = '<div class="card" style="color: red;">Error loading QSOs. Please try refreshing the page.</div>';
+            }
+        });
+}
+
+function renderQsoTable(qsos, pagination) {
+    var container = document.getElementById('qso-table-container');
+    if (!container) return;
+
+    if (qsos.length === 0) {
+        container.innerHTML = '<div class="card"><p>No QSOs match the current filters.</p></div>';
+        return;
+    }
+
+    var html = '<div class="table-responsive"><table><thead><tr>';
+    html += '<th scope="col">Date/Time (UTC)</th>';
+    html += '<th scope="col">DX Call</th>';
+    html += '<th scope="col" class="hide-mobile">Band</th>';
+    html += '<th scope="col" class="hide-mobile">Mode</th>';
+    html += '<th scope="col">Power</th>';
+    html += '<th scope="col">QSO Race</th>';
+    html += '<th scope="col">Cool Factor</th>';
+    html += '<th scope="col">Confirmed</th>';
+    html += '</tr></thead><tbody>';
+
+    qsos.forEach(function(qso) {
+        html += '<tr>';
+        html += '<td>' + (qso.qso_datetime_utc || '-') + '</td>';
+        html += '<td><span class="dx-callsign">';
+        if (qso.country_flag) html += qso.country_flag + ' ';
+        html += '<strong>' + qso.dx_callsign + '</strong></span>';
+        if (qso.dx_sig_info || qso.my_sig_info) {
+            html += ' <span class="pota-badge">🏕️ ' + (qso.dx_sig_info || qso.my_sig_info) + '</span>';
+        }
+        html += '</td>';
+        html += '<td class="hide-mobile">' + (qso.band || '-') + '</td>';
+        html += '<td class="hide-mobile">' + (qso.mode || '-') + '</td>';
+        html += '<td>' + (qso.tx_power_w ? qso.tx_power_w + 'W' : '-') + '</td>';
+        html += '<td>' + (qso.distance_km ? Math.round(qso.distance_km) + ' km' : '-') + '</td>';
+        html += '<td>' + (qso.cool_factor ? qso.cool_factor.toFixed(1) : '-') + '</td>';
+        html += '<td>' + (qso.is_confirmed ? 'Yes' : 'No') + '</td>';
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    // Pagination
+    if (pagination.total_pages > 1) {
+        html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; flex-wrap: wrap; gap: 10px;">';
+        html += '<span style="color: var(--text-secondary);">Showing ';
+        html += ((pagination.page - 1) * pagination.per_page + 1) + '-';
+        html += Math.min(pagination.page * pagination.per_page, pagination.total_items);
+        html += ' of ' + pagination.total_items + ' QSOs</span>';
+        html += '<div class="btn-group">';
+        if (pagination.page > 1) {
+            html += '<button onclick="filterQsos(' + (pagination.page - 1) + ')" class="btn btn-sm btn-secondary">&larr; Prev</button>';
+        }
+        html += '<span class="btn btn-sm" style="cursor: default;">Page ' + pagination.page + ' of ' + pagination.total_pages + '</span>';
+        if (pagination.page < pagination.total_pages) {
+            html += '<button onclick="filterQsos(' + (pagination.page + 1) + ')" class="btn btn-sm btn-secondary">Next &rarr;</button>';
+        }
+        html += '</div></div>';
+    } else if (pagination.total_items > 0) {
+        html += '<div style="margin-top: 15px; color: var(--text-secondary);">Showing ' + pagination.total_items + ' QSOs</div>';
+    }
+
+    container.innerHTML = html;
+}
+</script>
+
+<div id="qso-table-container">
 {% if qsos %}
 <div class="table-responsive"><table>
     <thead>
@@ -810,6 +1015,7 @@ async function rejectInvite(teamId) {
     {% endif %}
 </div>
 {% endif %}
+</div><!-- end qso-table-container -->
 
 <!-- DQ History Modal -->
 <div id="qso-dq-history-modal" class="modal-overlay">

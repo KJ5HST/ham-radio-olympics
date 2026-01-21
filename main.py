@@ -1812,6 +1812,16 @@ async def get_competitor(
     band: Optional[str] = None,
     mode: Optional[str] = None,
     confirmed: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    dx_call: Optional[str] = None,
+    distance_min: Optional[str] = None,
+    distance_max: Optional[str] = None,
+    cf_min: Optional[str] = None,
+    cf_max: Optional[str] = None,
+    power_min: Optional[str] = None,
+    power_max: Optional[str] = None,
+    pota: Optional[str] = None,
     page: int = 1
 ):
     """Get competitor's QSOs, medals, and personal bests."""
@@ -1845,6 +1855,67 @@ async def get_competitor(
         if confirmed and confirmed.isdigit():
             base_where += " AND is_confirmed = ?"
             qso_params.append(int(confirmed))
+
+        # Date range filters
+        if date_from:
+            base_where += " AND date(qso_datetime_utc) >= ?"
+            qso_params.append(date_from)
+        if date_to:
+            base_where += " AND date(qso_datetime_utc) <= ?"
+            qso_params.append(date_to)
+
+        # DX callsign search (case-insensitive, supports partial match)
+        if dx_call:
+            base_where += " AND UPPER(dx_callsign) LIKE ?"
+            qso_params.append(f"%{dx_call.upper()}%")
+
+        # Distance range filters
+        if distance_min:
+            try:
+                base_where += " AND distance_km >= ?"
+                qso_params.append(float(distance_min))
+            except ValueError:
+                pass
+        if distance_max:
+            try:
+                base_where += " AND distance_km <= ?"
+                qso_params.append(float(distance_max))
+            except ValueError:
+                pass
+
+        # Cool Factor range filters
+        if cf_min:
+            try:
+                base_where += " AND cool_factor >= ?"
+                qso_params.append(float(cf_min))
+            except ValueError:
+                pass
+        if cf_max:
+            try:
+                base_where += " AND cool_factor <= ?"
+                qso_params.append(float(cf_max))
+            except ValueError:
+                pass
+
+        # Power range filters
+        if power_min:
+            try:
+                base_where += " AND tx_power_w >= ?"
+                qso_params.append(float(power_min))
+            except ValueError:
+                pass
+        if power_max:
+            try:
+                base_where += " AND tx_power_w <= ?"
+                qso_params.append(float(power_max))
+            except ValueError:
+                pass
+
+        # POTA filter (has park reference)
+        if pota == "1":
+            base_where += " AND (dx_sig_info IS NOT NULL OR my_sig_info IS NOT NULL)"
+        elif pota == "0":
+            base_where += " AND dx_sig_info IS NULL AND my_sig_info IS NULL"
 
         # Get total QSO count for pagination
         cursor = conn.execute(f"SELECT COUNT(*) FROM qsos {base_where}", qso_params)
@@ -2748,6 +2819,16 @@ async def user_dashboard(
     band: Optional[str] = None,
     mode: Optional[str] = None,
     confirmed: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    dx_call: Optional[str] = None,
+    distance_min: Optional[str] = None,
+    distance_max: Optional[str] = None,
+    cf_min: Optional[str] = None,
+    cf_max: Optional[str] = None,
+    power_min: Optional[str] = None,
+    power_max: Optional[str] = None,
+    pota: Optional[str] = None,
     page: int = 1
 ):
     """User dashboard with stats, QSOs, and medals."""
@@ -2768,6 +2849,67 @@ async def user_dashboard(
         if confirmed and confirmed.isdigit():
             base_where += " AND is_confirmed = ?"
             qso_params.append(int(confirmed))
+
+        # Date range filters
+        if date_from:
+            base_where += " AND date(qso_datetime_utc) >= ?"
+            qso_params.append(date_from)
+        if date_to:
+            base_where += " AND date(qso_datetime_utc) <= ?"
+            qso_params.append(date_to)
+
+        # DX callsign search (case-insensitive, supports partial match)
+        if dx_call:
+            base_where += " AND UPPER(dx_callsign) LIKE ?"
+            qso_params.append(f"%{dx_call.upper()}%")
+
+        # Distance range filters
+        if distance_min:
+            try:
+                base_where += " AND distance_km >= ?"
+                qso_params.append(float(distance_min))
+            except ValueError:
+                pass
+        if distance_max:
+            try:
+                base_where += " AND distance_km <= ?"
+                qso_params.append(float(distance_max))
+            except ValueError:
+                pass
+
+        # Cool Factor range filters
+        if cf_min:
+            try:
+                base_where += " AND cool_factor >= ?"
+                qso_params.append(float(cf_min))
+            except ValueError:
+                pass
+        if cf_max:
+            try:
+                base_where += " AND cool_factor <= ?"
+                qso_params.append(float(cf_max))
+            except ValueError:
+                pass
+
+        # Power range filters
+        if power_min:
+            try:
+                base_where += " AND tx_power_w >= ?"
+                qso_params.append(float(power_min))
+            except ValueError:
+                pass
+        if power_max:
+            try:
+                base_where += " AND tx_power_w <= ?"
+                qso_params.append(float(power_max))
+            except ValueError:
+                pass
+
+        # POTA filter (has park reference)
+        if pota == "1":
+            base_where += " AND (dx_sig_info IS NOT NULL OR my_sig_info IS NOT NULL)"
+        elif pota == "0":
+            base_where += " AND dx_sig_info IS NULL AND my_sig_info IS NULL"
 
         # Get total count for pagination
         count_query = f"SELECT COUNT(*) FROM qsos {base_where}"
@@ -3157,12 +3299,260 @@ async def update_display_preferences(
 
 
 # ============================================================
+# QSO FILTER API (for AJAX filtering)
+# ============================================================
+
+@app.get("/api/qsos")
+async def get_filtered_qsos(
+    request: Request,
+    user: User = Depends(require_user),
+    callsign: Optional[str] = None,
+    band: Optional[str] = None,
+    mode: Optional[str] = None,
+    confirmed: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    dx_call: Optional[str] = None,
+    distance_min: Optional[str] = None,
+    distance_max: Optional[str] = None,
+    cf_min: Optional[str] = None,
+    cf_max: Optional[str] = None,
+    power_min: Optional[str] = None,
+    power_max: Optional[str] = None,
+    pota: Optional[str] = None,
+    page: int = 1
+):
+    """Get filtered QSOs as JSON for AJAX requests."""
+    # Use provided callsign or default to logged-in user
+    target_callsign = (callsign or user.callsign).upper()
+    per_page = 50
+
+    with get_db() as conn:
+        # Build QSO query with filters
+        base_where = "WHERE competitor_callsign = ?"
+        qso_params = [target_callsign]
+
+        if band:
+            base_where += " AND band = ?"
+            qso_params.append(band)
+        if mode:
+            base_where += " AND mode = ?"
+            qso_params.append(mode)
+        if confirmed and confirmed.isdigit():
+            base_where += " AND is_confirmed = ?"
+            qso_params.append(int(confirmed))
+
+        # Date range filters
+        if date_from:
+            base_where += " AND date(qso_datetime_utc) >= ?"
+            qso_params.append(date_from)
+        if date_to:
+            base_where += " AND date(qso_datetime_utc) <= ?"
+            qso_params.append(date_to)
+
+        # DX callsign search
+        if dx_call:
+            base_where += " AND UPPER(dx_callsign) LIKE ?"
+            qso_params.append(f"%{dx_call.upper()}%")
+
+        # Distance range filters
+        if distance_min:
+            try:
+                base_where += " AND distance_km >= ?"
+                qso_params.append(float(distance_min))
+            except ValueError:
+                pass
+        if distance_max:
+            try:
+                base_where += " AND distance_km <= ?"
+                qso_params.append(float(distance_max))
+            except ValueError:
+                pass
+
+        # Cool Factor range filters
+        if cf_min:
+            try:
+                base_where += " AND cool_factor >= ?"
+                qso_params.append(float(cf_min))
+            except ValueError:
+                pass
+        if cf_max:
+            try:
+                base_where += " AND cool_factor <= ?"
+                qso_params.append(float(cf_max))
+            except ValueError:
+                pass
+
+        # Power range filters
+        if power_min:
+            try:
+                base_where += " AND tx_power_w >= ?"
+                qso_params.append(float(power_min))
+            except ValueError:
+                pass
+        if power_max:
+            try:
+                base_where += " AND tx_power_w <= ?"
+                qso_params.append(float(power_max))
+            except ValueError:
+                pass
+
+        # POTA filter
+        if pota == "1":
+            base_where += " AND (dx_sig_info IS NOT NULL OR my_sig_info IS NOT NULL)"
+        elif pota == "0":
+            base_where += " AND dx_sig_info IS NULL AND my_sig_info IS NULL"
+
+        # Get total count for pagination
+        cursor = conn.execute(f"SELECT COUNT(*) FROM qsos {base_where}", qso_params)
+        total_qsos = cursor.fetchone()[0]
+        total_pages = (total_qsos + per_page - 1) // per_page if total_qsos > 0 else 1
+        page = max(1, min(page, total_pages))
+        offset = (page - 1) * per_page
+
+        # Get QSOs with pagination
+        cursor = conn.execute(f"""
+            SELECT id, dx_callsign, qso_datetime_utc, band, mode,
+                   dx_grid, dx_dxcc, my_grid, tx_power_w, distance_km,
+                   cool_factor, is_confirmed, dx_sig_info, my_sig_info
+            FROM qsos {base_where}
+            ORDER BY qso_datetime_utc DESC
+            LIMIT ? OFFSET ?
+        """, qso_params + [per_page, offset])
+        qsos = []
+        for row in cursor.fetchall():
+            qso = dict(row)
+            if qso.get("dx_dxcc"):
+                qso["dx_country"] = get_country_name(qso["dx_dxcc"])
+                qso["country_flag"] = get_country_flag(qso["dx_dxcc"])
+            qsos.append(qso)
+
+    return {
+        "qsos": qsos,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_items": total_qsos,
+            "total_pages": total_pages
+        }
+    }
+
+
+# ============================================================
 # EXPORT ENDPOINTS
 # ============================================================
 
+def format_adif_field(field_name: str, value: str) -> str:
+    """Format a single ADIF field in <NAME:LENGTH>VALUE format."""
+    if not value:
+        return ""
+    value_str = str(value)
+    return f"<{field_name}:{len(value_str)}>{value_str}"
+
+
+def qsos_to_adif(qsos: list, callsign: str) -> str:
+    """
+    Convert a list of QSOs to ADIF format.
+
+    ADIF spec: https://adif.org/314/ADIF_314.htm
+    Key fields:
+    - CALL: Contacted station's callsign
+    - QSO_DATE: Date in YYYYMMDD format
+    - TIME_ON: Time in HHMMSS or HHMM format
+    - BAND: Band (e.g., "20m")
+    - MODE: Mode (e.g., "SSB", "FT8")
+    - GRIDSQUARE: Contacted station's grid square
+    - DXCC: DXCC entity number
+    - TX_PWR: Transmit power in watts
+    - MY_GRIDSQUARE: Operator's grid square
+    - MY_SIG_INFO: Operator's special interest activity info (e.g., park ID)
+    - SIG_INFO: Contacted station's special interest activity info
+    """
+    from datetime import datetime
+
+    lines = []
+
+    # ADIF header
+    lines.append(f"ADIF Export from Ham Radio Olympics for {callsign}")
+    lines.append(format_adif_field("ADIF_VER", "3.1.4"))
+    lines.append(format_adif_field("PROGRAMID", "Ham Radio Olympics"))
+    lines.append(format_adif_field("PROGRAMVERSION", "1.0"))
+    lines.append(format_adif_field("CREATED_TIMESTAMP", datetime.utcnow().strftime("%Y%m%d %H%M%S")))
+    lines.append("<EOH>")
+    lines.append("")
+
+    # QSO records
+    for qso in qsos:
+        record_parts = []
+
+        # Parse datetime (format: 2025-01-15T12:00:00 or similar)
+        qso_dt = qso.get("qso_datetime_utc", "")
+        if qso_dt:
+            try:
+                # Handle ISO format with T separator
+                if "T" in qso_dt:
+                    dt = datetime.fromisoformat(qso_dt.replace("Z", "+00:00"))
+                else:
+                    dt = datetime.strptime(qso_dt[:19], "%Y-%m-%d %H:%M:%S")
+                record_parts.append(format_adif_field("QSO_DATE", dt.strftime("%Y%m%d")))
+                record_parts.append(format_adif_field("TIME_ON", dt.strftime("%H%M%S")))
+            except (ValueError, AttributeError):
+                pass
+
+        # Required CALL field
+        if qso.get("dx_callsign"):
+            record_parts.append(format_adif_field("CALL", qso["dx_callsign"]))
+
+        # Band and mode
+        if qso.get("band"):
+            # ADIF band should be lowercase without 'm' suffix sometimes,
+            # but common practice is to include it (e.g., "20m", "40m")
+            record_parts.append(format_adif_field("BAND", qso["band"].upper().replace("M", "m")))
+        if qso.get("mode"):
+            record_parts.append(format_adif_field("MODE", qso["mode"].upper()))
+
+        # Grid squares
+        if qso.get("dx_grid"):
+            record_parts.append(format_adif_field("GRIDSQUARE", qso["dx_grid"].upper()))
+        if qso.get("my_grid"):
+            record_parts.append(format_adif_field("MY_GRIDSQUARE", qso["my_grid"].upper()))
+
+        # DXCC entities
+        if qso.get("dx_dxcc"):
+            record_parts.append(format_adif_field("DXCC", str(qso["dx_dxcc"])))
+        if qso.get("my_dxcc"):
+            record_parts.append(format_adif_field("MY_DXCC", str(qso["my_dxcc"])))
+
+        # Power
+        if qso.get("tx_power_w"):
+            record_parts.append(format_adif_field("TX_PWR", str(int(qso["tx_power_w"]))))
+
+        # POTA/Special interest info
+        if qso.get("dx_sig_info"):
+            record_parts.append(format_adif_field("SIG", "POTA"))
+            record_parts.append(format_adif_field("SIG_INFO", qso["dx_sig_info"]))
+        if qso.get("my_sig_info"):
+            record_parts.append(format_adif_field("MY_SIG", "POTA"))
+            record_parts.append(format_adif_field("MY_SIG_INFO", qso["my_sig_info"]))
+
+        # Station callsign (the competitor)
+        record_parts.append(format_adif_field("STATION_CALLSIGN", callsign))
+
+        # End of record
+        record_parts.append("<EOR>")
+
+        lines.append(" ".join(part for part in record_parts if part))
+
+    return "\n".join(lines)
+
+
 @app.get("/export/qsos")
-async def export_qsos(request: Request, user: User = Depends(require_user)):
-    """Export user's QSOs as CSV."""
+async def export_qsos(
+    request: Request,
+    user: User = Depends(require_user),
+    format: str = "csv"
+):
+    """Export user's QSOs as CSV or ADIF."""
     import csv
     import io
     from starlette.responses import StreamingResponse
@@ -3170,37 +3560,53 @@ async def export_qsos(request: Request, user: User = Depends(require_user)):
     with get_db() as conn:
         cursor = conn.execute("""
             SELECT dx_callsign, qso_datetime_utc, band, mode,
-                   dx_grid, dx_dxcc, is_confirmed, cool_factor
+                   dx_grid, dx_dxcc, my_grid, my_dxcc,
+                   tx_power_w, dx_sig_info, my_sig_info,
+                   is_confirmed, cool_factor, distance_km
             FROM qsos
             WHERE competitor_callsign = ?
             ORDER BY qso_datetime_utc DESC
         """, (user.callsign,))
-        qsos = cursor.fetchall()
+        qsos = [dict(row) for row in cursor.fetchall()]
 
-    # Generate CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["callsign", "datetime_utc", "band", "mode",
-                     "grid", "dxcc", "confirmed", "cool_factor"])
+    if format.lower() == "adif":
+        # Generate ADIF
+        content = qsos_to_adif(qsos, user.callsign)
+        return StreamingResponse(
+            iter([content]),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename={user.callsign}_qsos.adi"}
+        )
+    else:
+        # Generate CSV (default)
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["callsign", "datetime_utc", "band", "mode",
+                         "grid", "dxcc", "power_w", "distance_km",
+                         "cool_factor", "pota_park", "confirmed"])
 
-    for qso in qsos:
-        writer.writerow([
-            qso["dx_callsign"],
-            qso["qso_datetime_utc"],
-            qso["band"],
-            qso["mode"],
-            qso["dx_grid"] or "",
-            qso["dx_dxcc"] or "",
-            "Yes" if qso["is_confirmed"] else "No",
-            qso["cool_factor"] or ""
-        ])
+        for qso in qsos:
+            park = qso.get("dx_sig_info") or qso.get("my_sig_info") or ""
+            writer.writerow([
+                qso["dx_callsign"],
+                qso["qso_datetime_utc"],
+                qso["band"] or "",
+                qso["mode"] or "",
+                qso["dx_grid"] or "",
+                qso["dx_dxcc"] or "",
+                qso["tx_power_w"] or "",
+                qso["distance_km"] or "",
+                qso["cool_factor"] or "",
+                park,
+                "Yes" if qso["is_confirmed"] else "No"
+            ])
 
-    output.seek(0)
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={user.callsign}_qsos.csv"}
-    )
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={user.callsign}_qsos.csv"}
+        )
 
 
 @app.get("/export/medals")

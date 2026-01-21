@@ -156,6 +156,69 @@ class TestExportQSOs:
         assert "attachment" in disposition
         assert ".csv" in disposition
 
+    def test_export_qsos_adif_format(self, logged_in_client):
+        """Test export QSOs as ADIF format."""
+        from database import get_db
+
+        # Add a QSO with full data
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc,
+                                  band, mode, tx_power_w, dx_grid, dx_dxcc, my_grid,
+                                  dx_sig_info, is_confirmed, distance_km, cool_factor)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, ("W1EXP", "K2ADI", "2024-02-20T15:30:00", "20m", "FT8", 100,
+                  "FN31pr", 291, "EM12kx", "K-0001", 1, 1500.5, 15.005))
+            conn.commit()
+
+        response = logged_in_client.get("/export/qsos?format=adif")
+        assert response.status_code == 200
+
+        content = response.text
+
+        # Check ADIF header
+        assert "<ADIF_VER:" in content
+        assert "<PROGRAMID:" in content
+        assert "<EOH>" in content
+
+        # Check QSO record
+        assert "<CALL:" in content
+        assert "K2ADI" in content
+        assert "<QSO_DATE:" in content
+        assert "20240220" in content
+        assert "<TIME_ON:" in content
+        assert "153000" in content
+        assert "<BAND:" in content
+        assert "20m" in content
+        assert "<MODE:" in content
+        assert "FT8" in content
+        assert "<TX_PWR:" in content
+        assert "100" in content
+        assert "<GRIDSQUARE:" in content
+        assert "FN31PR" in content
+        assert "<DXCC:" in content
+        assert "291" in content
+        assert "<SIG_INFO:" in content
+        assert "K-0001" in content
+        assert "<EOR>" in content
+
+    def test_export_qsos_adif_content_disposition(self, logged_in_client):
+        """Test ADIF export has proper content disposition for download."""
+        response = logged_in_client.get("/export/qsos?format=adif")
+        disposition = response.headers.get("content-disposition", "")
+
+        assert "attachment" in disposition
+        assert ".adi" in disposition
+
+    def test_export_qsos_csv_default(self, logged_in_client):
+        """Test CSV is the default export format."""
+        response = logged_in_client.get("/export/qsos")
+        content_type = response.headers.get("content-type", "")
+        disposition = response.headers.get("content-disposition", "")
+
+        assert "text/csv" in content_type
+        assert ".csv" in disposition
+
 
 class TestExportMedals:
     """Test medals export functionality."""

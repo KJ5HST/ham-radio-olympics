@@ -719,6 +719,68 @@ class TestCompetitorEndpoints:
         assert "Gold" in response.text  # Medal label
         assert "Points" in response.text
 
+    def test_get_competitor_with_advanced_filters(self, client):
+        """Test getting competitor details with advanced QSO filters."""
+        from database import get_db
+
+        signup_user(client, "K1FLT")
+
+        # Create some test QSOs with varied data
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc,
+                                  band, mode, tx_power_w, distance_km, cool_factor,
+                                  is_confirmed, dx_sig_info)
+                VALUES
+                ('K1FLT', 'W1TEST', '2025-01-15T12:00:00', '20m', 'FT8', 100, 5000, 50.0, 1, NULL),
+                ('K1FLT', 'K5POTA', '2025-01-16T14:00:00', '40m', 'SSB', 50, 2000, 40.0, 1, 'K-0001'),
+                ('K1FLT', 'N3LOW', '2025-01-17T10:00:00', '20m', 'CW', 5, 10000, 2000.0, 0, NULL)
+            """)
+            conn.commit()
+
+        # Test date range filter
+        response = client.get("/competitor/K1FLT?date_from=2025-01-15&date_to=2025-01-16")
+        assert response.status_code == 200
+        assert "W1TEST" in response.text
+        assert "K5POTA" in response.text
+        # N3LOW is on the 17th, outside the range
+        # but might still be in HTML due to other page elements
+
+        # Test DX callsign filter
+        response = client.get("/competitor/K1FLT?dx_call=W1")
+        assert response.status_code == 200
+        assert "W1TEST" in response.text
+
+        # Test distance range filter
+        response = client.get("/competitor/K1FLT?distance_min=1000&distance_max=6000")
+        assert response.status_code == 200
+
+        # Test cool factor range filter
+        response = client.get("/competitor/K1FLT?cf_min=30&cf_max=60")
+        assert response.status_code == 200
+
+        # Test power range filter
+        response = client.get("/competitor/K1FLT?power_min=1&power_max=50")
+        assert response.status_code == 200
+
+        # Test POTA filter (has park)
+        response = client.get("/competitor/K1FLT?pota=1")
+        assert response.status_code == 200
+        assert "K5POTA" in response.text
+
+        # Test POTA filter (no park)
+        response = client.get("/competitor/K1FLT?pota=0")
+        assert response.status_code == 200
+
+        # Test combined filters
+        response = client.get("/competitor/K1FLT?band=20m&mode=FT8&confirmed=1")
+        assert response.status_code == 200
+
+        # Clean up
+        with get_db() as conn:
+            conn.execute("DELETE FROM qsos WHERE competitor_callsign = 'K1FLT'")
+            conn.commit()
+
     def test_get_competitor_not_found(self, client):
         """Test getting non-existent competitor."""
         # Must be logged in to access competitor pages
@@ -1744,11 +1806,11 @@ class TestLandingPage:
         })
         return client
 
-    def test_landing_page_redirects_to_signup_when_not_logged_in(self, client):
-        """Test landing page redirects to signup for unauthenticated users."""
+    def test_landing_page_redirects_to_login_when_not_logged_in(self, client):
+        """Test landing page redirects to login for unauthenticated users."""
         response = client.get("/", follow_redirects=False)
         assert response.status_code == 303
-        assert response.headers["location"] == "/signup"
+        assert response.headers["location"] == "/login"
 
     def test_landing_page_no_olympiad(self, logged_in_client):
         """Test landing page with no active olympiad."""
