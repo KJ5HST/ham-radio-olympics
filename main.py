@@ -988,6 +988,17 @@ async def landing_page(request: Request):
             )
             sports = [dict(row) for row in cursor.fetchall()]
 
+            # Fetch matches for each sport
+            for sport in sports:
+                cursor = conn.execute(
+                    "SELECT * FROM matches WHERE sport_id = ? ORDER BY start_date",
+                    (sport["id"],)
+                )
+                sport["matches"] = [dict(row) for row in cursor.fetchall()]
+                # Add target_display to each match
+                for match in sport["matches"]:
+                    match["target_display"] = format_target_display(match["target_value"], sport["target_type"])
+
     return templates.TemplateResponse("index.html", {
         "request": request,
         "user": user,

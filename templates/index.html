@@ -21,8 +21,12 @@
     </thead>
     <tbody>
         {% for sport in sports %}
-        <tr>
-            <td><strong>{{ sport.name }}</strong></td>
+        <tr class="sport-row" onclick="toggleMatches({{ sport.id }})" style="cursor: pointer;">
+            <td>
+                <span class="expand-icon" id="expand-icon-{{ sport.id }}">▶</span>
+                <strong>{{ sport.name }}</strong>
+                {% if sport.matches %}<span style="color: var(--text-secondary); font-size: 0.85em;"> ({{ sport.matches | length }} matches)</span>{% endif %}
+            </td>
             <td>{{ sport.target_type | capitalize }}</td>
             <td>
                 {% if sport.work_enabled %}Work{% endif %}
@@ -30,11 +34,53 @@
                 {% if sport.activate_enabled %}Activate{% endif %}
                 {% if sport.separate_pools %} (separate pools){% endif %}
             </td>
-            <td><a href="/olympiad/sport/{{ sport.id }}" class="btn btn-sm"><span class="icon">👁️</span> View</a></td>
+            <td><a href="/olympiad/sport/{{ sport.id }}" class="btn btn-sm" onclick="event.stopPropagation();"><span class="icon">👁️</span> View</a></td>
+        </tr>
+        <tr class="details-row" id="matches-{{ sport.id }}" style="display: none;">
+            <td colspan="4" style="padding: 0; background: var(--bg-primary);">
+                {% if sport.matches %}
+                <table style="margin: 10px; width: calc(100% - 20px);">
+                    <thead>
+                        <tr>
+                            <th>Target</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for match in sport.matches %}
+                        <tr>
+                            <td>{{ match.target_display }}</td>
+                            <td>{{ match.start_date | format_date }}</td>
+                            <td>{{ match.end_date | format_date }}</td>
+                            <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn btn-sm"><span class="icon">👁️</span></a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="margin: 10px; color: var(--text-secondary);">No matches scheduled yet.</p>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table></div>
+
+<script>
+function toggleMatches(sportId) {
+    var row = document.getElementById('matches-' + sportId);
+    var icon = document.getElementById('expand-icon-' + sportId);
+    if (row.style.display === 'none') {
+        row.style.display = 'table-row';
+        icon.textContent = '▼';
+    } else {
+        row.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+</script>
 {% else %}
 <p>No sports configured yet.</p>
 {% endif %}
