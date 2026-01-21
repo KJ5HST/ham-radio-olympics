@@ -1,6 +1,9 @@
 # Ham Radio Olympics - Next Up
 
-**Status:** Waiting for user feedback on v1.0.0 release
+**Status:** Waiting for user feedback post-release
+
+## Recently Completed
+- Public results setting (unauthenticated visitors can view results when enabled)
 
 ---
 
