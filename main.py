@@ -273,6 +273,18 @@ templates.env.globals["get_site_config"] = get_site_config
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+# Serve service worker from root for proper scope
+@app.get("/sw.js")
+async def service_worker():
+    """Serve service worker from root path for full scope."""
+    from starlette.responses import FileResponse
+    return FileResponse(
+        "static/sw.js",
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/"}
+    )
+
+
 # CSRF token management
 CSRF_COOKIE_NAME = config.CSRF_COOKIE_NAME
 

@@ -216,6 +216,21 @@
         <p style="color: #c53030;">Push notifications are not supported in this browser. Try using Chrome, Firefox, or Edge.</p>
     </div>
 
+    <div id="push-ios-standalone" style="display: none;">
+        <p style="color: #dd6b20; margin-bottom: 10px;">
+            <strong>iOS requires the app to be installed</strong>
+        </p>
+        <p style="margin-bottom: 10px;">To enable push notifications on iOS Safari:</p>
+        <ol style="margin-left: 20px; margin-bottom: 15px; line-height: 1.8;">
+            <li>Tap the <strong>Share</strong> button <span style="font-size: 1.2em;">&#x1F4E4;</span> at the bottom of Safari</li>
+            <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+            <li>Tap <strong>"Add"</strong> in the top right</li>
+            <li>Open the app from your home screen</li>
+            <li>Return to Settings to enable notifications</li>
+        </ol>
+        <p style="font-size: 0.9em; color: #718096;">Note: Requires iOS 16.4 or later</p>
+    </div>
+
     <div id="push-not-configured" style="display: none;">
         <p style="color: #718096;">Push notifications are not configured on this server.</p>
     </div>
@@ -276,9 +291,23 @@
     var pushConfigured = false;
     var currentSubscription = null;
 
+    // Detect iOS Safari
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    var isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    var isIOSSafari = isIOS && isSafari;
+
     async function initPushUI() {
         var statusDot = document.getElementById('push-status-dot');
         var statusText = document.getElementById('push-status-text');
+
+        // iOS Safari only supports push when installed to home screen
+        if (isIOSSafari && !isStandalone) {
+            document.getElementById('push-ios-standalone').style.display = 'block';
+            statusDot.style.background = '#dd6b20';
+            statusText.textContent = 'Install app first';
+            return;
+        }
 
         if (!pushSupported) {
             document.getElementById('push-not-supported').style.display = 'block';
@@ -315,9 +344,19 @@
 
         document.getElementById('push-controls').style.display = 'block';
 
-        // Check current subscription
+        // Check current subscription with timeout
         try {
-            var reg = await navigator.serviceWorker.ready;
+            statusText.textContent = 'Loading...';
+
+            // Wait for service worker with timeout
+            var swReady = Promise.race([
+                navigator.serviceWorker.ready,
+                new Promise(function(_, reject) {
+                    setTimeout(function() { reject(new Error('SW timeout')); }, 10000);
+                })
+            ]);
+
+            var reg = await swReady;
             currentSubscription = await reg.pushManager.getSubscription();
 
             if (currentSubscription) {
@@ -371,34 +410,75 @@
         btn.disabled = true;
         btn.textContent = 'Enabling...';
 
+        // Timeout helper
+        function withTimeout(promise, ms, message) {
+            return Promise.race([
+                promise,
+                new Promise(function(_, reject) {
+                    setTimeout(function() { reject(new Error(message || 'Timeout')); }, ms);
+                })
+            ]);
+        }
+
         try {
+            // Check if service worker is supported and registered
+            if (!('serviceWorker' in navigator)) {
+                throw new Error('Service workers not supported');
+            }
+
             // Get VAPID public key
-            var resp = await fetch('/push/vapid-public-key');
+            var resp = await withTimeout(fetch('/push/vapid-public-key'), 10000, 'Server timeout');
             var data = await resp.json();
+            if (!data.publicKey) {
+                throw new Error('Server not configured for push');
+            }
             var publicKey = urlBase64ToUint8Array(data.publicKey);
 
-            // Request permission
-            var permission = await Notification.requestPermission();
+            // Request permission with timeout
+            btn.textContent = 'Requesting permission...';
+            var permission = await withTimeout(
+                Notification.requestPermission(),
+                30000,
+                'Permission request timed out. Check your browser settings.'
+            );
             if (permission !== 'granted') {
                 throw new Error('Permission denied');
             }
 
-            // Subscribe
-            var reg = await navigator.serviceWorker.ready;
-            var subscription = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: publicKey
-            });
+            // Wait for service worker with timeout
+            btn.textContent = 'Connecting...';
+            var reg = await withTimeout(
+                navigator.serviceWorker.ready,
+                15000,
+                'Service worker not ready. Try refreshing the page.'
+            );
+
+            // Subscribe to push with timeout
+            btn.textContent = 'Subscribing...';
+            var subscription = await withTimeout(
+                reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: publicKey
+                }),
+                15000,
+                'Push subscription failed. Your browser may not support this feature.'
+            );
 
             // Send to server
-            var subscribeResp = await fetch('/push/subscribe', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(subscription.toJSON())
-            });
+            btn.textContent = 'Saving...';
+            var subscribeResp = await withTimeout(
+                fetch('/push/subscribe', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(subscription.toJSON())
+                }),
+                10000,
+                'Failed to save to server'
+            );
 
             if (!subscribeResp.ok) {
-                throw new Error('Failed to save subscription');
+                var errData = await subscribeResp.json().catch(function() { return {}; });
+                throw new Error(errData.detail || 'Failed to save subscription');
             }
 
             currentSubscription = subscription;
@@ -472,7 +552,11 @@
 
     window.testPushNotification = async function() {
         try {
-            var resp = await fetch('/push/test', {method: 'POST'});
+            var resp = await fetch('/push/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: '{}'
+            });
             var data = await resp.json();
             if (resp.ok) {
                 showToast(data.message, 'success');
