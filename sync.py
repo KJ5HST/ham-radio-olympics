@@ -477,6 +477,7 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     # Process and store QSOs in small batches to avoid blocking reads
     new_count = 0
     updated_count = 0
+    newly_confirmed_calls = []  # Track DX callsigns for newly confirmed QSOs
     batch_size = 50
 
     for i in range(0, len(qsos), batch_size):
@@ -484,10 +485,13 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         with get_db() as conn:
             for qso in batch:
                 result = _upsert_qso(conn, callsign.upper(), qso)
-                if result == "new":
+                if result["status"] == "new":
                     new_count += 1
-                elif result == "updated":
+                elif result["status"] == "updated":
                     updated_count += 1
+                # Track newly confirmed QSOs for notification
+                if result.get("newly_confirmed"):
+                    newly_confirmed_calls.append(result["dx_callsign"])
             conn.commit()
 
     # Update last sync time
@@ -498,14 +502,28 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         )
         conn.commit()
 
+    # Get medal state BEFORE recomputation for comparison
+    old_medals = _get_competitor_medal_state(callsign.upper())
+
     # Recompute medals for all active matches after sync
     recompute_all_active_matches()
+
+    # Get medal state AFTER recomputation
+    new_medals = _get_competitor_medal_state(callsign.upper())
+
+    # Send notifications for new confirmations
+    if newly_confirmed_calls:
+        _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
+
+    # Send notifications for medal changes
+    _notify_medal_changes(callsign.upper(), old_medals, new_medals)
 
     return {
         "callsign": callsign.upper(),
         "new_qsos": new_count,
         "updated_qsos": updated_count,
         "total_fetched": len(qsos),
+        "new_confirmations": len(newly_confirmed_calls),
     }
 
 
@@ -627,6 +645,7 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     # Process and store QSOs in small batches to avoid blocking reads
     new_count = 0
     updated_count = 0
+    newly_confirmed_calls = []  # Track DX callsigns for newly confirmed QSOs
     batch_size = 50
 
     for i in range(0, len(qsos), batch_size):
@@ -634,10 +653,13 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
         with get_db() as conn:
             for qso in batch:
                 result = _upsert_qso(conn, callsign.upper(), qso)
-                if result == "new":
+                if result["status"] == "new":
                     new_count += 1
-                elif result == "updated":
+                elif result["status"] == "updated":
                     updated_count += 1
+                # Track newly confirmed QSOs for notification
+                if result.get("newly_confirmed"):
+                    newly_confirmed_calls.append(result["dx_callsign"])
             conn.commit()
 
     # Update last sync time
@@ -648,23 +670,40 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
         )
         conn.commit()
 
+    # Get medal state BEFORE recomputation for comparison
+    old_medals = _get_competitor_medal_state(callsign.upper())
+
     # Recompute medals for all active matches after sync
     recompute_all_active_matches()
+
+    # Get medal state AFTER recomputation
+    new_medals = _get_competitor_medal_state(callsign.upper())
+
+    # Send notifications for new confirmations
+    if newly_confirmed_calls:
+        _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
+
+    # Send notifications for medal changes
+    _notify_medal_changes(callsign.upper(), old_medals, new_medals)
 
     return {
         "callsign": callsign.upper(),
         "new_qsos": new_count,
         "updated_qsos": updated_count,
         "total_fetched": len(qsos),
+        "new_confirmations": len(newly_confirmed_calls),
     }
 
 
-def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
+def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> dict:
     """
     Insert or update a QSO in the database.
 
     Returns:
-        "new", "updated", or None
+        dict with keys:
+        - status: "new", "updated", or None
+        - newly_confirmed: True if QSO became confirmed for first time
+        - dx_callsign: DX station callsign (for notifications)
     """
     # Check if QSO already exists (by QRZ logid or by unique combination)
     existing = None
@@ -704,6 +743,11 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             pass  # Invalid grid format
 
     if existing:
+        # Check if this update will result in a new confirmation
+        was_confirmed = bool(existing["is_confirmed"])
+        will_be_confirmed = qso.is_confirmed
+        newly_confirmed = not was_confirmed and will_be_confirmed
+
         # Merge fields - use COALESCE to keep existing values if new value is NULL
         # This allows QRZ (with tx_power) and LoTW (with confirmation) to complement each other
         # Set confirmed_at timestamp when QSO becomes confirmed for the first time
@@ -740,7 +784,7 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
             cool_factor,
             existing["id"],
         ))
-        return "updated"
+        return {"status": "updated", "newly_confirmed": newly_confirmed, "dx_callsign": qso.dx_callsign}
     else:
         # Insert new QSO
         import sqlite3
@@ -821,13 +865,14 @@ def _upsert_qso(conn, competitor_callsign: str, qso: QSOData) -> Optional[str]:
                     qso.qrz_logid,
                     existing_row["id"],
                 ))
-                return "updated"
-            return None
+                return {"status": "updated", "newly_confirmed": False, "dx_callsign": qso.dx_callsign}
+            return {"status": None, "newly_confirmed": False, "dx_callsign": qso.dx_callsign}
 
         # Note: Records are updated via recompute_all_records() which only
         # considers QSOs that qualified for matches (correct target, time period, mode)
 
-        return "new"
+        # New QSO that's already confirmed counts as newly confirmed
+        return {"status": "new", "newly_confirmed": qso.is_confirmed, "dx_callsign": qso.dx_callsign}
 
 
 def merge_duplicate_qsos() -> dict:
@@ -1109,3 +1154,83 @@ async def populate_missing_dxcc() -> dict:
             logger.warning(f"Failed to look up {callsign}: {e}")
 
     return {"updated": updated, "lookups": lookups, "callsigns": len(missing_callsigns)}
+
+
+# ============================================================
+# PUSH NOTIFICATION HELPERS
+# ============================================================
+
+def _get_competitor_medal_state(callsign: str) -> dict:
+    """
+    Get the current medal state for a competitor across all active matches.
+
+    Returns dict keyed by match_id with medal info.
+    """
+    with get_db() as conn:
+        cursor = conn.execute("""
+            SELECT m.match_id, m.role, m.qso_race_medal, m.cool_factor_medal, m.total_points,
+                   mt.target_value, s.name as sport_name
+            FROM medals m
+            JOIN matches mt ON m.match_id = mt.id
+            JOIN sports s ON mt.sport_id = s.id
+            JOIN olympiads o ON s.olympiad_id = o.id
+            WHERE m.callsign = ? AND o.is_active = 1
+        """, (callsign,))
+
+        result = {}
+        for row in cursor.fetchall():
+            key = f"{row['match_id']}-{row['role']}"
+            result[key] = {
+                "match_id": row["match_id"],
+                "role": row["role"],
+                "qso_race_medal": row["qso_race_medal"],
+                "cool_factor_medal": row["cool_factor_medal"],
+                "total_points": row["total_points"],
+                "target_value": row["target_value"],
+                "sport_name": row["sport_name"],
+            }
+        return result
+
+
+def _notify_new_confirmations(callsign: str, dx_callsigns: list):
+    """Send push notification for new QSO confirmations."""
+    try:
+        from notifications import notify_new_confirmations
+        notify_new_confirmations(callsign, len(dx_callsigns), dx_callsigns[:5])
+    except Exception as e:
+        logger.error(f"Failed to send confirmation notification for {callsign}: {e}")
+
+
+def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
+    """Send push notifications for medal changes."""
+    try:
+        from notifications import notify_medal_change
+
+        # Find matches where medals changed
+        all_keys = set(old_medals.keys()) | set(new_medals.keys())
+
+        for key in all_keys:
+            old = old_medals.get(key, {})
+            new = new_medals.get(key, {})
+
+            old_qso = old.get("qso_race_medal")
+            new_qso = new.get("qso_race_medal")
+            old_cf = old.get("cool_factor_medal")
+            new_cf = new.get("cool_factor_medal")
+
+            # Check if any medal changed
+            if old_qso != new_qso or old_cf != new_cf:
+                sport_name = new.get("sport_name") or old.get("sport_name", "Unknown")
+                target = new.get("target_value") or old.get("target_value", "Unknown")
+                points = new.get("total_points", 0)
+
+                notify_medal_change(
+                    callsign=callsign,
+                    sport_name=sport_name,
+                    match_target=target,
+                    old_medals={"qso_race": old_qso, "cool_factor": old_cf},
+                    new_medals={"qso_race": new_qso, "cool_factor": new_cf},
+                    total_points=points
+                )
+    except Exception as e:
+        logger.error(f"Failed to send medal notification for {callsign}: {e}")

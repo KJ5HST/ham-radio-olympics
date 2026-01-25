@@ -646,6 +646,8 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
         sport_id: Sport ID (None for global records)
         match_id: Match ID where the QSO qualified
     """
+    records_to_notify = []  # Collect records broken for notifications
+
     with get_db() as conn:
         # Get QSO data
         cursor = conn.execute("SELECT * FROM qsos WHERE id = ?", (qso_id,))
@@ -657,26 +659,75 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
         # Use QSO datetime for when record was achieved, not current time
         achieved_at = qso["qso_datetime_utc"]
 
+        # Get sport name if available
+        sport_name = None
+        if sport_id:
+            sport_row = conn.execute("SELECT name FROM sports WHERE id = ?", (sport_id,)).fetchone()
+            if sport_row:
+                sport_name = sport_row["name"]
+
         # Check longest distance
         if qso["distance_km"]:
-            _update_record_if_better(
+            result = _update_record_if_better(
                 conn, "longest_distance", qso["distance_km"],
                 qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=True
             )
+            if result["world_record_broken"] or result["personal_best_broken"]:
+                records_to_notify.append({
+                    "record_type": "distance",
+                    "value": qso["distance_km"],
+                    "is_world_record": result["world_record_broken"],
+                    "sport_name": sport_name,
+                    "dx_callsign": qso["dx_callsign"],
+                })
 
         # Check highest cool factor
         if qso["cool_factor"]:
-            _update_record_if_better(
+            result = _update_record_if_better(
                 conn, "highest_cool_factor", qso["cool_factor"],
                 qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=True
             )
+            if result["world_record_broken"] or result["personal_best_broken"]:
+                records_to_notify.append({
+                    "record_type": "cool_factor",
+                    "value": qso["cool_factor"],
+                    "is_world_record": result["world_record_broken"],
+                    "sport_name": sport_name,
+                    "dx_callsign": qso["dx_callsign"],
+                })
 
         # Check lowest power (only for confirmed QSOs with positive power)
         if qso["tx_power_w"] and qso["tx_power_w"] > 0 and qso["is_confirmed"]:
-            _update_record_if_better(
+            result = _update_record_if_better(
                 conn, "lowest_power", qso["tx_power_w"],
                 qso_id, callsign, sport_id, match_id, achieved_at, higher_is_better=False
             )
+            # Don't notify for lowest power records as they're less exciting
+
+    # Send notifications after transaction commits
+    _notify_records_broken(callsign, records_to_notify)
+
+
+def _notify_records_broken(callsign: str, records: list):
+    """Send push notifications for broken records."""
+    if not records:
+        return
+
+    try:
+        from notifications import notify_record_broken
+
+        for record in records:
+            notify_record_broken(
+                callsign=callsign,
+                record_type=record["record_type"],
+                value=record["value"],
+                is_world_record=record["is_world_record"],
+                sport_name=record.get("sport_name"),
+                dx_callsign=record.get("dx_callsign"),
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to send record notification for {callsign}: {e}")
 
 
 def _update_record_if_better(
@@ -689,8 +740,15 @@ def _update_record_if_better(
     match_id: Optional[int],
     achieved_at: str,
     higher_is_better: bool,
-):
-    """Helper to update a record if the new value is better."""
+) -> dict:
+    """
+    Helper to update a record if the new value is better.
+
+    Returns dict with:
+        - world_record_broken: True if a world record was broken
+        - personal_best_broken: True if a personal best was broken
+    """
+    result = {"world_record_broken": False, "personal_best_broken": False}
 
     # Build sport_id condition - use IS NULL for NULL, = for values
     if sport_id is None:
@@ -708,11 +766,12 @@ def _update_record_if_better(
     world_record = cursor.fetchone()
 
     if world_record is None:
-        # No record exists, create it
+        # No record exists, create it (first record = world record)
         conn.execute("""
             INSERT INTO records (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at)
             VALUES (?, ?, NULL, ?, ?, ?, ?)
         """, (sport_id, match_id, record_type, value, qso_id, achieved_at))
+        result["world_record_broken"] = True
     else:
         is_better = (value > world_record["value"]) if higher_is_better else (value < world_record["value"])
         if is_better:
@@ -720,6 +779,7 @@ def _update_record_if_better(
                 UPDATE records SET value = ?, qso_id = ?, match_id = ?, achieved_at = ?
                 WHERE id = ?
             """, (value, qso_id, match_id, achieved_at, world_record["id"]))
+            result["world_record_broken"] = True
 
     # Check personal best (per callsign)
     cursor = conn.execute(f"""
@@ -733,6 +793,7 @@ def _update_record_if_better(
             INSERT INTO records (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
         """, (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at))
+        result["personal_best_broken"] = True
     else:
         is_better = (value > pb_record["value"]) if higher_is_better else (value < pb_record["value"])
         if is_better:
@@ -740,6 +801,9 @@ def _update_record_if_better(
                 UPDATE records SET value = ?, qso_id = ?, match_id = ?, achieved_at = ?
                 WHERE id = ?
             """, (value, qso_id, match_id, achieved_at, pb_record["id"]))
+            result["personal_best_broken"] = True
+
+    return result
 
 
 @dataclass

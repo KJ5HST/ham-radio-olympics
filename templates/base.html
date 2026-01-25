@@ -12,6 +12,42 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+
+    <!-- iOS Splash Screens -->
+    <!-- iPhone SE, iPod Touch -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-640x1136.png" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)">
+    <!-- iPhone 8, 7, 6s, 6 -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-750x1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+    <!-- iPhone 8 Plus, 7 Plus, 6s Plus, 6 Plus -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1242x2208.png" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone X, XS, 11 Pro, 12 mini, 13 mini -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1125x2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone XR, 11, XS Max, 11 Pro Max -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1242x2688.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone 12, 12 Pro, 13, 13 Pro, 14 -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1170x2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone 12 Pro Max, 13 Pro Max, 14 Plus -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1284x2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone 14 Pro -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1179x2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPhone 14 Pro Max, 15 Plus, 15 Pro Max -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1290x2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+    <!-- iPad Mini, Air -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1536x2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2)">
+    <!-- iPad Pro 10.5" -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1668x2224.png" media="(device-width: 834px) and (device-height: 1112px) and (-webkit-device-pixel-ratio: 2)">
+    <!-- iPad Pro 11" -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-1668x2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2)">
+    <!-- iPad Pro 12.9" -->
+    <link rel="apple-touch-startup-image" href="/static/splash/splash-2048x2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2)">
+
+    <!-- Additional PWA meta tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Ham Radio Olympics">
+    <meta name="msapplication-TileColor" content="#1a365d">
+    <meta name="msapplication-TileImage" content="/static/icon-144.png">
+    <meta name="msapplication-config" content="none">
+
     <title>{% block title %}{{ get_site_config().name }}{% endblock %}</title>
     <style>
         /* CSS Custom Properties for theming */
@@ -832,6 +868,157 @@
                 font-size: 0.9rem;
             }
         }
+
+        /* PWA Install Banner */
+        .pwa-install-banner {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 16px 20px;
+            box-shadow: 0 -4px 12px var(--shadow-color);
+            z-index: 10001;
+            animation: slideUp 0.3s ease-out;
+        }
+        .pwa-install-banner.show {
+            display: block;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        .pwa-install-content {
+            max-width: 600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .pwa-install-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+        .pwa-install-text {
+            flex: 1;
+        }
+        .pwa-install-text h4 {
+            margin: 0 0 4px 0;
+            color: var(--text-heading);
+            font-size: 1rem;
+        }
+        .pwa-install-text p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        .pwa-install-actions {
+            display: flex;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .pwa-install-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .pwa-install-btn.primary {
+            background: var(--accent-color);
+            color: white;
+        }
+        .pwa-install-btn.primary:hover {
+            background: var(--accent-hover);
+        }
+        .pwa-install-btn.secondary {
+            background: transparent;
+            color: var(--text-secondary);
+        }
+        .pwa-install-btn.secondary:hover {
+            background: var(--bg-card);
+        }
+        @media (max-width: 480px) {
+            .pwa-install-content {
+                flex-wrap: wrap;
+            }
+            .pwa-install-actions {
+                width: 100%;
+                margin-top: 10px;
+            }
+            .pwa-install-btn {
+                flex: 1;
+            }
+        }
+
+        /* Update notification */
+        .pwa-update-banner {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--accent-color);
+            border-radius: 10px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 20px var(--shadow-color);
+            z-index: 10002;
+            max-width: 320px;
+            animation: slideIn 0.3s ease-out;
+        }
+        .pwa-update-banner.show {
+            display: block;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .pwa-update-banner h4 {
+            margin: 0 0 8px 0;
+            color: var(--text-heading);
+            font-size: 1rem;
+        }
+        .pwa-update-banner p {
+            margin: 0 0 12px 0;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+        .pwa-update-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Offline indicator */
+        .offline-indicator {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #e53e3e;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 0.85rem;
+            z-index: 10003;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .offline-indicator.show {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        body.is-offline {
+            padding-top: 40px;
+        }
     </style>
     <!-- Theme-specific styles -->
     <link rel="stylesheet" href="/static/themes/{{ get_site_config().theme }}.css">
@@ -839,8 +1026,38 @@
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
 
+    <!-- Offline indicator -->
+    <div class="offline-indicator" id="offline-indicator" role="alert">
+        You're offline. Some features may be unavailable.
+    </div>
+
     <!-- Toast notification container -->
     <div class="toast-container" id="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- PWA Install Banner -->
+    <div class="pwa-install-banner" id="pwa-install-banner" role="dialog" aria-labelledby="pwa-install-title">
+        <div class="pwa-install-content">
+            <img src="/static/icon-192.png" alt="" class="pwa-install-icon">
+            <div class="pwa-install-text">
+                <h4 id="pwa-install-title">Install Ham Radio Olympics</h4>
+                <p>Add to your home screen for quick access and offline support</p>
+            </div>
+            <div class="pwa-install-actions">
+                <button class="pwa-install-btn primary" id="pwa-install-accept">Install</button>
+                <button class="pwa-install-btn secondary" id="pwa-install-dismiss">Not now</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PWA Update Banner -->
+    <div class="pwa-update-banner" id="pwa-update-banner" role="dialog" aria-labelledby="pwa-update-title">
+        <h4 id="pwa-update-title">Update Available</h4>
+        <p>A new version of Ham Radio Olympics is ready.</p>
+        <div class="pwa-update-actions">
+            <button class="pwa-install-btn primary" id="pwa-update-accept">Refresh</button>
+            <button class="pwa-install-btn secondary" id="pwa-update-dismiss">Later</button>
+        </div>
+    </div>
 
     <header>
         <div class="header-content">
@@ -1396,18 +1613,167 @@
         window.initSortableTables = initSortableTables;
     })();
 
-    // Service Worker registration
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-            navigator.serviceWorker.register('/static/sw.js')
-                .then(function(registration) {
-                    console.log('SW registered:', registration.scope);
-                })
-                .catch(function(error) {
-                    console.log('SW registration failed:', error);
-                });
+    // PWA Enhancement System
+    (function() {
+        var deferredInstallPrompt = null;
+        var swRegistration = null;
+
+        // Offline/Online status handling
+        function updateOnlineStatus() {
+            var indicator = document.getElementById('offline-indicator');
+            var body = document.body;
+
+            if (navigator.onLine) {
+                indicator.classList.remove('show');
+                body.classList.remove('is-offline');
+            } else {
+                indicator.classList.add('show');
+                body.classList.add('is-offline');
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+        updateOnlineStatus();
+
+        // Install prompt handling
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+
+            // Check if user has dismissed recently
+            var dismissed = localStorage.getItem('pwa-install-dismissed');
+            if (dismissed) {
+                var dismissedTime = parseInt(dismissed, 10);
+                var daysSinceDismissed = (Date.now() - dismissedTime) / (1000 * 60 * 60 * 24);
+                if (daysSinceDismissed < 7) return; // Don't show for 7 days after dismissal
+            }
+
+            // Show install banner
+            setTimeout(function() {
+                document.getElementById('pwa-install-banner').classList.add('show');
+            }, 2000); // Delay to not interrupt initial page load
         });
-    }
+
+        // Install button click
+        document.getElementById('pwa-install-accept').addEventListener('click', function() {
+            if (!deferredInstallPrompt) return;
+
+            deferredInstallPrompt.prompt();
+            deferredInstallPrompt.userChoice.then(function(choiceResult) {
+                if (choiceResult.outcome === 'accepted') {
+                    showToast('App installed successfully!', 'success');
+                }
+                deferredInstallPrompt = null;
+                document.getElementById('pwa-install-banner').classList.remove('show');
+            });
+        });
+
+        // Dismiss install banner
+        document.getElementById('pwa-install-dismiss').addEventListener('click', function() {
+            document.getElementById('pwa-install-banner').classList.remove('show');
+            localStorage.setItem('pwa-install-dismissed', Date.now().toString());
+        });
+
+        // Track when app is installed
+        window.addEventListener('appinstalled', function() {
+            deferredInstallPrompt = null;
+            document.getElementById('pwa-install-banner').classList.remove('show');
+            console.log('PWA installed');
+        });
+
+        // Update banner handling
+        document.getElementById('pwa-update-accept').addEventListener('click', function() {
+            if (swRegistration && swRegistration.waiting) {
+                swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+            window.location.reload();
+        });
+
+        document.getElementById('pwa-update-dismiss').addEventListener('click', function() {
+            document.getElementById('pwa-update-banner').classList.remove('show');
+        });
+
+        // Service Worker registration with update handling
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(function(registration) {
+                        swRegistration = registration;
+                        console.log('SW registered:', registration.scope);
+
+                        // Check for updates periodically
+                        setInterval(function() {
+                            registration.update();
+                        }, 60 * 60 * 1000); // Check every hour
+
+                        // Handle waiting worker (update available)
+                        if (registration.waiting) {
+                            showUpdateBanner();
+                        }
+
+                        // Listen for new worker
+                        registration.addEventListener('updatefound', function() {
+                            var newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', function() {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    showUpdateBanner();
+                                }
+                            });
+                        });
+                    })
+                    .catch(function(error) {
+                        console.log('SW registration failed:', error);
+                    });
+
+                // Listen for controller change (update applied)
+                navigator.serviceWorker.addEventListener('controllerchange', function() {
+                    console.log('SW controller changed');
+                });
+
+                // Listen for messages from SW
+                navigator.serviceWorker.addEventListener('message', function(event) {
+                    if (event.data.type === 'SW_UPDATED') {
+                        console.log('SW updated to version:', event.data.version);
+                    }
+                    if (event.data.type === 'SYNC_COMPLETE') {
+                        showToast('Background sync completed!', 'success');
+                    }
+                });
+            });
+        }
+
+        function showUpdateBanner() {
+            document.getElementById('pwa-update-banner').classList.add('show');
+        }
+
+        // Queue sync when offline
+        window.queueSyncRequest = function(url, options) {
+            if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+                return Promise.reject(new Error('No service worker'));
+            }
+
+            return new Promise(function(resolve, reject) {
+                var messageChannel = new MessageChannel();
+                messageChannel.port1.onmessage = function(event) {
+                    if (event.data.success) {
+                        resolve();
+                    } else {
+                        reject(new Error(event.data.error));
+                    }
+                };
+
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'QUEUE_SYNC',
+                    payload: {
+                        url: url,
+                        headers: options.headers || {},
+                        body: options.body || null
+                    }
+                }, [messageChannel.port2]);
+            });
+        };
+    })();
     </script>
 </body>
 </html>

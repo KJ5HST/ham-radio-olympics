@@ -199,6 +199,311 @@
     </form>
 </div>
 
+<h3 id="push-notifications">Push Notifications</h3>
+<div class="card">
+    <p style="font-size: 0.9em; color: #718096; margin-bottom: 15px;">
+        Get instant notifications on your device when medals change, QSOs are confirmed, or matches are about to start.
+    </p>
+
+    <div id="push-status" style="margin-bottom: 15px;">
+        <span id="push-status-indicator" style="display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 4px; background: var(--bg-card); border: 1px solid var(--border-color);">
+            <span id="push-status-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #718096;"></span>
+            <span id="push-status-text">Checking...</span>
+        </span>
+    </div>
+
+    <div id="push-not-supported" style="display: none;">
+        <p style="color: #c53030;">Push notifications are not supported in this browser. Try using Chrome, Firefox, or Edge.</p>
+    </div>
+
+    <div id="push-not-configured" style="display: none;">
+        <p style="color: #718096;">Push notifications are not configured on this server.</p>
+    </div>
+
+    <div id="push-permission-denied" style="display: none;">
+        <p style="color: #c53030;">Push notification permission was denied. Please enable notifications in your browser settings to receive alerts.</p>
+    </div>
+
+    <div id="push-controls" style="display: none;">
+        <div id="push-subscribe-section">
+            <button type="button" class="btn" onclick="subscribePush()" id="push-subscribe-btn">
+                Enable Push Notifications
+            </button>
+        </div>
+
+        <div id="push-preferences-section" style="display: none;">
+            <p style="margin-bottom: 15px; color: #22543d;">
+                <strong>Push notifications are enabled</strong>
+                <span id="push-device-count"></span>
+            </p>
+
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="pref-medal-changes" checked style="width: auto;">
+                    <span>Medal changes</span>
+                    <span style="font-size: 0.85em; color: #718096;">(when you win, lose, or upgrade medals)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="pref-new-confirmations" checked style="width: auto;">
+                    <span>QSO confirmations</span>
+                    <span style="font-size: 0.85em; color: #718096;">(when your QSOs get confirmed)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="pref-record-broken" checked style="width: auto;">
+                    <span>Record achievements</span>
+                    <span style="font-size: 0.85em; color: #718096;">(when you set personal or world records)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="pref-match-reminders" checked style="width: auto;">
+                    <span>Match reminders</span>
+                    <span style="font-size: 0.85em; color: #718096;">(7 days before a match starts)</span>
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button type="button" class="btn" onclick="savePushPreferences()">Save Preferences</button>
+                <button type="button" class="btn" style="background: #718096;" onclick="testPushNotification()">Send Test</button>
+                <button type="button" class="btn" style="background: #c53030;" onclick="unsubscribePush()">Disable Notifications</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Push notification management
+(function() {
+    var pushSupported = 'serviceWorker' in navigator && 'PushManager' in window;
+    var pushConfigured = false;
+    var currentSubscription = null;
+
+    async function initPushUI() {
+        var statusDot = document.getElementById('push-status-dot');
+        var statusText = document.getElementById('push-status-text');
+
+        if (!pushSupported) {
+            document.getElementById('push-not-supported').style.display = 'block';
+            statusDot.style.background = '#c53030';
+            statusText.textContent = 'Not supported';
+            return;
+        }
+
+        // Check if push is configured on server
+        try {
+            var resp = await fetch('/push/vapid-public-key');
+            if (!resp.ok) {
+                document.getElementById('push-not-configured').style.display = 'block';
+                statusDot.style.background = '#718096';
+                statusText.textContent = 'Not configured';
+                return;
+            }
+            pushConfigured = true;
+        } catch (e) {
+            document.getElementById('push-not-configured').style.display = 'block';
+            statusDot.style.background = '#718096';
+            statusText.textContent = 'Not configured';
+            return;
+        }
+
+        // Check permission
+        var permission = Notification.permission;
+        if (permission === 'denied') {
+            document.getElementById('push-permission-denied').style.display = 'block';
+            statusDot.style.background = '#c53030';
+            statusText.textContent = 'Permission denied';
+            return;
+        }
+
+        document.getElementById('push-controls').style.display = 'block';
+
+        // Check current subscription
+        try {
+            var reg = await navigator.serviceWorker.ready;
+            currentSubscription = await reg.pushManager.getSubscription();
+
+            if (currentSubscription) {
+                showPreferencesSection();
+                await loadPreferences();
+            } else {
+                showSubscribeSection();
+            }
+        } catch (e) {
+            console.error('Push init error:', e);
+            showSubscribeSection();
+        }
+    }
+
+    function showSubscribeSection() {
+        document.getElementById('push-subscribe-section').style.display = 'block';
+        document.getElementById('push-preferences-section').style.display = 'none';
+        document.getElementById('push-status-dot').style.background = '#718096';
+        document.getElementById('push-status-text').textContent = 'Disabled';
+    }
+
+    function showPreferencesSection() {
+        document.getElementById('push-subscribe-section').style.display = 'none';
+        document.getElementById('push-preferences-section').style.display = 'block';
+        document.getElementById('push-status-dot').style.background = '#38a169';
+        document.getElementById('push-status-text').textContent = 'Enabled';
+    }
+
+    async function loadPreferences() {
+        try {
+            var resp = await fetch('/push/preferences');
+            if (resp.ok) {
+                var data = await resp.json();
+                document.getElementById('pref-medal-changes').checked = data.preferences.medal_changes;
+                document.getElementById('pref-new-confirmations').checked = data.preferences.new_confirmations;
+                document.getElementById('pref-record-broken').checked = data.preferences.record_broken;
+                document.getElementById('pref-match-reminders').checked = data.preferences.match_reminders;
+
+                if (data.subscription_count > 1) {
+                    document.getElementById('push-device-count').textContent =
+                        ' on ' + data.subscription_count + ' devices';
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load preferences:', e);
+        }
+    }
+
+    window.subscribePush = async function() {
+        var btn = document.getElementById('push-subscribe-btn');
+        btn.disabled = true;
+        btn.textContent = 'Enabling...';
+
+        try {
+            // Get VAPID public key
+            var resp = await fetch('/push/vapid-public-key');
+            var data = await resp.json();
+            var publicKey = urlBase64ToUint8Array(data.publicKey);
+
+            // Request permission
+            var permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                throw new Error('Permission denied');
+            }
+
+            // Subscribe
+            var reg = await navigator.serviceWorker.ready;
+            var subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: publicKey
+            });
+
+            // Send to server
+            var subscribeResp = await fetch('/push/subscribe', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(subscription.toJSON())
+            });
+
+            if (!subscribeResp.ok) {
+                throw new Error('Failed to save subscription');
+            }
+
+            currentSubscription = subscription;
+            showPreferencesSection();
+            await loadPreferences();
+            showToast('Push notifications enabled!', 'success');
+
+        } catch (e) {
+            console.error('Subscribe error:', e);
+            if (e.message === 'Permission denied') {
+                document.getElementById('push-permission-denied').style.display = 'block';
+                document.getElementById('push-controls').style.display = 'none';
+            } else {
+                showToast('Failed to enable notifications: ' + e.message, 'error');
+            }
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Enable Push Notifications';
+        }
+    };
+
+    window.unsubscribePush = async function() {
+        if (!confirm('Are you sure you want to disable push notifications?')) return;
+
+        try {
+            if (currentSubscription) {
+                await currentSubscription.unsubscribe();
+
+                await fetch('/push/unsubscribe', {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({endpoint: currentSubscription.endpoint})
+                });
+            }
+
+            currentSubscription = null;
+            showSubscribeSection();
+            showToast('Push notifications disabled', 'success');
+
+        } catch (e) {
+            console.error('Unsubscribe error:', e);
+            showToast('Failed to disable notifications', 'error');
+        }
+    };
+
+    window.savePushPreferences = async function() {
+        try {
+            var prefs = {
+                medal_changes: document.getElementById('pref-medal-changes').checked,
+                new_confirmations: document.getElementById('pref-new-confirmations').checked,
+                record_broken: document.getElementById('pref-record-broken').checked,
+                match_reminders: document.getElementById('pref-match-reminders').checked
+            };
+
+            var resp = await fetch('/push/preferences', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(prefs)
+            });
+
+            if (resp.ok) {
+                showToast('Preferences saved', 'success');
+            } else {
+                throw new Error('Failed to save');
+            }
+        } catch (e) {
+            console.error('Save preferences error:', e);
+            showToast('Failed to save preferences', 'error');
+        }
+    };
+
+    window.testPushNotification = async function() {
+        try {
+            var resp = await fetch('/push/test', {method: 'POST'});
+            var data = await resp.json();
+            if (resp.ok) {
+                showToast(data.message, 'success');
+            } else {
+                showToast(data.detail || 'Test failed', 'error');
+            }
+        } catch (e) {
+            showToast('Test failed: ' + e.message, 'error');
+        }
+    };
+
+    function urlBase64ToUint8Array(base64String) {
+        var padding = '='.repeat((4 - base64String.length % 4) % 4);
+        var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        var rawData = window.atob(base64);
+        var outputArray = new Uint8Array(rawData.length);
+        for (var i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    // Initialize on load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPushUI);
+    } else {
+        initPushUI();
+    }
+})();
+</script>
+
 <script>
 document.getElementById('password-form').addEventListener('submit', function(e) {
     const newPass = document.getElementById('new_password').value;

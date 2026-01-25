@@ -3,6 +3,7 @@ Ham Radio Olympics - Main FastAPI Application
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -3366,6 +3367,144 @@ async def update_display_preferences(
 
 
 # ============================================================
+# PUSH NOTIFICATION API
+# ============================================================
+
+@app.get("/push/vapid-public-key")
+async def get_vapid_public_key():
+    """Get the VAPID public key for push subscription."""
+    from notifications import get_vapid_public_key, is_push_configured
+
+    if not is_push_configured():
+        raise HTTPException(status_code=503, detail="Push notifications not configured")
+
+    return {"publicKey": get_vapid_public_key()}
+
+
+@app.post("/push/subscribe")
+async def subscribe_push(
+    request: Request,
+    user: User = Depends(require_user)
+):
+    """Subscribe to push notifications."""
+    from notifications import save_subscription, is_push_configured
+
+    if not is_push_configured():
+        raise HTTPException(status_code=503, detail="Push notifications not configured")
+
+    try:
+        data = await request.json()
+        endpoint = data.get("endpoint")
+        keys = data.get("keys", {})
+        p256dh = keys.get("p256dh")
+        auth = keys.get("auth")
+
+        if not endpoint or not p256dh or not auth:
+            raise HTTPException(status_code=400, detail="Invalid subscription data")
+
+        user_agent = request.headers.get("User-Agent")
+
+        if save_subscription(user.callsign, endpoint, p256dh, auth, user_agent):
+            return {"message": "Subscribed successfully"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save subscription")
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+
+@app.delete("/push/unsubscribe")
+async def unsubscribe_push(
+    request: Request,
+    user: User = Depends(require_user)
+):
+    """Unsubscribe from push notifications."""
+    from notifications import remove_subscription
+
+    try:
+        data = await request.json()
+        endpoint = data.get("endpoint")
+
+        if not endpoint:
+            raise HTTPException(status_code=400, detail="Endpoint required")
+
+        remove_subscription(endpoint)
+        return {"message": "Unsubscribed successfully"}
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+
+@app.delete("/push/unsubscribe-all")
+async def unsubscribe_all_push(user: User = Depends(require_user)):
+    """Remove all push subscriptions for the current user."""
+    from notifications import remove_all_subscriptions
+
+    remove_all_subscriptions(user.callsign)
+    return {"message": "All subscriptions removed"}
+
+
+@app.get("/push/preferences")
+async def get_push_preferences(user: User = Depends(require_user)):
+    """Get push notification preferences."""
+    from notifications import get_notification_preferences, get_subscriptions
+
+    prefs = get_notification_preferences(user.callsign)
+    subscriptions = get_subscriptions(user.callsign)
+
+    return {
+        "preferences": prefs,
+        "subscription_count": len(subscriptions)
+    }
+
+
+@app.put("/push/preferences")
+async def update_push_preferences(
+    request: Request,
+    user: User = Depends(require_user)
+):
+    """Update push notification preferences."""
+    from notifications import update_notification_preferences
+
+    try:
+        data = await request.json()
+        preferences = {
+            "medal_changes": data.get("medal_changes", True),
+            "new_confirmations": data.get("new_confirmations", True),
+            "record_broken": data.get("record_broken", True),
+            "match_reminders": data.get("match_reminders", True)
+        }
+
+        if update_notification_preferences(user.callsign, preferences):
+            return {"message": "Preferences updated"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update preferences")
+
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+
+@app.post("/push/test")
+async def send_test_notification(user: User = Depends(require_user)):
+    """Send a test push notification to the current user."""
+    from notifications import send_notification, NotificationPayload, get_subscriptions
+
+    subscriptions = get_subscriptions(user.callsign)
+    if not subscriptions:
+        raise HTTPException(status_code=400, detail="No push subscriptions found")
+
+    payload = NotificationPayload(
+        title="Test Notification",
+        body="Push notifications are working!",
+        tag="test",
+        url="/settings"
+    )
+
+    count = send_notification(user.callsign, payload)
+    return {"message": f"Test notification sent to {count} device(s)"}
+
+
+# ============================================================
 # QSO FILTER API (for AJAX filtering)
 # ============================================================
 
@@ -5475,6 +5614,69 @@ async def update_public_results(
     set_setting("public_results", "1" if enabled else "0")
 
     return {"message": f"Public results {'enabled' if enabled else 'disabled'}"}
+
+
+# ============================================================
+# ADMIN PUSH NOTIFICATION ENDPOINTS
+# ============================================================
+
+@app.post("/admin/notifications/send-reminders")
+async def admin_send_match_reminders(_: bool = Depends(verify_admin)):
+    """Send match reminder notifications for upcoming matches."""
+    from notifications import send_match_reminders
+
+    results = await asyncio.to_thread(send_match_reminders)
+
+    return {
+        "message": "Match reminders processed",
+        "matches_checked": results["checked"],
+        "reminders_sent": results["sent"],
+        "reminders_skipped": results["skipped"]
+    }
+
+
+@app.post("/admin/notifications/cleanup")
+async def admin_cleanup_notifications(_: bool = Depends(verify_admin)):
+    """Cleanup old notification records and stale subscriptions."""
+    from notifications import cleanup_old_notifications, cleanup_stale_subscriptions
+
+    old_deleted = await asyncio.to_thread(cleanup_old_notifications, 30)
+    stale_deleted = await asyncio.to_thread(cleanup_stale_subscriptions, 90)
+
+    return {
+        "message": "Notification cleanup complete",
+        "old_notifications_deleted": old_deleted,
+        "stale_subscriptions_deleted": stale_deleted
+    }
+
+
+@app.get("/admin/notifications/stats")
+async def admin_notification_stats(_: bool = Depends(verify_admin)):
+    """Get push notification statistics."""
+    with get_db() as conn:
+        # Count subscriptions
+        sub_count = conn.execute("SELECT COUNT(*) FROM push_subscriptions").fetchone()[0]
+
+        # Count subscribers (unique callsigns)
+        subscriber_count = conn.execute(
+            "SELECT COUNT(DISTINCT callsign) FROM push_subscriptions"
+        ).fetchone()[0]
+
+        # Count sent notifications
+        sent_count = conn.execute("SELECT COUNT(*) FROM sent_notifications").fetchone()[0]
+
+        # Count recent notifications (last 24 hours)
+        recent_count = conn.execute("""
+            SELECT COUNT(*) FROM sent_notifications
+            WHERE sent_at > datetime('now', '-24 hours')
+        """).fetchone()[0]
+
+    return {
+        "total_subscriptions": sub_count,
+        "unique_subscribers": subscriber_count,
+        "total_sent": sent_count,
+        "sent_last_24h": recent_count
+    }
 
 
 @app.post("/admin/recompute-records")

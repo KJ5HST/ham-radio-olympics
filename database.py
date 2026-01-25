@@ -934,6 +934,40 @@ def init_db():
                 FOREIGN KEY (disqualification_id) REFERENCES qso_disqualifications(id) ON DELETE CASCADE
             );
 
+            -- Push Subscriptions table (stores Web Push subscriptions per device)
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                callsign TEXT NOT NULL,
+                endpoint TEXT NOT NULL UNIQUE,
+                p256dh_key TEXT NOT NULL,
+                auth_key TEXT NOT NULL,
+                user_agent TEXT,
+                created_at TEXT NOT NULL,
+                last_used_at TEXT,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Notification Preferences table (per-user notification settings)
+            CREATE TABLE IF NOT EXISTS notification_preferences (
+                callsign TEXT PRIMARY KEY,
+                medal_changes INTEGER NOT NULL DEFAULT 1,
+                new_confirmations INTEGER NOT NULL DEFAULT 1,
+                record_broken INTEGER NOT NULL DEFAULT 1,
+                match_reminders INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
+            -- Sent Notifications table (tracks sent notifications to avoid duplicates)
+            CREATE TABLE IF NOT EXISTS sent_notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                callsign TEXT NOT NULL,
+                notification_type TEXT NOT NULL,
+                reference_id TEXT,
+                sent_at TEXT NOT NULL,
+                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+            );
+
             -- Indexes for performance
             CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
             CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log(action);
@@ -972,6 +1006,11 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_qso_dq_sport ON qso_disqualifications(sport_id);
             CREATE INDEX IF NOT EXISTS idx_qso_dq_status ON qso_disqualifications(status);
             CREATE INDEX IF NOT EXISTS idx_qso_dq_comments_dq ON qso_disqualification_comments(disqualification_id);
+
+            -- Indexes for push notifications
+            CREATE INDEX IF NOT EXISTS idx_push_subscriptions_callsign ON push_subscriptions(callsign);
+            CREATE INDEX IF NOT EXISTS idx_sent_notifications_callsign ON sent_notifications(callsign);
+            CREATE INDEX IF NOT EXISTS idx_sent_notifications_type ON sent_notifications(notification_type, reference_id);
         """)
 
 

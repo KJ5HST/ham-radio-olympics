@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a365d">
+    <title>Offline - Ham Radio Olympics</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: white;
+            --text-primary: #333;
+            --text-secondary: #718096;
+            --text-heading: #1a365d;
+            --accent-color: #2c5282;
+            --accent-hover: #1a365d;
+            --border-color: #e2e8f0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-primary: #1a202c;
+                --bg-secondary: #2d3748;
+                --text-primary: #e2e8f0;
+                --text-secondary: #a0aec0;
+                --text-heading: #90cdf4;
+                --accent-color: #4299e1;
+                --accent-hover: #3182ce;
+                --border-color: #4a5568;
+            }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .offline-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.8;
+        }
+
+        h2 {
+            color: var(--text-heading);
+            margin-bottom: 15px;
+            font-size: 1.8rem;
+        }
+
+        .message {
+            color: var(--text-secondary);
+            max-width: 400px;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 24px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .btn:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--border-color);
+            color: var(--text-primary);
+            margin-left: 10px;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+        }
+
+        .cached-pages {
+            margin-top: 40px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .cached-pages h3 {
+            color: var(--text-heading);
+            font-size: 1rem;
+            margin-bottom: 15px;
+        }
+
+        .cached-pages ul {
+            list-style: none;
+            text-align: left;
+        }
+
+        .cached-pages li {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .cached-pages li:last-child {
+            border-bottom: none;
+        }
+
+        .cached-pages a {
+            color: var(--accent-color);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .cached-pages a:hover {
+            text-decoration: underline;
+        }
+
+        .status-indicator {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e53e3e;
+        }
+
+        .status-dot.online {
+            background: #38a169;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            display: none;
+        }
+
+        .loading.show {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        footer {
+            padding: 20px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Ham Radio Olympics</h1>
+        <p>Olympic-style amateur radio competition</p>
+    </header>
+
+    <main>
+        <div class="offline-icon">📡</div>
+        <h2>You're Offline</h2>
+        <p class="message">
+            It looks like you've lost your internet connection.
+            Don't worry - your data is safe and will sync when you're back online.
+        </p>
+
+        <div>
+            <button class="btn" onclick="retry()">
+                <span class="loading" id="retry-loading"></span>
+                <span>Try Again</span>
+            </button>
+            <a href="/" class="btn btn-secondary">Go Home</a>
+        </div>
+
+        <div class="cached-pages" id="cached-pages">
+            <h3>Available Offline</h3>
+            <ul id="cached-list">
+                <li><a href="/"><span>🏠</span> Home</a></li>
+            </ul>
+        </div>
+    </main>
+
+    <div class="status-indicator" id="status-indicator">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Offline</span>
+    </div>
+
+    <footer>
+        <p>Ham Radio Olympics &copy; 2026</p>
+    </footer>
+
+    <script>
+        // Check for cached pages and display them
+        async function loadCachedPages() {
+            if (!('caches' in window)) return;
+
+            try {
+                const pagesCacheName = await findPagesCache();
+                if (!pagesCacheName) return;
+
+                const cache = await caches.open(pagesCacheName);
+                const keys = await cache.keys();
+                const list = document.getElementById('cached-list');
+
+                const pageIcons = {
+                    '/': '🏠',
+                    '/dashboard': '📊',
+                    '/olympiad': '🏅',
+                    '/olympiad/sports': '🎯',
+                    '/records': '🏆',
+                    '/medals': '🥇',
+                    '/teams': '👥',
+                    '/settings': '⚙️'
+                };
+
+                const pages = [];
+                for (const request of keys) {
+                    const url = new URL(request.url);
+                    if (url.pathname !== '/' && !url.pathname.startsWith('/static/')) {
+                        pages.push({
+                            path: url.pathname,
+                            icon: pageIcons[url.pathname] || '📄'
+                        });
+                    }
+                }
+
+                if (pages.length > 0) {
+                    // Sort by path
+                    pages.sort((a, b) => a.path.localeCompare(b.path));
+
+                    // Add to list (keep home at top)
+                    pages.forEach(page => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `<a href="${page.path}"><span>${page.icon}</span> ${formatPath(page.path)}</a>`;
+                        list.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load cached pages:', error);
+            }
+        }
+
+        async function findPagesCache() {
+            const cacheNames = await caches.keys();
+            return cacheNames.find(name => name.includes('pages'));
+        }
+
+        function formatPath(path) {
+            return path
+                .split('/')
+                .filter(Boolean)
+                .map(segment => segment.charAt(0).toUpperCase() + segment.slice(1))
+                .join(' > ');
+        }
+
+        // Retry connection
+        function retry() {
+            const loading = document.getElementById('retry-loading');
+            loading.classList.add('show');
+
+            fetch('/', { method: 'HEAD', cache: 'no-store' })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        throw new Error('Still offline');
+                    }
+                })
+                .catch(() => {
+                    loading.classList.remove('show');
+                    showToast('Still offline. Please check your connection.');
+                });
+        }
+
+        // Online/offline status monitoring
+        function updateStatus() {
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+
+            if (navigator.onLine) {
+                dot.classList.add('online');
+                text.textContent = 'Back Online!';
+
+                // Auto-reload after brief delay
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                dot.classList.remove('online');
+                text.textContent = 'Offline';
+            }
+        }
+
+        // Simple toast notification
+        function showToast(message) {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
+
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 12px 24px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 1000;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Listen for online/offline events
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+
+        // Listen for SW messages
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data.type === 'SYNC_COMPLETE') {
+                    showToast('Background sync completed!');
+                }
+            });
+        }
+
+        // Initialize
+        updateStatus();
+        loadCachedPages();
+
+        // Periodically check connection
+        setInterval(() => {
+            if (!navigator.onLine) {
+                fetch('/', { method: 'HEAD', cache: 'no-store' })
+                    .then(response => {
+                        if (response.ok) updateStatus();
+                    })
+                    .catch(() => {});
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
