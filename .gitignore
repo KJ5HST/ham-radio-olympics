@@ -62,3 +62,8 @@ Thumbs.db
 # Fly.io
 fly.toml.bak
 fly.toml
+
+# VAPID keys (for push notifications)
+vapid_*.txt
+vapid_*.json
+.vapid_keys
