@@ -57,6 +57,28 @@
 </div>
 
 <div class="card">
+    <h3>Email Settings</h3>
+    <p style="color: #718096; margin-bottom: 1rem;">
+        Configure email notification behavior for the system.
+    </p>
+    <form id="email-settings-form">
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="admin_bcc_emails" {% if admin_bcc_emails %}checked{% endif %} style="width: auto;">
+                <span>BCC admin on all outgoing emails</span>
+            </label>
+            <small style="color: #718096; display: block; margin-top: 0.5rem;">
+                When enabled, a copy of every email sent to competitors will be sent to the admin email address ({{ admin_email or 'not configured' }}).
+            </small>
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Save</button>
+        </div>
+    </form>
+    <div id="email-settings-result" style="margin-top: 1rem;"></div>
+</div>
+
+<div class="card">
     <h3>QRZ XML API Credentials</h3>
     <p style="color: #718096; margin-bottom: 1rem;">
         These credentials are used for callsign lookups to fetch competitor names and country information.
@@ -86,6 +108,30 @@
 </div>
 
 <script>
+// Email settings form handler
+document.getElementById('email-settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('email-settings-result');
+    const enabled = document.getElementById('admin_bcc_emails').checked;
+
+    try {
+        const resp = await fetch('/admin/settings/email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({ admin_bcc_emails: enabled })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
 // Public results form handler
 document.getElementById('public-results-form').addEventListener('submit', async (e) => {
     e.preventDefault();

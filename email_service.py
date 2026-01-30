@@ -50,7 +50,8 @@ async def send_email(
     to: str,
     subject: str,
     body: str,
-    html_body: Optional[str] = None
+    html_body: Optional[str] = None,
+    skip_bcc: bool = False
 ) -> bool:
     """
     Send an email using the configured backend.
@@ -60,12 +61,23 @@ async def send_email(
         subject: Email subject
         body: Plain text body
         html_body: Optional HTML body
+        skip_bcc: If True, don't BCC admin even if enabled (for admin error emails)
 
     Returns:
         True if email was sent successfully, False otherwise
     """
+    # Check if admin BCC is enabled
+    bcc = None
+    if not skip_bcc and config.ADMIN_EMAIL:
+        try:
+            from database import get_setting
+            if get_setting("admin_bcc_emails") == "1":
+                bcc = config.ADMIN_EMAIL
+        except Exception:
+            pass  # Don't fail email send if we can't check setting
+
     backend = _get_backend()
-    return await backend(to, subject, body, html_body)
+    return await backend(to, subject, body, html_body, bcc)
 
 
 def _get_backend():
@@ -87,13 +99,16 @@ async def _console_backend(
     to: str,
     subject: str,
     body: str,
-    html_body: Optional[str] = None
+    html_body: Optional[str] = None,
+    bcc: Optional[str] = None
 ) -> bool:
     """Console backend - prints email to stdout."""
     print("=" * 60)
     print("EMAIL (Console Backend)")
     print("=" * 60)
     print(f"To: {to}")
+    if bcc:
+        print(f"Bcc: {bcc}")
     print(f"Subject: {subject}")
     print("-" * 60)
     print(body)
@@ -109,7 +124,8 @@ async def _smtp_backend(
     to: str,
     subject: str,
     body: str,
-    html_body: Optional[str] = None
+    html_body: Optional[str] = None,
+    bcc: Optional[str] = None
 ) -> bool:
     """SMTP backend - sends email via SMTP server."""
     try:
@@ -128,6 +144,13 @@ async def _smtp_backend(
         msg["Subject"] = subject
         msg["From"] = config.EMAIL_FROM
         msg["To"] = to
+        if bcc:
+            msg["Bcc"] = bcc
+
+        # Build recipient list
+        recipients = [to]
+        if bcc:
+            recipients.append(bcc)
 
         # Send via SMTP
         await aiosmtplib.send(
@@ -136,7 +159,8 @@ async def _smtp_backend(
             port=config.SMTP_PORT,
             username=config.SMTP_USER if config.SMTP_USER else None,
             password=config.SMTP_PASSWORD if config.SMTP_PASSWORD else None,
-            start_tls=True
+            start_tls=True,
+            recipients=recipients
         )
 
         logger.info(f"Email sent to {to}: {subject}")
@@ -151,7 +175,8 @@ async def _resend_backend(
     to: str,
     subject: str,
     body: str,
-    html_body: Optional[str] = None
+    html_body: Optional[str] = None,
+    bcc: Optional[str] = None
 ) -> bool:
     """Resend backend - sends email via Resend API."""
     try:
@@ -167,6 +192,8 @@ async def _resend_backend(
         }
         if html_body:
             params["html"] = html_body
+        if bcc:
+            params["bcc"] = [bcc]
 
         resend.Emails.send(params)
 
@@ -380,7 +407,7 @@ def _render_medal_notification_template(
     competition: str,
     points: int
 ) -> str:
-    """Render medal notification email template."""
+    """Render medal notification email template (single medal - legacy)."""
     medal_colors = {
         "gold": "#FFD700",
         "silver": "#C0C0C0",
@@ -413,6 +440,139 @@ def _render_medal_notification_template(
     <p>Keep up the great work!</p>
     <p>73,<br>Ham Radio Olympics</p>
     {_get_email_footer_html()}
+</body>
+</html>
+"""
+
+
+def _render_medals_summary_template(callsign: str, medals: list, total_points: int) -> str:
+    """Render consolidated medals notification email template."""
+    medal_colors = {
+        "gold": "#FFD700",
+        "silver": "#C0C0C0",
+        "bronze": "#CD7F32"
+    }
+    medal_emoji = {"gold": "🥇", "silver": "🥈", "bronze": "🥉"}
+
+    medals_html = ""
+    for m in medals:
+        color = medal_colors.get(m["medal_type"].lower(), "#4299e1")
+        emoji = medal_emoji.get(m["medal_type"].lower(), "🏅")
+        medals_html += f"""
+        <div style="background-color: #f7fafc; border-left: 4px solid {color}; padding: 15px; margin: 10px 0;">
+            <p style="margin: 0; font-size: 16px;"><strong>{emoji} {m["medal_type"].title()} Medal</strong></p>
+            <p style="margin: 5px 0 0 0; color: #4a5568;">
+                {m["competition"]} - {m["sport_name"]}<br>
+                Target: {m["match_name"]}
+            </p>
+            <p style="margin: 5px 0 0 0; color: #2d3748;">
+                <strong>+{m["points"]} points</strong>
+            </p>
+        </div>
+        """
+
+    medal_count = len(medals)
+    title_text = "medal" if medal_count == 1 else "medals"
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Medals Earned - Ham Radio Olympics</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2d3748;">Congratulations! 🎉</h1>
+    <p>Hello {callsign},</p>
+    <p>You've earned <strong>{medal_count} {title_text}</strong> in the Ham Radio Olympics!</p>
+    {medals_html}
+    <div style="background-color: #ebf8ff; padding: 15px; margin: 20px 0; border-radius: 4px;">
+        <p style="margin: 0; font-size: 18px; color: #2d3748;">
+            <strong>Total from these medals: +{total_points} points</strong>
+        </p>
+    </div>
+    <p>Keep up the great work!</p>
+    <p>73,<br>Ham Radio Olympics</p>
+    {_get_email_footer_html()}
+</body>
+</html>
+"""
+
+
+def _render_push_disabled_template(callsign: str, reason: str) -> str:
+    """Render push notifications disabled email template."""
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Push Notifications Disabled - Ham Radio Olympics</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #2d3748;">Push Notifications Disabled</h1>
+    <p>Hello {callsign},</p>
+    <p>Your push notification subscription has been automatically disabled because we could no longer deliver notifications to your device.</p>
+    <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #92400e;">
+            <strong>Why did this happen?</strong><br>
+            {reason}
+        </p>
+    </div>
+    <h3 style="color: #2d3748;">How to Re-enable Push Notifications</h3>
+    <ol style="color: #4a5568; line-height: 1.8;">
+        <li>Log in to Ham Radio Olympics</li>
+        <li>Go to your <strong>Settings</strong> page</li>
+        <li>Scroll to the <strong>Push Notifications</strong> section</li>
+        <li>Click <strong>"Enable Push Notifications"</strong></li>
+        <li>When your browser asks for permission, click <strong>Allow</strong></li>
+    </ol>
+    <p style="margin-top: 20px;">
+        <a href="{APP_BASE_URL}/settings#notifications" style="background-color: #4299e1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">
+            Go to Settings
+        </a>
+    </p>
+    <p style="color: #718096; margin-top: 20px;">
+        If you no longer wish to receive push notifications, no action is needed.
+    </p>
+    <p>73,<br>Ham Radio Olympics</p>
+    {_get_email_footer_html()}
+</body>
+</html>
+"""
+
+
+def _render_admin_error_template(error_type: str, error_details: str, context: dict) -> str:
+    """Render admin error notification email template."""
+    context_html = ""
+    if context:
+        context_items = "".join([f"<li><strong>{k}:</strong> {v}</li>" for k, v in context.items()])
+        context_html = f"""
+        <div style="background-color: #f7fafc; padding: 15px; margin: 10px 0; border-radius: 4px;">
+            <p style="margin: 0 0 10px 0;"><strong>Context:</strong></p>
+            <ul style="margin: 0; padding-left: 20px;">{context_items}</ul>
+        </div>
+        """
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Error Alert - Ham Radio Olympics</title>
+</head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <h1 style="color: #c53030;">⚠️ Error Alert</h1>
+    <p>An error occurred in the Ham Radio Olympics system.</p>
+    <div style="background-color: #fed7d7; border-left: 4px solid #c53030; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; font-size: 16px;"><strong>Error Type:</strong> {error_type}</p>
+        <p style="margin: 10px 0 0 0; color: #4a5568;">
+            {error_details}
+        </p>
+    </div>
+    {context_html}
+    <p style="color: #718096; font-size: 12px;">
+        This is an automated error notification from Ham Radio Olympics.
+    </p>
 </body>
 </html>
 """
@@ -704,6 +864,182 @@ Ham Radio Olympics
     )
 
 
+async def send_push_disabled_email(
+    callsign: str,
+    email: str,
+    reason: str = "Your browser or device reported that the notification subscription is no longer valid. This can happen if you cleared your browser data, disabled notifications in your browser settings, or if the subscription expired."
+) -> bool:
+    """
+    Send an email notifying user their push subscription was disabled.
+
+    Args:
+        callsign: User's callsign
+        email: User's email address
+        reason: Explanation of why push was disabled
+
+    Returns:
+        True if email sent successfully
+    """
+    html_body = _render_push_disabled_template(callsign, reason)
+
+    plain_body = f"""
+Push Notifications Disabled
+
+Hello {callsign},
+
+Your push notification subscription has been automatically disabled because we could no longer deliver notifications to your device.
+
+Why did this happen?
+{reason}
+
+How to Re-enable Push Notifications:
+1. Log in to Ham Radio Olympics
+2. Go to your Settings page
+3. Scroll to the Push Notifications section
+4. Click "Enable Push Notifications"
+5. When your browser asks for permission, click Allow
+
+Go to Settings: {APP_BASE_URL}/settings#notifications
+
+If you no longer wish to receive push notifications, no action is needed.
+
+73,
+Ham Radio Olympics
+{_get_email_footer_text()}
+"""
+
+    return await send_email(
+        to=email,
+        subject="Push Notifications Disabled - Ham Radio Olympics",
+        body=plain_body.strip(),
+        html_body=html_body
+    )
+
+
+async def send_admin_error_email(
+    error_type: str,
+    error_details: str,
+    context: dict = None
+) -> bool:
+    """
+    Send an error notification email to the admin.
+
+    Args:
+        error_type: Type/category of error (e.g., "Push Notification Failure")
+        error_details: Detailed error message
+        context: Optional dict with additional context
+
+    Returns:
+        True if email sent successfully
+    """
+    admin_email = config.ADMIN_EMAIL
+    if not admin_email:
+        logger.warning("ADMIN_EMAIL not configured, cannot send error notification")
+        return False
+
+    html_body = _render_admin_error_template(error_type, error_details, context or {})
+
+    context_text = ""
+    if context:
+        context_text = "\n".join([f"  - {k}: {v}" for k, v in context.items()])
+        context_text = f"\n\nContext:\n{context_text}"
+
+    plain_body = f"""
+Error Alert - Ham Radio Olympics
+
+An error occurred in the Ham Radio Olympics system.
+
+Error Type: {error_type}
+Details: {error_details}{context_text}
+
+This is an automated error notification.
+"""
+
+    return await send_email(
+        to=admin_email,
+        subject=f"⚠️ Error: {error_type} - Ham Radio Olympics",
+        body=plain_body.strip(),
+        html_body=html_body,
+        skip_bcc=True  # Don't BCC admin on admin emails
+    )
+
+
+async def send_medals_summary_email(
+    callsign: str,
+    email: str,
+    medals: list,
+    total_points: int
+) -> bool:
+    """
+    Send a consolidated medals notification email.
+
+    Args:
+        callsign: User's callsign
+        email: User's email address
+        medals: List of medal dicts with keys: medal_type, competition, sport_name, match_name, points
+        total_points: Total points from all medals
+
+    Returns:
+        True if email sent successfully
+    """
+    if not medals:
+        return True
+
+    medal_count = len(medals)
+    medal_emoji = {"gold": "🥇", "silver": "🥈", "bronze": "🥉"}
+
+    # Find the best medal for the subject line
+    best_medal = None
+    for medal_type in ["gold", "silver", "bronze"]:
+        for m in medals:
+            if m["medal_type"].lower() == medal_type:
+                best_medal = medal_type
+                break
+        if best_medal:
+            break
+
+    emoji = medal_emoji.get(best_medal, "🏅") if best_medal else "🎉"
+
+    html_body = _render_medals_summary_template(callsign, medals, total_points)
+
+    # Build plain text version
+    medals_text = ""
+    for m in medals:
+        e = medal_emoji.get(m["medal_type"].lower(), "🏅")
+        medals_text += f"\n{e} {m['medal_type'].title()} Medal - {m['competition']}\n"
+        medals_text += f"   {m['sport_name']} - {m['match_name']}\n"
+        medals_text += f"   +{m['points']} points\n"
+
+    title_text = "medal" if medal_count == 1 else "medals"
+    plain_body = f"""
+Congratulations! 🎉
+
+Hello {callsign},
+
+You've earned {medal_count} {title_text} in the Ham Radio Olympics!
+{medals_text}
+Total from these medals: +{total_points} points
+
+Keep up the great work!
+
+73,
+Ham Radio Olympics
+{_get_email_footer_text()}
+"""
+
+    if medal_count == 1:
+        subject = f"{emoji} You earned a {best_medal} medal! - Ham Radio Olympics"
+    else:
+        subject = f"{emoji} You earned {medal_count} medals! - Ham Radio Olympics"
+
+    return await send_email(
+        to=email,
+        subject=subject,
+        body=plain_body.strip(),
+        html_body=html_body
+    )
+
+
 async def send_match_reminder_email(
     callsign: str,
     email: str,
@@ -876,12 +1212,14 @@ async def notify_new_medals() -> dict:
     """
     Send notifications for new medals that haven't been notified yet.
 
+    Consolidates all medals per person into a single email to avoid spam.
+
     Returns:
         Dict with counts of notifications sent and any errors
     """
     from database import get_db
 
-    results = {"sent": 0, "skipped": 0, "errors": 0}
+    results = {"sent": 0, "skipped": 0, "errors": 0, "medals_notified": 0}
 
     with get_db() as conn:
         # Find medals with actual medals (gold/silver/bronze) that haven't been notified
@@ -897,66 +1235,125 @@ async def notify_new_medals() -> dict:
             JOIN competitors c ON m.callsign = c.callsign
             WHERE m.notified_at IS NULL
               AND (m.qso_race_medal IS NOT NULL OR m.cool_factor_medal IS NOT NULL)
+            ORDER BY m.callsign, s.name, mat.target_value
         """)
-        medals = cursor.fetchall()
+        all_medals = cursor.fetchall()
 
-        for medal in medals:
+        # Group medals by callsign
+        medals_by_person = {}
+        medal_ids_by_person = {}
+        for medal in all_medals:
             medal = dict(medal)
+            callsign = medal["callsign"]
+
+            if callsign not in medals_by_person:
+                medals_by_person[callsign] = {
+                    "email": medal["email"],
+                    "email_verified": medal["email_verified"],
+                    "email_notifications_enabled": medal["email_notifications_enabled"],
+                    "email_medal_notifications": medal["email_medal_notifications"],
+                    "medals": []
+                }
+                medal_ids_by_person[callsign] = []
+
+            medal_ids_by_person[callsign].append(medal["id"])
+
+            # Build medal entries for this person
+            if medal["qso_race_medal"]:
+                points = {"gold": 3, "silver": 2, "bronze": 1}.get(medal["qso_race_medal"], 0)
+                medals_by_person[callsign]["medals"].append({
+                    "medal_type": medal["qso_race_medal"],
+                    "competition": "QSO Race",
+                    "sport_name": medal["sport_name"],
+                    "match_name": medal["target_value"],
+                    "points": points
+                })
+
+            if medal["cool_factor_medal"]:
+                points = {"gold": 3, "silver": 2, "bronze": 1}.get(medal["cool_factor_medal"], 0)
+                medals_by_person[callsign]["medals"].append({
+                    "medal_type": medal["cool_factor_medal"],
+                    "competition": "Cool Factor",
+                    "sport_name": medal["sport_name"],
+                    "match_name": medal["target_value"],
+                    "points": points
+                })
+
+        # Send one consolidated email per person
+        now = datetime.utcnow().isoformat()
+        for callsign, data in medals_by_person.items():
+            medal_ids = medal_ids_by_person[callsign]
 
             # Skip if no email, notifications disabled, or medal notifications disabled
-            if not medal["email"] or not medal["email_notifications_enabled"] or not medal["email_medal_notifications"]:
-                results["skipped"] += 1
-                # Mark as notified anyway to prevent future attempts
-                conn.execute(
-                    "UPDATE medals SET notified_at = ? WHERE id = ?",
-                    (datetime.utcnow().isoformat(), medal["id"])
-                )
+            if not data["email"] or not data["email_notifications_enabled"] or not data["email_medal_notifications"]:
+                results["skipped"] += len(data["medals"])
+                # Mark all as notified to prevent future attempts
+                for medal_id in medal_ids:
+                    conn.execute(
+                        "UPDATE medals SET notified_at = ? WHERE id = ?",
+                        (now, medal_id)
+                    )
                 continue
 
             # Skip unverified emails
-            if not medal["email_verified"]:
-                results["skipped"] += 1
-                conn.execute(
-                    "UPDATE medals SET notified_at = ? WHERE id = ?",
-                    (datetime.utcnow().isoformat(), medal["id"])
-                )
+            if not data["email_verified"]:
+                results["skipped"] += len(data["medals"])
+                for medal_id in medal_ids:
+                    conn.execute(
+                        "UPDATE medals SET notified_at = ? WHERE id = ?",
+                        (now, medal_id)
+                    )
                 continue
 
-            # Determine which medal(s) to report
-            notifications_to_send = []
-            if medal["qso_race_medal"]:
-                notifications_to_send.append(("QSO Race", medal["qso_race_medal"]))
-            if medal["cool_factor_medal"]:
-                notifications_to_send.append(("Cool Factor", medal["cool_factor_medal"]))
+            # Calculate total points
+            total_points = sum(m["points"] for m in data["medals"])
 
-            # Send one email per medal record (may have multiple competitions)
-            for competition, medal_type in notifications_to_send:
-                points = {"gold": 3, "silver": 2, "bronze": 1}.get(medal_type, 0)
-                try:
-                    success = await send_medal_notification_email(
-                        callsign=medal["callsign"],
-                        email=medal["email"],
-                        sport_name=medal["sport_name"],
-                        match_name=medal["target_value"],
-                        medal_type=medal_type,
-                        competition=competition,
-                        points=points
-                    )
-                    if success:
-                        results["sent"] += 1
-                    else:
-                        results["errors"] += 1
-                except Exception as e:
-                    logger.error(f"Failed to send medal notification to {medal['callsign']}: {e}")
+            # Send consolidated email
+            try:
+                success = await send_medals_summary_email(
+                    callsign=callsign,
+                    email=data["email"],
+                    medals=data["medals"],
+                    total_points=total_points
+                )
+                if success:
+                    results["sent"] += 1
+                    results["medals_notified"] += len(data["medals"])
+                else:
                     results["errors"] += 1
+                    # Notify admin of email failure
+                    await send_admin_error_email(
+                        error_type="Medal Email Failure",
+                        error_details=f"Failed to send medal notification email to {callsign}",
+                        context={
+                            "callsign": callsign,
+                            "email": data["email"],
+                            "medal_count": len(data["medals"])
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send medal notification to {callsign}: {e}")
+                results["errors"] += 1
+                # Notify admin of error
+                await send_admin_error_email(
+                    error_type="Medal Email Error",
+                    error_details=str(e),
+                    context={
+                        "callsign": callsign,
+                        "email": data["email"],
+                        "medal_count": len(data["medals"])
+                    }
+                )
 
-            # Mark as notified
-            conn.execute(
-                "UPDATE medals SET notified_at = ? WHERE id = ?",
-                (datetime.utcnow().isoformat(), medal["id"])
-            )
+            # Mark all medals as notified regardless of success
+            # (to prevent repeated attempts on persistent failures)
+            for medal_id in medal_ids:
+                conn.execute(
+                    "UPDATE medals SET notified_at = ? WHERE id = ?",
+                    (now, medal_id)
+                )
 
-    logger.info(f"Medal notifications: sent={results['sent']}, skipped={results['skipped']}, errors={results['errors']}")
+    logger.info(f"Medal notifications: sent={results['sent']}, medals={results['medals_notified']}, skipped={results['skipped']}, errors={results['errors']}")
     return results
 
 

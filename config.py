@@ -96,6 +96,7 @@ class Config:
     SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
     RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@hamradio-olympics.com")
+    ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "")  # Email for error notifications
 
     # Testing mode
     TESTING: bool = bool(os.getenv("TESTING", ""))

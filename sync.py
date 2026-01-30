@@ -417,44 +417,44 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     except Exception as e:
         logger.warning(f"Failed to populate name for {callsign}: {e}")
 
-    # Calculate date range for incremental sync
-    since_date = None
+    # Determine sync strategy
+    # The QRZ BETWEEN date filter is unreliable for some accounts (returns COUNT=0).
+    # We use AFTERLOGID for incremental syncs and do a full re-fetch periodically
+    # to catch confirmation updates on existing QSOs.
+    max_logid = 0
+    has_unconfirmed = False
     with get_db() as conn:
-        # Get most recent QSO datetime for this competitor
+        # Get highest logid and check for unconfirmed QSOs
         cursor = conn.execute(
-            "SELECT MAX(qso_datetime_utc) FROM qsos WHERE competitor_callsign = ?",
+            """SELECT
+                MAX(CAST(qrz_logid AS INTEGER)) as max_logid,
+                COUNT(*) as total,
+                SUM(CASE WHEN is_confirmed = 0 THEN 1 ELSE 0 END) as unconfirmed
+               FROM qsos WHERE competitor_callsign = ?""",
             (callsign.upper(),)
         )
-        most_recent_qso = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        if row:
+            max_logid = row["max_logid"] or 0
+            has_unconfirmed = (row["unconfirmed"] or 0) > 0
 
-        # Get active olympiad start date
-        cursor = conn.execute(
-            "SELECT start_date FROM olympiads WHERE is_active = 1"
-        )
-        olympiad = cursor.fetchone()
+    # If user has unconfirmed QSOs, do a full fetch to check for confirmation updates
+    # Otherwise, just fetch new QSOs after the last known logid
+    if max_logid == 0:
+        logger.info(f"First sync for {callsign}: fetching all QSOs")
+        after_logid = 0
+    elif has_unconfirmed:
+        # Full re-fetch to catch confirmation updates
+        logger.info(f"Sync for {callsign}: full fetch to check confirmations (has unconfirmed QSOs)")
+        after_logid = 0
+    else:
+        # All QSOs are confirmed, just get new ones
+        logger.info(f"Incremental sync for {callsign}: fetching QSOs after logid {max_logid}")
+        after_logid = max_logid
 
-        if olympiad:
-            olympiad_start = datetime.fromisoformat(olympiad["start_date"])
-        else:
-            # No active olympiad, use a reasonable default (1 year ago)
-            olympiad_start = datetime.utcnow() - timedelta(days=365)
-
-        if most_recent_qso:
-            # Incremental sync: go back 60 days from most recent QSO to catch confirmations
-            # and any QSOs that were added to QRZ after the fact
-            latest_qso = datetime.fromisoformat(most_recent_qso)
-            confirmation_window = latest_qso - timedelta(days=60)
-            # Use the later of olympiad start or confirmation window
-            since_date = max(olympiad_start, confirmation_window)
-            logger.info(f"Incremental sync for {callsign}: fetching QSOs from {since_date.date()} (most recent QSO: {latest_qso.date()})")
-        else:
-            # First sync: pull ALL QSOs to seed the database
-            since_date = None
-            logger.info(f"First sync for {callsign}: fetching all QSOs (no date filter)")
-
-    # Fetch QSOs from QRZ with date range
+    # Fetch QSOs from QRZ using AFTERLOGID (more reliable than BETWEEN date filter)
     try:
-        qsos = await fetch_qsos(api_key, confirmed_only=False, since_date=since_date)
+        qsos = await fetch_qsos(api_key, confirmed_only=False, after_logid=after_logid)
     except QRZAPIError as e:
         return {"error": str(e)}
 

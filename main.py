@@ -2232,9 +2232,15 @@ async def sync_page(request: Request, callsign: Optional[str] = None):
 @app.post("/sync")
 async def trigger_sync(callsign: Optional[str] = None):
     """Trigger QRZ sync (API). Syncs single competitor or all if no callsign provided."""
+    from notifications import send_pending_push_disabled_emails, check_pota_spots_and_notify
+
     if callsign:
         # Single competitor sync runs inline (smaller operation)
         result = await sync_competitor(callsign)
+        # Send any pending push disabled notification emails
+        await send_pending_push_disabled_emails()
+        # Check POTA spots and notify (non-blocking, fire and forget)
+        asyncio.create_task(check_pota_spots_and_notify())
         return result
     else:
         # Full sync runs as subprocess to avoid blocking
@@ -3499,7 +3505,7 @@ async def update_push_preferences(
 @app.post("/push/test")
 async def send_test_notification(user: User = Depends(require_user)):
     """Send a test push notification to the current user."""
-    from notifications import send_notification, NotificationPayload, get_subscriptions
+    from notifications import send_notification, NotificationPayload, get_subscriptions, send_pending_push_disabled_emails
 
     subscriptions = get_subscriptions(user.callsign)
     if not subscriptions:
@@ -3513,6 +3519,10 @@ async def send_test_notification(user: User = Depends(require_user)):
     )
 
     count = send_notification(user.callsign, payload)
+
+    # Send any pending push disabled notification emails
+    await send_pending_push_disabled_emails()
+
     return {"message": f"Test notification sent to {count} device(s)"}
 
 
@@ -5498,6 +5508,10 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     # Get public results setting
     public_results = get_setting("public_results") == "1"
 
+    # Get email settings
+    admin_bcc_emails = get_setting("admin_bcc_emails") == "1"
+    admin_email = config.ADMIN_EMAIL
+
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
         "user": get_current_user(request),
@@ -5507,6 +5521,8 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
         "site_name": site_name,
         "site_tagline": site_tagline,
         "public_results": public_results,
+        "admin_bcc_emails": admin_bcc_emails,
+        "admin_email": admin_email,
     })
 
 
@@ -5628,6 +5644,23 @@ async def update_public_results(
     return {"message": f"Public results {'enabled' if enabled else 'disabled'}"}
 
 
+@app.post("/admin/settings/email")
+async def update_email_settings(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update email notification settings."""
+    from database import set_setting
+
+    data = await request.json()
+    admin_bcc = data.get("admin_bcc_emails", False)
+
+    set_setting("admin_bcc_emails", "1" if admin_bcc else "0")
+
+    status = "enabled" if admin_bcc else "disabled"
+    return {"message": f"Admin BCC on emails {status}"}
+
+
 # ============================================================
 # ADMIN PUSH NOTIFICATION ENDPOINTS
 # ============================================================
@@ -5644,6 +5677,22 @@ async def admin_send_match_reminders(_: bool = Depends(verify_admin)):
         "matches_checked": results["checked"],
         "reminders_sent": results["sent"],
         "reminders_skipped": results["skipped"]
+    }
+
+
+@app.post("/admin/notifications/check-pota-spots")
+async def admin_check_pota_spots(_: bool = Depends(verify_admin)):
+    """Check POTA spots for active matches and send notifications."""
+    from notifications import check_pota_spots_and_notify
+
+    results = await check_pota_spots_and_notify()
+
+    return {
+        "message": "POTA spots checked",
+        "spots_checked": results["spots_checked"],
+        "matches_with_spots": results["matches_with_spots"],
+        "notifications_sent": results["notifications_sent"],
+        "errors": results["errors"]
     }
 
 
@@ -5696,10 +5745,14 @@ async def admin_recompute_records(_: bool = Depends(verify_admin)):
     """Recompute all medals and world records from match-qualifying QSOs."""
     from scoring import recompute_all_records
     from sync import recompute_all_active_matches
+    from notifications import send_pending_push_disabled_emails
 
     # Run in thread pool to avoid blocking the event loop
     await asyncio.to_thread(recompute_all_active_matches)
     await asyncio.to_thread(recompute_all_records)
+
+    # Send any pending push disabled notification emails
+    await send_pending_push_disabled_emails()
 
     return {"message": "Medals and world records recomputed successfully"}
 

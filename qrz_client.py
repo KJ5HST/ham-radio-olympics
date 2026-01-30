@@ -365,6 +365,7 @@ async def fetch_qsos(
     confirmed_only: bool = True,
     since_date: Optional[datetime] = None,
     until_date: Optional[datetime] = None,
+    after_logid: int = 0,
 ) -> List[QSOData]:
     """
     Fetch QSOs from QRZ Logbook API.
@@ -373,7 +374,11 @@ async def fetch_qsos(
         api_key: User's QRZ Logbook API key
         confirmed_only: If True, only fetch confirmed QSOs
         since_date: If provided, only fetch QSOs from this date forward (inclusive)
+            NOTE: The QRZ BETWEEN filter is unreliable for some accounts.
+            Prefer using after_logid for incremental syncs.
         until_date: If provided, only fetch QSOs until this date (inclusive)
+        after_logid: If provided, only fetch QSOs with logid > this value.
+            This is the preferred method for incremental syncs.
 
     Returns:
         List of QSOData objects
@@ -382,7 +387,7 @@ async def fetch_qsos(
         QRZAPIError: If API returns an error or authentication fails
     """
     all_qsos = []
-    last_logid = 0
+    last_logid = after_logid
 
     async with httpx.AsyncClient() as client:
         while True:
@@ -390,8 +395,9 @@ async def fetch_qsos(
             if confirmed_only:
                 options.append("STATUS:CONFIRMED")
 
-            # Add date range filtering if specified
-            # QRZ BETWEEN format: YYYYMMDD+YYYYMMDD
+            # Note: The BETWEEN filter is unreliable for some QRZ accounts
+            # and may return COUNT=0 even when QSOs exist. We keep it as a
+            # fallback but prefer using after_logid for incremental syncs.
             if since_date or until_date:
                 start_str = since_date.strftime("%Y%m%d") if since_date else "19000101"
                 end_str = until_date.strftime("%Y%m%d") if until_date else "20991231"

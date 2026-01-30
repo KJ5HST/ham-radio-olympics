@@ -106,15 +106,82 @@ def save_subscription(
         return False
 
 
-def remove_subscription(endpoint: str) -> bool:
-    """Remove a push subscription by endpoint."""
+def remove_subscription(endpoint: str, notify_user: bool = False) -> bool:
+    """
+    Remove a push subscription by endpoint.
+
+    Args:
+        endpoint: The push subscription endpoint URL
+        notify_user: If True, send email to user explaining how to re-enable
+
+    Returns:
+        True if subscription was removed
+    """
     try:
         with get_db() as conn:
+            # Get user info before deleting if we need to notify
+            user_info = None
+            if notify_user:
+                cursor = conn.execute("""
+                    SELECT ps.callsign, c.email, c.email_verified, c.email_notifications_enabled
+                    FROM push_subscriptions ps
+                    JOIN competitors c ON ps.callsign = c.callsign
+                    WHERE ps.endpoint = ?
+                """, (endpoint,))
+                user_info = cursor.fetchone()
+
             conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+
+            # Send notification email if requested and user has valid email
+            if user_info and user_info["email"] and user_info["email_verified"] and user_info["email_notifications_enabled"]:
+                # Schedule the email to be sent (we're in sync context, can't await)
+                _pending_push_disabled_notifications.append({
+                    "callsign": user_info["callsign"],
+                    "email": user_info["email"]
+                })
+
             return True
     except Exception as e:
         logger.error(f"Failed to remove subscription: {e}")
         return False
+
+
+# Pending notifications to send after sync operations complete
+_pending_push_disabled_notifications: List[Dict[str, str]] = []
+
+
+async def send_pending_push_disabled_emails() -> int:
+    """
+    Send any pending push disabled notification emails.
+    Call this after operations that might remove subscriptions.
+
+    Returns:
+        Number of emails sent
+    """
+    global _pending_push_disabled_notifications
+
+    if not _pending_push_disabled_notifications:
+        return 0
+
+    from email_service import send_push_disabled_email
+
+    sent = 0
+    pending = _pending_push_disabled_notifications.copy()
+    _pending_push_disabled_notifications.clear()
+
+    for notification in pending:
+        try:
+            success = await send_push_disabled_email(
+                callsign=notification["callsign"],
+                email=notification["email"]
+            )
+            if success:
+                sent += 1
+                logger.info(f"Sent push disabled email to {notification['callsign']}")
+        except Exception as e:
+            logger.error(f"Failed to send push disabled email to {notification['callsign']}: {e}")
+
+    return sent
 
 
 def remove_all_subscriptions(callsign: str) -> bool:
@@ -220,17 +287,50 @@ def _send_push(subscription: Dict[str, Any], payload: NotificationPayload) -> bo
         return True
     except WebPushException as e:
         logger.error(f"Push failed: {e}")
-        # If subscription is invalid (410 Gone or 404), remove it
-        if e.response and e.response.status_code in (404, 410):
-            remove_subscription(subscription.get("endpoint", ""))
+        # Remove invalid subscriptions:
+        # - 400 Bad Request: Invalid/stale subscription (common with WNS/Windows)
+        # - 404 Not Found: Subscription doesn't exist
+        # - 410 Gone: Subscription expired/unsubscribed
+        if e.response and e.response.status_code in (400, 404, 410):
+            endpoint = subscription.get("endpoint", "")
+            logger.info(f"Removing invalid subscription (HTTP {e.response.status_code}): {endpoint[:50]}...")
+            # Remove and notify user via email so they know how to re-enable
+            remove_subscription(endpoint, notify_user=True)
         return False
     except Exception as e:
         logger.error(f"Push error: {e}")
         return False
 
 
+# Track push errors to avoid spamming admin
+_push_error_count = 0
+_push_error_notified = False
+
+
+async def notify_admin_push_errors(error_count: int, sample_errors: List[str]) -> None:
+    """Notify admin about accumulated push notification errors."""
+    global _push_error_notified
+    if _push_error_notified:
+        return
+
+    try:
+        from email_service import send_admin_error_email
+        await send_admin_error_email(
+            error_type="Push Notification Failures",
+            error_details=f"{error_count} push notifications failed. This may indicate stale subscriptions or VAPID key issues.",
+            context={
+                "error_count": error_count,
+                "sample_errors": "; ".join(sample_errors[:3]) if sample_errors else "No details"
+            }
+        )
+        _push_error_notified = True
+    except Exception as e:
+        logger.error(f"Failed to notify admin of push errors: {e}")
+
+
 def send_notification(callsign: str, payload: NotificationPayload) -> int:
     """Send notification to all of a user's subscriptions. Returns count of successful sends."""
+    global _push_error_count
     subscriptions = get_subscriptions(callsign)
     success_count = 0
 
@@ -246,8 +346,22 @@ def send_notification(callsign: str, payload: NotificationPayload) -> int:
                     )
             except Exception:
                 pass
+        else:
+            _push_error_count += 1
 
     return success_count
+
+
+def get_push_error_count() -> int:
+    """Get the current push error count."""
+    return _push_error_count
+
+
+def reset_push_error_tracking() -> None:
+    """Reset push error tracking (call after notifying admin)."""
+    global _push_error_count, _push_error_notified
+    _push_error_count = 0
+    _push_error_notified = False
 
 
 def was_notification_sent(callsign: str, notification_type: str, reference_id: str) -> bool:
@@ -560,6 +674,173 @@ def send_match_reminders() -> Dict[str, int]:
                     results["sent"] += 1
                 else:
                     results["skipped"] += 1
+
+    return results
+
+
+def notify_pota_spot(
+    callsign: str,
+    park_reference: str,
+    activator_callsign: str,
+    frequency: str,
+    mode: str,
+    sport_name: str
+) -> bool:
+    """
+    Send notification about a POTA spot for an active match.
+
+    Args:
+        callsign: User's callsign to notify
+        park_reference: POTA park reference (e.g., "K-0001")
+        activator_callsign: Callsign of the activator
+        frequency: Frequency of the spot
+        mode: Mode (SSB, CW, FT8, etc.)
+        sport_name: Name of the sport/match
+    """
+    prefs = get_notification_preferences(callsign)
+    if not prefs.get("match_reminders"):  # Use match_reminders pref for spots too
+        return False
+
+    # Create reference to avoid duplicate notifications for same activator at same park
+    # Reset after 30 minutes to allow re-notification if activator is still there
+    time_bucket = datetime.utcnow().strftime("%Y%m%d%H") + str(datetime.utcnow().minute // 30)
+    reference = f"spot-{park_reference}-{activator_callsign}-{time_bucket}"
+
+    if was_notification_sent(callsign, "pota_spot", reference):
+        return False
+
+    title = f"POTA Spot: {park_reference}"
+    body = f"{activator_callsign} on {frequency} {mode} - {sport_name}"
+
+    payload = NotificationPayload(
+        title=title,
+        body=body,
+        tag=f"spot-{park_reference}",
+        url=f"/olympiad/sports",
+        renotify=True,
+        actions=[
+            {"action": "view", "title": "View Match"}
+        ]
+    )
+
+    result = send_notification(callsign, payload) > 0
+    if result:
+        mark_notification_sent(callsign, "pota_spot", reference)
+    return result
+
+
+async def check_pota_spots_and_notify() -> Dict[str, int]:
+    """
+    Check POTA spots for active matches and notify entered users.
+
+    Should be called periodically (e.g., every 5 minutes) or during sync.
+
+    Returns dict with counts of spots found and notifications sent.
+    """
+    import httpx
+
+    results = {"spots_checked": 0, "matches_with_spots": 0, "notifications_sent": 0, "errors": 0}
+
+    try:
+        # Fetch current POTA spots
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.pota.app/spot/activator",
+                timeout=10.0
+            )
+            if response.status_code != 200:
+                logger.warning(f"Failed to fetch POTA spots: HTTP {response.status_code}")
+                return results
+
+            all_spots = response.json()
+            if not all_spots:
+                return results
+
+            results["spots_checked"] = len(all_spots)
+
+        # Build a dict of park -> spots for quick lookup
+        spots_by_park = {}
+        for spot in all_spots:
+            park_ref = spot.get("reference")
+            if park_ref:
+                if park_ref not in spots_by_park:
+                    spots_by_park[park_ref] = []
+                spots_by_park[park_ref].append(spot)
+
+        with get_db() as conn:
+            # Get active olympiad
+            olympiad = conn.execute(
+                "SELECT id FROM olympiads WHERE is_active = 1"
+            ).fetchone()
+
+            if not olympiad:
+                return results
+
+            # Get active matches with park targets (POTA)
+            now = datetime.utcnow().isoformat()
+            matches = conn.execute("""
+                SELECT m.id, m.target_value, s.id as sport_id, s.name as sport_name
+                FROM matches m
+                JOIN sports s ON m.sport_id = s.id
+                WHERE s.olympiad_id = ?
+                  AND s.target_type = 'park'
+                  AND m.start_date <= ?
+                  AND m.end_date >= ?
+            """, (olympiad["id"], now, now)).fetchall()
+
+            for match in matches:
+                park_ref = match["target_value"]
+                spots = spots_by_park.get(park_ref, [])
+
+                if not spots:
+                    continue
+
+                results["matches_with_spots"] += 1
+
+                # Get users entered in this sport with push subscriptions
+                subscribers = conn.execute("""
+                    SELECT DISTINCT se.callsign
+                    FROM sport_entries se
+                    JOIN push_subscriptions ps ON se.callsign = ps.callsign
+                    WHERE se.sport_id = ?
+                """, (match["sport_id"],)).fetchall()
+
+                # Notify each subscriber about each spot
+                for sub in subscribers:
+                    user_callsign = sub["callsign"]
+
+                    for spot in spots:
+                        activator = spot.get("activator", "Unknown")
+                        # Don't notify user about their own activation
+                        if activator.upper() == user_callsign.upper():
+                            continue
+
+                        frequency = spot.get("frequency", "?")
+                        mode = spot.get("mode", "?")
+
+                        try:
+                            if notify_pota_spot(
+                                callsign=user_callsign,
+                                park_reference=park_ref,
+                                activator_callsign=activator,
+                                frequency=frequency,
+                                mode=mode,
+                                sport_name=match["sport_name"]
+                            ):
+                                results["notifications_sent"] += 1
+                        except Exception as e:
+                            logger.error(f"Failed to send POTA spot notification to {user_callsign}: {e}")
+                            results["errors"] += 1
+
+    except httpx.RequestError as e:
+        logger.error(f"Failed to fetch POTA spots: {e}")
+        results["errors"] += 1
+    except Exception as e:
+        logger.error(f"Error checking POTA spots: {e}")
+        results["errors"] += 1
+
+    if results["notifications_sent"] > 0:
+        logger.info(f"POTA spot notifications: {results['notifications_sent']} sent for {results['matches_with_spots']} matches")
 
     return results
 
