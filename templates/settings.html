@@ -273,6 +273,11 @@
                     <span>Match reminders</span>
                     <span style="font-size: 0.85em; color: #718096;">(7 days before a match starts)</span>
                 </label>
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="pref-pota-spots" checked style="width: auto;">
+                    <span>POTA spot alerts</span>
+                    <span style="font-size: 0.85em; color: #718096;">(when someone activates a park in your matches)</span>
+                </label>
             </div>
 
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -394,6 +399,7 @@
                 document.getElementById('pref-new-confirmations').checked = data.preferences.new_confirmations;
                 document.getElementById('pref-record-broken').checked = data.preferences.record_broken;
                 document.getElementById('pref-match-reminders').checked = data.preferences.match_reminders;
+                document.getElementById('pref-pota-spots').checked = data.preferences.pota_spots !== false;
 
                 if (data.subscription_count > 1) {
                     document.getElementById('push-device-count').textContent =
@@ -530,7 +536,8 @@
                 medal_changes: document.getElementById('pref-medal-changes').checked,
                 new_confirmations: document.getElementById('pref-new-confirmations').checked,
                 record_broken: document.getElementById('pref-record-broken').checked,
-                match_reminders: document.getElementById('pref-match-reminders').checked
+                match_reminders: document.getElementById('pref-match-reminders').checked,
+                pota_spots: document.getElementById('pref-pota-spots').checked
             };
 
             var resp = await fetch('/push/preferences', {

@@ -5680,7 +5680,7 @@ async def admin_send_match_reminders(_: bool = Depends(verify_admin)):
     }
 
 
-@app.post("/admin/notifications/check-pota-spots")
+@app.get("/admin/notifications/check-pota-spots")
 async def admin_check_pota_spots(_: bool = Depends(verify_admin)):
     """Check POTA spots for active matches and send notifications."""
     from notifications import check_pota_spots_and_notify

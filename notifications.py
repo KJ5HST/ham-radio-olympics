@@ -96,8 +96,8 @@ def save_subscription(
             # Initialize notification preferences if not exists
             conn.execute("""
                 INSERT OR IGNORE INTO notification_preferences
-                    (callsign, medal_changes, new_confirmations, record_broken, match_reminders, updated_at)
-                VALUES (?, 1, 1, 1, 1, ?)
+                    (callsign, medal_changes, new_confirmations, record_broken, match_reminders, pota_spots, updated_at)
+                VALUES (?, 1, 1, 1, 1, 1, ?)
             """, (callsign, now))
 
             return True
@@ -220,7 +220,7 @@ def get_notification_preferences(callsign: str) -> Dict[str, bool]:
     """Get notification preferences for a user."""
     with get_db() as conn:
         row = conn.execute("""
-            SELECT medal_changes, new_confirmations, record_broken, match_reminders
+            SELECT medal_changes, new_confirmations, record_broken, match_reminders, pota_spots
             FROM notification_preferences
             WHERE callsign = ?
         """, (callsign,)).fetchone()
@@ -230,7 +230,8 @@ def get_notification_preferences(callsign: str) -> Dict[str, bool]:
                 "medal_changes": bool(row["medal_changes"]),
                 "new_confirmations": bool(row["new_confirmations"]),
                 "record_broken": bool(row["record_broken"]),
-                "match_reminders": bool(row["match_reminders"])
+                "match_reminders": bool(row["match_reminders"]),
+                "pota_spots": bool(row["pota_spots"]) if row["pota_spots"] is not None else True
             }
 
         # Default all enabled
@@ -238,7 +239,8 @@ def get_notification_preferences(callsign: str) -> Dict[str, bool]:
             "medal_changes": True,
             "new_confirmations": True,
             "record_broken": True,
-            "match_reminders": True
+            "match_reminders": True,
+            "pota_spots": True
         }
 
 
@@ -249,13 +251,14 @@ def update_notification_preferences(callsign: str, preferences: Dict[str, bool])
             now = datetime.utcnow().isoformat()
             conn.execute("""
                 INSERT INTO notification_preferences
-                    (callsign, medal_changes, new_confirmations, record_broken, match_reminders, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                    (callsign, medal_changes, new_confirmations, record_broken, match_reminders, pota_spots, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(callsign) DO UPDATE SET
                     medal_changes = excluded.medal_changes,
                     new_confirmations = excluded.new_confirmations,
                     record_broken = excluded.record_broken,
                     match_reminders = excluded.match_reminders,
+                    pota_spots = excluded.pota_spots,
                     updated_at = excluded.updated_at
             """, (
                 callsign,
@@ -263,6 +266,7 @@ def update_notification_preferences(callsign: str, preferences: Dict[str, bool])
                 int(preferences.get("new_confirmations", True)),
                 int(preferences.get("record_broken", True)),
                 int(preferences.get("match_reminders", True)),
+                int(preferences.get("pota_spots", True)),
                 now
             ))
             return True
@@ -286,16 +290,37 @@ def _send_push(subscription: Dict[str, Any], payload: NotificationPayload) -> bo
         )
         return True
     except WebPushException as e:
+        error_str = str(e)
         logger.error(f"Push failed: {e}")
+
         # Remove invalid subscriptions:
         # - 400 Bad Request: Invalid/stale subscription (common with WNS/Windows)
         # - 404 Not Found: Subscription doesn't exist
         # - 410 Gone: Subscription expired/unsubscribed
-        if e.response and e.response.status_code in (400, 404, 410):
+        should_remove = False
+        status_code = None
+
+        # Try to get status code from response object
+        if e.response and hasattr(e.response, 'status_code'):
+            status_code = e.response.status_code
+            if status_code in (400, 404, 410):
+                should_remove = True
+
+        # Fallback: parse status code from error message string
+        # e.g., "Push failed: 400 Bad Request"
+        if not should_remove:
+            import re
+            match = re.search(r'\b(400|404|410)\b', error_str)
+            if match:
+                status_code = int(match.group(1))
+                should_remove = True
+
+        if should_remove:
             endpoint = subscription.get("endpoint", "")
-            logger.info(f"Removing invalid subscription (HTTP {e.response.status_code}): {endpoint[:50]}...")
+            logger.info(f"Removing invalid subscription (HTTP {status_code}): {endpoint[:50]}...")
             # Remove and notify user via email so they know how to re-enable
             remove_subscription(endpoint, notify_user=True)
+
         return False
     except Exception as e:
         logger.error(f"Push error: {e}")
@@ -698,7 +723,7 @@ def notify_pota_spot(
         sport_name: Name of the sport/match
     """
     prefs = get_notification_preferences(callsign)
-    if not prefs.get("match_reminders"):  # Use match_reminders pref for spots too
+    if not prefs.get("pota_spots"):
         return False
 
     # Create reference to avoid duplicate notifications for same activator at same park

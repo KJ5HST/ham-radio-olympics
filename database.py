@@ -633,6 +633,14 @@ def init_db():
                 """)
                 conn.commit()
 
+        # Migration: add pota_spots column to notification_preferences
+        if 'notification_preferences' in tables:
+            cursor = conn.execute("PRAGMA table_info(notification_preferences)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'pota_spots' not in columns:
+                conn.execute("ALTER TABLE notification_preferences ADD COLUMN pota_spots INTEGER NOT NULL DEFAULT 1")
+                conn.commit()
+
         # Migration: clean up leftover _old tables from previous migrations
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         for leftover in ['qsos_old', 'sports_old', 'matches_old', 'medals_old', 'team_medals_old', 'team_medals_old2']:
@@ -954,6 +962,7 @@ def init_db():
                 new_confirmations INTEGER NOT NULL DEFAULT 1,
                 record_broken INTEGER NOT NULL DEFAULT 1,
                 match_reminders INTEGER NOT NULL DEFAULT 1,
+                pota_spots INTEGER NOT NULL DEFAULT 1,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
             );
