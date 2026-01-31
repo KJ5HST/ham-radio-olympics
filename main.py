@@ -1570,53 +1570,37 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
         # Per-mode records from medal-qualifying QSOs only
         # Join medals with QSOs to find actual QSOs that earned medals
         # Then rank by distance/cool_factor per mode
-        # Note: We also fetch allowed_modes to filter in Python (SQLite lacks good string functions)
+        # Note: We filter by target matching and allowed_modes in Python
         cursor = conn.execute("""
             WITH medal_competitor_matches AS (
                 -- Get all competitor/match pairs that have medals
                 SELECT DISTINCT med.callsign, med.match_id
                 FROM medals med
                 WHERE med.qualified = 1
-            ),
-            matching_qsos AS (
-                -- Find QSOs from medal-holding competitors during their matches
-                -- that match the target (for parks, check sig_info)
-                SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
-                       q.qso_datetime_utc, q.tx_power_w, q.dx_callsign, q.my_sig_info,
-                       c.first_name, m.id as match_id, m.target_value,
-                       s.id as sport_id, s.name as sport_name, s.target_type,
-                       COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes
-                FROM medal_competitor_matches mcm
-                INNER JOIN matches m ON mcm.match_id = m.id
-                INNER JOIN sports s ON m.sport_id = s.id
-                INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
-                                 AND q.qso_datetime_utc >= m.start_date
-                                 AND q.qso_datetime_utc <= m.end_date
-                                 AND q.is_confirmed = 1
-                LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
-                WHERE q.mode IS NOT NULL AND q.mode != ''
-                  -- For parks, verify the QSO matches the target
-                  AND (s.target_type != 'park'
-                       OR q.dx_sig_info = m.target_value
-                       OR q.my_sig_info = m.target_value)
-            ),
-            ranked_qsos AS (
-                SELECT *,
-                       ROW_NUMBER() OVER (PARTITION BY mode ORDER BY distance_km DESC) as dist_rank,
-                       ROW_NUMBER() OVER (PARTITION BY mode ORDER BY cool_factor DESC) as cf_rank
-                FROM matching_qsos
             )
-            SELECT * FROM ranked_qsos
-            WHERE dist_rank <= 3 OR cf_rank <= 3
-            ORDER BY mode, dist_rank
+            SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
+                   q.qso_datetime_utc, q.tx_power_w, q.dx_callsign, q.my_sig_info,
+                   q.dx_sig_info, q.dx_dxcc, q.my_dxcc, q.dx_grid, q.my_grid,
+                   c.first_name, m.id as match_id, m.target_value,
+                   s.id as sport_id, s.name as sport_name, s.target_type,
+                   s.work_enabled, s.activate_enabled,
+                   COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes
+            FROM medal_competitor_matches mcm
+            INNER JOIN matches m ON mcm.match_id = m.id
+            INNER JOIN sports s ON m.sport_id = s.id
+            INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
+                             AND q.qso_datetime_utc >= m.start_date
+                             AND q.qso_datetime_utc <= m.end_date
+                             AND q.is_confirmed = 1
+            LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
+            WHERE q.mode IS NOT NULL AND q.mode != ''
         """)
         candidate_qsos = cursor.fetchall()
 
-        # Import mode filtering function
-        from scoring import is_mode_allowed
+        # Import filtering functions
+        from scoring import is_mode_allowed, matches_target, normalize_mode
 
-        # Build mode records (filtering by allowed_modes for each sport/match)
-        from scoring import normalize_mode
+        # Build mode records (filtering by target matching and allowed_modes)
         mode_best = {}
         for qso in candidate_qsos:
             qso_dict = dict(qso)
@@ -1625,6 +1609,21 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
             # Skip QSOs whose mode isn't allowed for the sport/match
             allowed_modes = qso_dict.get('allowed_modes')
             if not is_mode_allowed(raw_mode, allowed_modes):
+                continue
+
+            # Skip QSOs that don't match the target for this match
+            target_type = qso_dict.get('target_type')
+            target_value = qso_dict.get('target_value')
+            work_enabled = qso_dict.get('work_enabled')
+            activate_enabled = qso_dict.get('activate_enabled')
+
+            qso_matches = False
+            if work_enabled and matches_target(qso_dict, target_type, target_value, "work"):
+                qso_matches = True
+            if activate_enabled and matches_target(qso_dict, target_type, target_value, "activate"):
+                qso_matches = True
+
+            if not qso_matches:
                 continue
 
             # Normalize mode (USB/LSB -> SSB, etc.)

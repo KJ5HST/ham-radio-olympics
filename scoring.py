@@ -1031,16 +1031,15 @@ def recompute_all_records():
     """
     Recompute all records from scratch.
 
-    Overall records include ALL confirmed QSOs from medal-holding competitors
-    during match periods, regardless of mode restrictions or strict target matching.
-    This matches the logic used for per-mode records on the records page.
+    Records are only credited to matches where the QSO actually matches the target.
+    For example, a QSO with VK6AS (Oceania) won't be credited to an NA (North America) match.
     """
     with get_db() as conn:
         # Clear all existing records
         conn.execute("DELETE FROM records")
 
         # Find all confirmed QSOs from medal-holding competitors during match periods
-        # This is intentionally permissive - same logic as per-mode records
+        # Include match and sport info for target validation
         cursor = conn.execute("""
             WITH medal_competitor_matches AS (
                 -- Get all competitor/match pairs that have medals
@@ -1048,9 +1047,12 @@ def recompute_all_records():
                 FROM medals med
                 WHERE med.qualified = 1
             )
-            SELECT DISTINCT q.id as qso_id, q.competitor_callsign, m.id as match_id
+            SELECT DISTINCT q.id as qso_id, q.competitor_callsign, m.id as match_id,
+                   s.target_type, COALESCE(m.target_type, s.target_type) as effective_target_type,
+                   m.target_value, s.work_enabled, s.activate_enabled
             FROM medal_competitor_matches mcm
             INNER JOIN matches m ON mcm.match_id = m.id
+            INNER JOIN sports s ON m.sport_id = s.id
             INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
                              AND q.qso_datetime_utc >= m.start_date
                              AND q.qso_datetime_utc <= m.end_date
@@ -1059,14 +1061,43 @@ def recompute_all_records():
         """)
         qsos_to_process = cursor.fetchall()
 
-    # Track QSOs we've processed to avoid duplicates
-    seen_qsos = set()
+        # Build a dict of QSO data for target matching
+        qso_cache = {}
+        for row in qsos_to_process:
+            qso_id = row["qso_id"]
+            if qso_id not in qso_cache:
+                qso_row = conn.execute("SELECT * FROM qsos WHERE id = ?", (qso_id,)).fetchone()
+                if qso_row:
+                    qso_cache[qso_id] = dict(qso_row)
+
+    # Track (qso_id, match_id) pairs we've processed to avoid duplicates
+    seen_pairs = set()
 
     for row in qsos_to_process:
         qso_id = row["qso_id"]
         callsign = row["competitor_callsign"]
         match_id = row["match_id"]
+        target_type = row["effective_target_type"]
+        target_value = row["target_value"]
+        work_enabled = row["work_enabled"]
+        activate_enabled = row["activate_enabled"]
 
-        if qso_id not in seen_qsos:
-            seen_qsos.add(qso_id)
+        pair_key = (qso_id, match_id)
+        if pair_key in seen_pairs:
+            continue
+        seen_pairs.add(pair_key)
+
+        # Get the QSO data for target matching
+        qso = qso_cache.get(qso_id)
+        if not qso:
+            continue
+
+        # Check if QSO actually matches the target for this match
+        qso_matches = False
+        if work_enabled and matches_target(qso, target_type, target_value, "work"):
+            qso_matches = True
+        if activate_enabled and matches_target(qso, target_type, target_value, "activate"):
+            qso_matches = True
+
+        if qso_matches:
             update_records(qso_id, callsign, match_id=match_id)
