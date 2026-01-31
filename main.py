@@ -285,6 +285,27 @@ async def service_worker():
     )
 
 
+# Serve downloads with Content-Disposition header
+@app.get("/download/{filename:path}")
+async def download_file(filename: str):
+    """Serve files from downloads directory with attachment disposition."""
+    import os
+    from starlette.responses import FileResponse
+
+    # Sanitize filename to prevent path traversal
+    safe_filename = os.path.basename(filename)
+    file_path = os.path.join("static/downloads", safe_filename)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(
+        file_path,
+        filename=safe_filename,
+        headers={"Content-Disposition": f"attachment; filename={safe_filename}"}
+    )
+
+
 # CSRF token management
 CSRF_COOKIE_NAME = config.CSRF_COOKIE_NAME
 
