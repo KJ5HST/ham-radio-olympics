@@ -277,17 +277,17 @@ function toggleQsoDetails(qsoId) {
 <div class="table-responsive"><table id="matches-table">
     <thead>
         <tr>
-            {% if user %}<th scope="col" class="sortable" data-sort="logged" style="width: 50px; cursor: pointer;" title="Sort by logged status">Logged</th>{% endif %}
-            <th scope="col" class="sortable" data-sort="target" style="cursor: pointer;" title="Sort by target">Target</th>
-            <th scope="col" class="sortable" data-sort="status" style="cursor: pointer;" title="Sort by status">Status</th>
-            <th scope="col" class="sortable" data-sort="start" style="cursor: pointer;" title="Sort by start date">Start</th>
-            <th scope="col" class="sortable" data-sort="end" style="cursor: pointer;" title="Sort by end date">End</th>
+            {% if user %}<th scope="col" style="width: 50px;">Logged</th>{% endif %}
+            <th scope="col">Target</th>
+            <th scope="col">Status</th>
+            <th scope="col">Start</th>
+            <th scope="col">End</th>
             <th scope="col">Action</th>
         </tr>
     </thead>
     <tbody>
         {% for match in matches %}
-        <tr data-logged="{{ 'true' if match.user_logged else 'false' }}" data-target="{{ match.target_display }}" data-start="{{ match.start_date }}" data-end="{{ match.end_date }}">
+        <tr data-logged="{{ 'true' if match.user_logged else 'false' }}">
             {% if user %}
             <td style="text-align: center;">
                 {% if match.user_logged %}
@@ -340,15 +340,12 @@ function toggleQsoDetails(qsoId) {
         if (now < start) {
             badge.textContent = 'Upcoming';
             badge.classList.add('status-upcoming');
-            badge.dataset.statusOrder = '2';
         } else if (now > end) {
             badge.textContent = 'Ended';
             badge.classList.add('status-ended');
-            badge.dataset.statusOrder = '3';
         } else {
             badge.textContent = '● Active';
             badge.classList.add('status-active');
-            badge.dataset.statusOrder = '1';
         }
     });
 
@@ -377,63 +374,6 @@ function filterMatches() {
     });
 }
 
-// Sorting functionality
-let currentSort = { column: null, ascending: true };
-
-document.querySelectorAll('#matches-table th.sortable').forEach(th => {
-    th.addEventListener('click', function() {
-        const sortKey = this.dataset.sort;
-        const ascending = currentSort.column === sortKey ? !currentSort.ascending : true;
-        currentSort = { column: sortKey, ascending };
-        sortTable(sortKey, ascending);
-
-        // Update sort indicators
-        document.querySelectorAll('#matches-table th.sortable').forEach(h => {
-            h.textContent = h.textContent.replace(/ [▲▼]$/, '');
-        });
-        this.textContent += ascending ? ' ▲' : ' ▼';
-    });
-});
-
-function sortTable(key, ascending) {
-    const tbody = document.querySelector('#matches-table tbody');
-    const rows = Array.from(tbody.querySelectorAll('tr'));
-
-    rows.sort((a, b) => {
-        let valA, valB;
-
-        switch(key) {
-            case 'logged':
-                valA = a.dataset.logged === 'true' ? 1 : 0;
-                valB = b.dataset.logged === 'true' ? 1 : 0;
-                break;
-            case 'target':
-                valA = a.dataset.target.toLowerCase();
-                valB = b.dataset.target.toLowerCase();
-                break;
-            case 'status':
-                valA = parseInt(a.querySelector('.status-badge')?.dataset.statusOrder || '9');
-                valB = parseInt(b.querySelector('.status-badge')?.dataset.statusOrder || '9');
-                break;
-            case 'start':
-                valA = a.dataset.start;
-                valB = b.dataset.start;
-                break;
-            case 'end':
-                valA = a.dataset.end;
-                valB = b.dataset.end;
-                break;
-            default:
-                return 0;
-        }
-
-        if (valA < valB) return ascending ? -1 : 1;
-        if (valA > valB) return ascending ? 1 : -1;
-        return 0;
-    });
-
-    rows.forEach(row => tbody.appendChild(row));
-}
 </script>
 
 {% if sport.target_type == 'park' %}
