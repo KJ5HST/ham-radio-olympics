@@ -595,7 +595,8 @@ def notify_match_reminder(
     sport_name: str,
     match_target: str,
     start_date: str,
-    days_until: int
+    days_until: int,
+    sport_id: Optional[int] = None
 ) -> bool:
     """
     Send notification about upcoming match.
@@ -629,11 +630,14 @@ def notify_match_reminder(
 
     body = f"{sport_name}: {match_target} {time_text}"
 
+    # Use sport page if sport_id is provided, otherwise dashboard
+    url = f"/olympiad/sport/{sport_id}" if sport_id else "/dashboard"
+
     payload = NotificationPayload(
         title=title,
         body=body,
         tag=f"reminder-{sport_name}",
-        url="/olympiad/sports",
+        url=url,
         actions=[
             {"action": "view", "title": "View Details"}
         ]
@@ -668,7 +672,7 @@ def send_match_reminders() -> Dict[str, int]:
         future_date = today + timedelta(days=7)
 
         matches = conn.execute("""
-            SELECT m.id, m.target_value, m.start_date, s.name as sport_name
+            SELECT m.id, m.target_value, m.start_date, s.id as sport_id, s.name as sport_name
             FROM matches m
             JOIN sports s ON m.sport_id = s.id
             WHERE s.olympiad_id = ?
@@ -694,7 +698,8 @@ def send_match_reminders() -> Dict[str, int]:
                     sport_name=match["sport_name"],
                     match_target=match["target_value"],
                     start_date=match["start_date"],
-                    days_until=days_until
+                    days_until=days_until,
+                    sport_id=match["sport_id"]
                 ):
                     results["sent"] += 1
                 else:
@@ -709,7 +714,8 @@ def notify_pota_spot(
     activator_callsign: str,
     frequency: str,
     mode: str,
-    sport_name: str
+    sport_name: str,
+    sport_id: Optional[int] = None
 ) -> bool:
     """
     Send notification about a POTA spot for an active match.
@@ -737,11 +743,14 @@ def notify_pota_spot(
     title = f"POTA Spot: {park_reference}"
     body = f"{activator_callsign} on {frequency} {mode} - {sport_name}"
 
+    # Use sport page if sport_id is provided, otherwise dashboard
+    url = f"/olympiad/sport/{sport_id}" if sport_id else "/dashboard"
+
     payload = NotificationPayload(
         title=title,
         body=body,
         tag=f"spot-{park_reference}",
-        url=f"/olympiad/sports",
+        url=url,
         renotify=True,
         actions=[
             {"action": "view", "title": "View Match"}
@@ -850,7 +859,8 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
                                 activator_callsign=activator,
                                 frequency=frequency,
                                 mode=mode,
-                                sport_name=match["sport_name"]
+                                sport_name=match["sport_name"],
+                                sport_id=match["sport_id"]
                             ):
                                 results["notifications_sent"] += 1
                         except Exception as e:
