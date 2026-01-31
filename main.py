@@ -1115,6 +1115,50 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: Option
         sport_dict = dict(sport)
         for match in matches:
             match["target_display"] = format_target_display(match["target_value"], sport_dict["target_type"])
+            match["user_logged"] = False  # Default
+
+        # Check if current user has confirmed QSOs for each match
+        if user:
+            from scoring import matches_target, is_mode_allowed
+            match_ids = [m["id"] for m in matches]
+            if match_ids:
+                placeholders = ",".join("?" * len(match_ids))
+                # Get user's confirmed QSOs that could apply to these matches
+                cursor = conn.execute(f"""
+                    SELECT q.*, ma.id as match_id, ma.target_value, ma.start_date, ma.end_date,
+                           COALESCE(ma.allowed_modes, s.allowed_modes) as match_allowed_modes
+                    FROM qsos q
+                    CROSS JOIN matches ma
+                    JOIN sports s ON ma.sport_id = s.id
+                    WHERE q.competitor_callsign = ?
+                      AND q.is_confirmed = 1
+                      AND ma.id IN ({placeholders})
+                      AND q.qso_datetime_utc >= ma.start_date
+                      AND q.qso_datetime_utc <= ma.end_date || ' 23:59:59'
+                """, [user.callsign] + match_ids)
+                user_qsos = cursor.fetchall()
+
+                # Check which matches the user has logged
+                logged_matches = set()
+                for qso in user_qsos:
+                    qso_dict = dict(qso)
+                    match_id = qso_dict["match_id"]
+                    target_value = qso_dict["target_value"]
+                    allowed_modes = qso_dict["match_allowed_modes"]
+
+                    # Check mode is allowed
+                    if not is_mode_allowed(qso_dict.get("mode"), allowed_modes):
+                        continue
+
+                    # Check if QSO matches target
+                    matches_work = sport_dict["work_enabled"] and matches_target(qso_dict, sport_dict["target_type"], target_value, "work")
+                    matches_activate = sport_dict["activate_enabled"] and matches_target(qso_dict, sport_dict["target_type"], target_value, "activate")
+                    if matches_work or matches_activate:
+                        logged_matches.add(match_id)
+
+                # Update matches with logged status
+                for match in matches:
+                    match["user_logged"] = match["id"] in logged_matches
 
         # Get cumulative standings with competitor names
         cursor = conn.execute("""
