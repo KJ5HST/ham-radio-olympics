@@ -1642,7 +1642,7 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
         candidate_qsos = cursor.fetchall()
 
         # Import filtering functions
-        from scoring import is_mode_allowed, matches_target, normalize_mode
+        from scoring import is_mode_allowed, matches_target, normalize_mode, compute_triathlon_leaders
 
         # Build mode records (filtering by target matching and allowed_modes)
         mode_best = {}
@@ -1729,6 +1729,9 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
         distance_records.sort(key=lambda x: x.get('date') or '', reverse=True)
         cool_factor_records.sort(key=lambda x: x.get('date') or '', reverse=True)
 
+        # Get triathlon leaders
+        triathlon_leaders = compute_triathlon_leaders(limit=3)
+
         display_prefs = get_display_prefs(user)
         return templates.TemplateResponse("records.html", {
             "request": request,
@@ -1736,6 +1739,7 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
             "world_records": world_records,
             "distance_records": distance_records,
             "cool_factor_records": cool_factor_records,
+            "triathlon_leaders": triathlon_leaders,
             "display_prefs": display_prefs,
         })
 

@@ -6,9 +6,12 @@ import pytest
 from datetime import datetime
 import os
 import sys
+import tempfile
 
-# Set test database
-os.environ["DATABASE_PATH"] = ":memory:"
+# Create temp file for test database BEFORE importing app modules
+_test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
+os.close(_test_db_fd)
+os.environ["DATABASE_PATH"] = _test_db_path
 
 from database import init_db, get_db, reset_db
 from scoring import (
@@ -22,6 +25,14 @@ from dxcc import get_continent
 def setup_db():
     """Reset database before each test."""
     reset_db()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_db():
+    """Cleanup database file after all tests."""
+    yield
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
 
 
 class TestTargetMatching:
@@ -831,3 +842,301 @@ class TestRecordUpdates:
             """, ("W1PB",))
             record = cursor.fetchone()
             assert record["value"] == 3000.0
+
+
+class TestTriathlon:
+    """Test Triathlon Podium computation."""
+
+    def _setup_olympiad(self):
+        """Helper to create an active olympiad."""
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('Test Olympiad', '2026-01-01', '2026-12-31', 0, 1)
+            """)
+
+    def _create_competitor(self, callsign: str, first_name: str = "Test"):
+        """Helper to create a competitor."""
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO competitors (callsign, password_hash, registered_at, first_name)
+                VALUES (?, 'hash', '2026-01-01', ?)
+            """, (callsign, first_name))
+
+    def _create_qso(self, callsign: str, dx_callsign: str, distance_km: float,
+                    tx_power_w: float, my_sig_info: str = None, dx_sig_info: str = None,
+                    qso_datetime: str = "2026-01-15T12:00:00"):
+        """Helper to create a confirmed QSO with optional POTA info."""
+        cool_factor = distance_km / tx_power_w if tx_power_w > 0 else 0
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, my_sig_info, dx_sig_info, mode
+                ) VALUES (?, ?, ?, ?, 'EM12', 'JN58', 230, 1, ?, ?, ?, ?, 'SSB')
+            """, (callsign, dx_callsign, qso_datetime, tx_power_w,
+                  distance_km, cool_factor, my_sig_info, dx_sig_info))
+
+    def test_triathlon_requires_all_three(self):
+        """Test that QSO must have distance, power, AND POTA involvement."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1TRI")
+
+        # QSO with distance and power but no POTA - should NOT qualify
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, mode
+                ) VALUES ('W1TRI', 'DL1ABC', '2026-01-15T12:00:00', 5.0,
+                          'EM12', 'JN58', 230, 1, 8000.0, 1600.0, 'SSB')
+            """)
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0  # No POTA = no triathlon
+
+    def test_triathlon_requires_positive_power(self):
+        """Test that QSO must have positive power (not zero or missing)."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1TRI")
+
+        # QSO with zero power - should NOT qualify
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, my_sig_info, mode
+                ) VALUES ('W1TRI', 'DL1ABC', '2026-01-15T12:00:00', 0,
+                          'EM12', 'JN58', 230, 1, 8000.0, 0, 'K-0001', 'SSB')
+            """)
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0  # Zero power = no triathlon
+
+    def test_triathlon_requires_positive_distance(self):
+        """Test that QSO must have positive distance."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1TRI")
+
+        # QSO with zero distance - should NOT qualify
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, my_sig_info, mode
+                ) VALUES ('W1TRI', 'DL1ABC', '2026-01-15T12:00:00', 5.0,
+                          'EM12', 'JN58', 230, 1, 0, 0, 'K-0001', 'SSB')
+            """)
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0  # Zero distance = no triathlon
+
+    def test_triathlon_p2p_bonus(self):
+        """Test P2P gets 100 bonus, single park gets 50."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1P2P")
+        self._create_competitor("W1SINGLE")
+
+        # P2P QSO (both parks) - same distance/power for fair comparison
+        self._create_qso("W1P2P", "DL1ABC", 8000.0, 5.0,
+                        my_sig_info="K-0001", dx_sig_info="DL-0001",
+                        qso_datetime="2026-01-15T12:00:00")
+
+        # Single park QSO (only my park) - same distance/power
+        self._create_qso("W1SINGLE", "DL2XYZ", 8000.0, 5.0,
+                        my_sig_info="K-0002", dx_sig_info=None,
+                        qso_datetime="2026-01-15T12:01:00")
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 2
+
+        p2p = next(l for l in leaders if l["callsign"] == "W1P2P")
+        single = next(l for l in leaders if l["callsign"] == "W1SINGLE")
+
+        assert p2p["pota_bonus"] == 100  # P2P
+        assert single["pota_bonus"] == 50  # Single park
+
+        # P2P should have higher total score due to +50 bonus difference
+        assert p2p["total_score"] > single["total_score"]
+
+    def test_triathlon_dx_park_only(self):
+        """Test QSO with only DX park (hunt) still qualifies."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1HUNT")
+
+        # Hunt QSO (only DX at park)
+        self._create_qso("W1HUNT", "DL1ABC", 8000.0, 5.0,
+                        my_sig_info=None, dx_sig_info="DL-0001")
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 1
+        assert leaders[0]["pota_bonus"] == 50
+
+    def test_triathlon_percentile_calculation(self):
+        """Test percentile calculation is correct."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1LOW")
+        self._create_competitor("W1MID")
+        self._create_competitor("W1HIGH")
+
+        # Create 3 QSOs with different distances
+        # All have POTA so they qualify
+        self._create_qso("W1LOW", "DL1", 1000.0, 5.0, my_sig_info="K-0001",
+                        qso_datetime="2026-01-15T12:00:00")
+        self._create_qso("W1MID", "DL2", 5000.0, 5.0, my_sig_info="K-0002",
+                        qso_datetime="2026-01-15T12:01:00")
+        self._create_qso("W1HIGH", "DL3", 10000.0, 5.0, my_sig_info="K-0003",
+                        qso_datetime="2026-01-15T12:02:00")
+
+        leaders = compute_triathlon_leaders()
+
+        # With 3 QSOs, percentiles should be:
+        # - lowest distance (1000): 1/3 = 33.3%
+        # - middle distance (5000): 2/3 = 66.7%
+        # - highest distance (10000): 3/3 = 100%
+        high = next(l for l in leaders if l["callsign"] == "W1HIGH")
+        mid = next(l for l in leaders if l["callsign"] == "W1MID")
+        low = next(l for l in leaders if l["callsign"] == "W1LOW")
+
+        assert high["distance_percentile"] == 100.0
+        assert abs(mid["distance_percentile"] - 66.67) < 1  # ~66.67%
+        assert abs(low["distance_percentile"] - 33.33) < 1  # ~33.33%
+
+    def test_triathlon_tie_breaker(self):
+        """Test earlier QSO wins ties in total score."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1EARLY")
+        self._create_competitor("W1LATE")
+
+        # Two QSOs with identical distance/power/POTA = same score
+        # But W1EARLY has earlier timestamp
+        self._create_qso("W1EARLY", "DL1", 8000.0, 5.0, my_sig_info="K-0001",
+                        qso_datetime="2026-01-15T10:00:00")  # Earlier
+        self._create_qso("W1LATE", "DL2", 8000.0, 5.0, my_sig_info="K-0002",
+                        qso_datetime="2026-01-15T14:00:00")  # Later
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 2
+
+        # With identical stats, both have same percentiles
+        # Tie-breaker: earlier QSO wins
+        assert leaders[0]["callsign"] == "W1EARLY"
+        assert leaders[1]["callsign"] == "W1LATE"
+
+    def test_triathlon_limit(self):
+        """Test only returns top N QSOs."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+
+        # Create 5 competitors with QSOs
+        for i in range(5):
+            call = f"W{i}TEST"
+            self._create_competitor(call)
+            self._create_qso(call, f"DL{i}", 1000.0 * (i + 1), 5.0,
+                            my_sig_info=f"K-{i:04d}",
+                            qso_datetime=f"2026-01-15T12:{i:02d}:00")
+
+        # Default limit is 3
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 3
+
+        # Custom limit
+        leaders = compute_triathlon_leaders(limit=2)
+        assert len(leaders) == 2
+
+        leaders = compute_triathlon_leaders(limit=10)
+        assert len(leaders) == 5  # Only 5 exist
+
+    def test_triathlon_no_qualifying_qsos(self):
+        """Test returns empty list when no QSOs qualify."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1NOQSO")
+
+        # No QSOs at all
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0
+
+    def test_triathlon_no_active_olympiad(self):
+        """Test returns empty list when no active olympiad."""
+        from scoring import compute_triathlon_leaders
+
+        # No olympiad created
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0
+
+    def test_triathlon_only_confirmed_qsos(self):
+        """Test that unconfirmed QSOs are excluded."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1UNCONF")
+
+        # Unconfirmed QSO
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, my_sig_info, mode
+                ) VALUES ('W1UNCONF', 'DL1ABC', '2026-01-15T12:00:00', 5.0,
+                          'EM12', 'JN58', 230, 0, 8000.0, 1600.0, 'K-0001', 'SSB')
+            """)
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0  # Unconfirmed = excluded
+
+    def test_triathlon_max_score_300(self):
+        """Test max theoretical score is 300 (100 + 100 + 100)."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()
+        self._create_competitor("W1MAX")
+
+        # Single QSO that's the best in everything = 100% distance + 100% CF + 100 P2P
+        self._create_qso("W1MAX", "DL1ABC", 8000.0, 5.0,
+                        my_sig_info="K-0001", dx_sig_info="DL-0001")
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 1
+
+        # With single QSO, it's 100% in both distance and CF (100 + 100) + P2P bonus (100)
+        assert leaders[0]["total_score"] == 300.0
+        assert leaders[0]["distance_percentile"] == 100.0
+        assert leaders[0]["cool_factor_percentile"] == 100.0
+        assert leaders[0]["pota_bonus"] == 100
+
+    def test_triathlon_qso_outside_olympiad_excluded(self):
+        """Test QSOs outside olympiad date range are excluded."""
+        from scoring import compute_triathlon_leaders
+
+        self._setup_olympiad()  # 2026-01-01 to 2026-12-31
+        self._create_competitor("W1OUT")
+
+        # QSO before olympiad starts
+        self._create_qso("W1OUT", "DL1ABC", 8000.0, 5.0,
+                        my_sig_info="K-0001",
+                        qso_datetime="2025-12-31T23:59:59")  # Before start
+
+        leaders = compute_triathlon_leaders()
+        assert len(leaders) == 0  # Outside olympiad period

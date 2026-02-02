@@ -1101,3 +1101,129 @@ def recompute_all_records():
 
         if qso_matches:
             update_records(qso_id, callsign, match_id=match_id)
+
+
+def compute_triathlon_leaders(limit: int = 3) -> List[dict]:
+    """
+    Compute top Triathlon QSOs across the active olympiad.
+
+    Triathlon Score = Distance Percentile (0-100) + Cool Factor Percentile (0-100) + POTA Bonus (50 or 100)
+
+    The three events:
+    - Distance: How far the QSO traveled
+    - Cool Factor: Efficiency (distance/power ratio)
+    - POTA: Park involvement bonus
+
+    Requirements:
+    - distance_km > 0
+    - tx_power_w > 0 (for cool_factor)
+    - POTA involvement (my_sig_info OR dx_sig_info present)
+    - P2P (both parks) = 100, single park = 50
+
+    Args:
+        limit: Maximum number of leaders to return (default 3)
+
+    Returns:
+        List of dicts with QSO details and score breakdown
+    """
+    with get_db() as conn:
+        # Get the active olympiad
+        cursor = conn.execute("""
+            SELECT id, start_date, end_date FROM olympiads WHERE is_active = 1
+        """)
+        olympiad = cursor.fetchone()
+        if not olympiad:
+            return []
+
+        # Get all confirmed QSOs from the active olympiad period that qualify:
+        # - distance_km > 0
+        # - tx_power_w > 0
+        # - POTA involvement (my_sig_info OR dx_sig_info present)
+        cursor = conn.execute("""
+            SELECT q.id, q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
+                   q.distance_km, q.tx_power_w, q.cool_factor,
+                   q.my_sig_info, q.dx_sig_info, q.mode, q.band,
+                   c.first_name
+            FROM qsos q
+            JOIN competitors c ON q.competitor_callsign = c.callsign
+            WHERE q.is_confirmed = 1
+              AND q.qso_datetime_utc >= ?
+              AND q.qso_datetime_utc <= ?
+              AND q.distance_km > 0
+              AND q.tx_power_w > 0
+              AND (q.my_sig_info IS NOT NULL AND q.my_sig_info != ''
+                   OR q.dx_sig_info IS NOT NULL AND q.dx_sig_info != '')
+            ORDER BY q.distance_km DESC
+        """, (olympiad["start_date"], olympiad["end_date"]))
+
+        qualifying_qsos = [dict(row) for row in cursor.fetchall()]
+
+        if not qualifying_qsos:
+            return []
+
+        # Build sorted lists for percentile calculation
+        distances = sorted([q["distance_km"] for q in qualifying_qsos])
+        cool_factors = sorted([q["cool_factor"] for q in qualifying_qsos])
+
+        # Calculate percentile for each QSO
+        def percentile_rank(value: float, sorted_list: List[float]) -> float:
+            """Calculate percentile rank (0-100) for a value in a sorted list."""
+            if not sorted_list:
+                return 0
+            # Count values less than or equal to this value
+            count_le = sum(1 for v in sorted_list if v <= value)
+            # Percentile = (count of values <= this value) / total count * 100
+            return (count_le / len(sorted_list)) * 100
+
+        scored_qsos = []
+        for qso in qualifying_qsos:
+            # Calculate distance percentile
+            distance_pct = percentile_rank(qso["distance_km"], distances)
+
+            # Calculate cool factor percentile
+            cf_pct = percentile_rank(qso["cool_factor"], cool_factors)
+
+            # Calculate POTA bonus
+            has_my_park = bool(qso["my_sig_info"])
+            has_dx_park = bool(qso["dx_sig_info"])
+            if has_my_park and has_dx_park:
+                pota_bonus = 100  # P2P
+            else:
+                pota_bonus = 50  # Single park
+
+            # Total triathlon score
+            total_score = distance_pct + cf_pct + pota_bonus
+
+            scored_qsos.append({
+                "qso_id": qso["id"],
+                "callsign": qso["competitor_callsign"],
+                "first_name": qso["first_name"],
+                "dx_callsign": qso["dx_callsign"],
+                "qso_datetime": qso["qso_datetime_utc"],
+                "distance_km": qso["distance_km"],
+                "tx_power_w": qso["tx_power_w"],
+                "cool_factor": qso["cool_factor"],
+                "mode": qso["mode"],
+                "band": qso["band"],
+                "my_sig_info": qso["my_sig_info"],
+                "dx_sig_info": qso["dx_sig_info"],
+                "distance_percentile": distance_pct,
+                "cool_factor_percentile": cf_pct,
+                "pota_bonus": pota_bonus,
+                "total_score": total_score,
+            })
+
+        # Sort by total score (desc), then QSO timestamp (asc) for ties
+        scored_qsos.sort(key=lambda q: (-q["total_score"], q["qso_datetime"]))
+
+        # Each competitor can only appear once on the podium (best QSO only)
+        seen_callsigns = set()
+        unique_leaders = []
+        for qso in scored_qsos:
+            if qso["callsign"] not in seen_callsigns:
+                seen_callsigns.add(qso["callsign"])
+                unique_leaders.append(qso)
+                if len(unique_leaders) >= limit:
+                    break
+
+        return unique_leaders

@@ -5,6 +5,86 @@
 {% block content %}
 <h2>World Records</h2>
 
+{% if triathlon_leaders %}
+<h3>Triathlon Podium</h3>
+<p style="color: var(--text-secondary); margin-bottom: 1rem;">Top QSOs excelling across all three events: Distance + Cool Factor + POTA <a href="/static/user_guide.html#64-triathlon-podium" title="Learn more about Triathlon Podium">ⓘ</a></p>
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th scope="col" style="width: 30px;"></th>
+            <th scope="col" style="width: 50px;">Rank</th>
+            <th scope="col">Score</th>
+            <th scope="col">Operator</th>
+            <th scope="col">QSO Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for leader in triathlon_leaders %}
+        <tr class="record-row">
+            <td style="cursor: pointer; text-align: center;" onclick="toggleRecord('tri-{{ loop.index }}')">
+                <span class="expand-icon" id="icon-tri-{{ loop.index }}">▶</span>
+            </td>
+            <td style="text-align: center;">
+                {% if loop.index == 1 %}🥇{% elif loop.index == 2 %}🥈{% elif loop.index == 3 %}🥉{% else %}{{ loop.index }}{% endif %}
+            </td>
+            <td><strong>{{ "%.1f" | format(leader.total_score) }}</strong> / 300</td>
+            <td>
+                <a href="/competitor/{{ leader.callsign }}">{{ leader.first_name | competitor_display(leader.callsign) }}</a>
+            </td>
+            <td>
+                {{ leader.dx_callsign }} via {{ leader.mode or 'unknown' }}
+                {% if leader.my_sig_info and leader.dx_sig_info %}
+                    <span title="Park-to-Park: {{ leader.my_sig_info }} ↔ {{ leader.dx_sig_info }}">🏕️↔🏕️</span>
+                {% elif leader.my_sig_info %}
+                    <span title="Activated from {{ leader.my_sig_info }}">📡</span>
+                {% elif leader.dx_sig_info %}
+                    <span title="Hunted {{ leader.dx_sig_info }}">🏕️</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr class="details-row" id="details-tri-{{ loop.index }}" style="display: none;">
+            <td colspan="5" style="padding: 0; background: var(--bg-primary);">
+                <div style="padding: 10px 15px 10px 40px;">
+                    <table style="margin: 0; font-size: 0.85em;">
+                        <tr>
+                            <th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Distance:</th>
+                            <td>{{ leader.distance_km | format_distance(display_prefs.distance_unit or 'km') }} <span style="color: var(--text-secondary);">({{ "%.1f" | format(leader.distance_percentile) }}%)</span></td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Cool Factor:</th>
+                            <td>{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(leader.cool_factor * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(leader.cool_factor) }} km/W{% endif %} <span style="color: var(--text-secondary);">({{ "%.1f" | format(leader.cool_factor_percentile) }}%)</span></td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Power:</th>
+                            <td>{{ leader.tx_power_w }}W</td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">POTA Bonus:</th>
+                            <td>
+                                {% if leader.pota_bonus == 100 %}
+                                    +100 (Park-to-Park: {{ leader.my_sig_info }} ↔ {{ leader.dx_sig_info }})
+                                {% else %}
+                                    +50 ({% if leader.my_sig_info %}Activated {{ leader.my_sig_info }}{% else %}Hunted {{ leader.dx_sig_info }}{% endif %})
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th style="padding: 4px 12px 4px 0; color: var(--text-secondary);">Date:</th>
+                            <td>{{ leader.qso_datetime | format_datetime(display_prefs.home_grid, display_prefs.time_display) }}</td>
+                        </tr>
+                        <tr style="border-top: 1px solid var(--border-color);">
+                            <th style="padding: 8px 12px 4px 0; color: var(--text-primary);"><strong>Total Score:</strong></th>
+                            <td style="padding-top: 8px;"><strong>{{ "%.1f" | format(leader.distance_percentile) }} + {{ "%.1f" | format(leader.cool_factor_percentile) }} + {{ leader.pota_bonus }} = {{ "%.1f" | format(leader.total_score) }}</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% endif %}
+
 {% if world_records %}
 <h3>Overall Records</h3>
 <div class="table-responsive"><table>
@@ -199,5 +279,6 @@ function toggleRecord(id) {
 <div class="card">
     <p><strong>Distance Records:</strong> Longest confirmed QSO distance{% if display_prefs.distance_unit == 'mi' %} in miles{% else %} in kilometers{% endif %}.</p>
     <p><strong>Cool Factor Records:</strong> Best distance-to-power ratio ({% if display_prefs.distance_unit == 'mi' %}mi/W{% else %}km/W{% endif %}) - rewards efficient, low-power contacts.</p>
+    <p><strong>Triathlon Podium:</strong> Top QSOs combining all three events - Distance percentile + Cool Factor percentile + POTA bonus (P2P=100, single park=50). Max score: 300.</p>
 </div>
 {% endblock %}

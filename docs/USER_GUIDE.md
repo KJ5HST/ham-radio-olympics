@@ -24,10 +24,11 @@
    - [QSO Disqualifications](#35-qso-disqualifications)
 4. [Scoring & Medals](#4-scoring--medals)
    - [Medal Point Values](#41-medal-point-values)
-   - [POTA Bonuses](#42-pota-bonuses)
-   - [Scoring Examples](#43-scoring-examples)
-   - [Maximum Points Per Match](#44-maximum-points-per-match)
-   - [Qualification Requirements](#45-qualification-requirements)
+   - [One Podium Spot Per Competitor](#42-one-podium-spot-per-competitor)
+   - [POTA Bonuses](#43-pota-bonuses)
+   - [Scoring Examples](#44-scoring-examples)
+   - [Maximum Points Per Match](#45-maximum-points-per-match)
+   - [Qualification Requirements](#46-qualification-requirements)
 5. [Teams](#5-teams)
    - [Team Competition](#51-team-competition)
    - [Creating a Team](#52-creating-a-team)
@@ -38,6 +39,7 @@
    - [World Records](#61-world-records)
    - [Personal Bests](#62-personal-bests)
    - [Medal Standings](#63-medal-standings)
+   - [Triathlon Podium](#64-triathlon-podium)
 7. [Settings & Preferences](#7-settings--preferences)
    - [Account Settings](#71-account-settings)
    - [Display Preferences](#72-display-preferences)
@@ -259,7 +261,15 @@ All disqualification history, including your refutation and any referee response
 | Silver | 2 points |
 | Bronze | 1 point |
 
-### 4.2 POTA Bonuses
+### 4.2 One Podium Spot Per Competitor
+
+A competitor can only occupy one spot on any podium. This applies to all medal events: match medals, sport standings, and special awards like the Triathlon Podium.
+
+If you have multiple qualifying results (e.g., multiple QSOs in a Cool Factor competition), only your best result counts toward the podium. The remaining spots go to other competitors with the next-best results.
+
+**Example:** If your QSOs rank 1st and 3rd in a Cool Factor competition, you receive the Gold medal. The Silver goes to whoever had the 2nd-best QSO, and Bronze goes to whoever had the 4th-best (since your 3rd-place QSO doesn't count—you already have Gold).
+
+### 4.3 POTA Bonuses
 
 Park contacts earn bonus points in addition to any medals:
 
@@ -281,7 +291,7 @@ For **activate mode** competitions targeting parks, a valid activation requires 
 
 This requirement only applies to activate mode. Hunters (work mode) have no minimum QSO requirement.
 
-### 4.3 Scoring Examples
+### 4.4 Scoring Examples
 
 **Best possible score (Park-to-Park with double gold):**
 - Gold in QSO Race: 3 points
@@ -313,12 +323,12 @@ This requirement only applies to activate mode. Hunters (work mode) have no mini
 - Hunted a park: +1 point
 - **Total: 4 points**
 
-### 4.4 Maximum Points Per Match
+### 4.5 Maximum Points Per Match
 
 - **Combined pools:** 8 points maximum (Gold QSO Race + Gold Cool Factor + Park-to-Park bonus)
 - **Separate pools:** 16 points maximum (8 points per role when both hunting and activating)
 
-### 4.5 Qualification Requirements
+### 4.6 Qualification Requirements
 
 The Olympiad administrator can set a minimum QSO threshold for medal eligibility. This prevents casual participants from claiming medals over competitors who are actively engaged in the competition.
 
@@ -432,6 +442,54 @@ The Medal Standings page (`/medals`) displays all competitors ranked by their to
 - Total points accumulated
 
 This provides a quick overview of who's leading the competition across all sports.
+
+### 6.4 Triathlon Podium
+
+The Triathlon Podium is a unique recognition exclusive to Ham Radio Olympics that highlights QSOs excelling across all three dimensions of amateur radio competition.
+
+#### What is the Triathlon?
+
+Just as Olympic triathlons test athletes across swimming, cycling, and running, the Ham Radio Triathlon measures excellence across three distinct "events":
+
+1. **Distance** — How far did your signal travel?
+2. **Cool Factor** — How efficiently did you operate? (distance ÷ power)
+3. **POTA** — Did you involve parks in your contact?
+
+A single exceptional QSO that scores well in all three events can earn a spot on the Triathlon Podium.
+
+#### How Scoring Works
+
+Each qualifying QSO receives a **Triathlon Score** (maximum 300 points):
+
+| Component | Calculation | Max Points |
+|-----------|-------------|------------|
+| Distance Percentile | Your QSO's rank among all QSOs by distance | 100 |
+| Cool Factor Percentile | Your QSO's rank among all QSOs by efficiency | 100 |
+| POTA Bonus | P2P (both at parks) = 100, single park = 50 | 100 |
+
+**Example:** A QSO that ranks in the 90th percentile for distance (90 pts), 85th percentile for Cool Factor (85 pts), and is Park-to-Park (100 pts) would score **275 points**.
+
+#### Qualification Requirements
+
+To qualify for the Triathlon Podium, a QSO must:
+
+- Have a positive distance (distance_km > 0)
+- Have positive transmit power recorded (tx_power_w > 0)
+- Involve at least one POTA park (MY_SIG_INFO or SIG_INFO present)
+- Be confirmed (via QRZ or LoTW)
+
+
+#### Why Triathlon is Unique
+
+The Triathlon Podium recognizes a different kind of excellence than traditional medals:
+
+- **QSO Race** rewards speed — being first to make contact
+- **Cool Factor** rewards efficiency — maximum distance with minimum power
+- **Triathlon** rewards the complete operator — someone who achieved distance, efficiency, AND park involvement in a single contact
+
+This means a QSO that might not medal in any individual event could still earn Triathlon recognition by performing well across all three dimensions. It celebrates well-rounded operating rather than specialization in a single metric.
+
+The top 3 Triathlon QSOs are displayed at the top of the Records page (`/records`) with a detailed breakdown showing how each QSO scored in each dimension.
 
 ---
 
