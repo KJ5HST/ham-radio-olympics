@@ -151,6 +151,29 @@
         {% endfor %}
     </tbody>
 </table></div>
+
+{% if honorable_mentions.longest_distance or honorable_mentions.highest_cool_factor %}
+<div class="honorable-mentions" style="margin-top: 0.5rem; padding: 0.75rem 1rem; background: var(--bg-secondary); border-radius: 4px; font-size: 0.85em;">
+    <p style="margin: 0 0 0.25rem 0; color: var(--text-secondary); font-style: italic;"><strong>Honorable Mention</strong> — Best outside competition:</p>
+    {% if honorable_mentions.longest_distance %}
+    <p style="margin: 0.25rem 0; color: var(--text-secondary);">
+        <strong>Longest Distance:</strong>
+        {{ honorable_mentions.longest_distance.value | format_distance(display_prefs.distance_unit or 'km') }}
+        by <a href="/competitor/{{ honorable_mentions.longest_distance.callsign }}">{{ honorable_mentions.longest_distance.first_name | competitor_display(honorable_mentions.longest_distance.callsign) }}</a>
+        ({{ honorable_mentions.longest_distance.date | format_date }})
+    </p>
+    {% endif %}
+    {% if honorable_mentions.highest_cool_factor %}
+    <p style="margin: 0.25rem 0; color: var(--text-secondary);">
+        <strong>Highest Cool Factor:</strong>
+        {% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(honorable_mentions.highest_cool_factor.value * 0.621371) }} mi/W{% else %}{{ "%.1f" | format(honorable_mentions.highest_cool_factor.value) }} km/W{% endif %}
+        by <a href="/competitor/{{ honorable_mentions.highest_cool_factor.callsign }}">{{ honorable_mentions.highest_cool_factor.first_name | competitor_display(honorable_mentions.highest_cool_factor.callsign) }}</a>
+        ({{ honorable_mentions.highest_cool_factor.date | format_date }})
+    </p>
+    {% endif %}
+</div>
+{% endif %}
+
 {% else %}
 <div class="card">
     <p>No world records have been set yet. Be the first to set a record!</p>

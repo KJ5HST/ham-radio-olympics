@@ -1140,3 +1140,247 @@ class TestTriathlon:
 
         leaders = compute_triathlon_leaders()
         assert len(leaders) == 0  # Outside olympiad period
+
+
+class TestHonorableMentions:
+    """Test honorable mentions for records made outside competition."""
+
+    def _setup_olympiad(self):
+        """Helper to create an active olympiad."""
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
+                VALUES ('Test Olympiad', '2026-01-01', '2026-12-31', 0, 1)
+            """)
+
+    def _create_competitor(self, callsign: str, first_name: str = "Test"):
+        """Helper to create a competitor."""
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO competitors (callsign, password_hash, registered_at, first_name)
+                VALUES (?, 'hash', '2026-01-01', ?)
+            """, (callsign, first_name))
+
+    def _create_qso(self, callsign: str, dx_callsign: str, distance_km: float,
+                    tx_power_w: float, qso_datetime: str = "2026-01-15T12:00:00",
+                    is_confirmed: int = 1):
+        """Helper to create a QSO."""
+        cool_factor = distance_km / tx_power_w if tx_power_w > 0 else 0
+        with get_db() as conn:
+            cursor = conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, mode
+                ) VALUES (?, ?, ?, ?, 'EM12', 'JN58', 230, ?, ?, ?, 'SSB')
+            """, (callsign, dx_callsign, qso_datetime, tx_power_w,
+                  is_confirmed, distance_km, cool_factor))
+            return cursor.lastrowid
+
+    def _create_sport_and_match(self, target_type: str = "continent", target_value: str = "EU"):
+        """Helper to create a sport and match."""
+        with get_db() as conn:
+            # Get olympiad id
+            olympiad_id = conn.execute("SELECT id FROM olympiads WHERE is_active = 1").fetchone()['id']
+
+            # Create sport
+            cursor = conn.execute("""
+                INSERT INTO sports (olympiad_id, name, description, target_type, work_enabled, activate_enabled, separate_pools)
+                VALUES (?, 'Test Sport', 'Test', ?, 1, 0, 0)
+            """, (olympiad_id, target_type))
+            sport_id = cursor.lastrowid
+
+            # Create match
+            cursor = conn.execute("""
+                INSERT INTO matches (sport_id, start_date, end_date, target_value)
+                VALUES (?, '2026-01-01', '2026-01-31', ?)
+            """, (sport_id, target_value))
+            return sport_id, cursor.lastrowid
+
+    def _create_world_record(self, record_type: str, value: float, qso_id: int):
+        """Helper to create a world record."""
+        with get_db() as conn:
+            conn.execute("""
+                INSERT INTO records (sport_id, match_id, callsign, record_type, value, qso_id, achieved_at)
+                VALUES (NULL, NULL, NULL, ?, ?, ?, '2026-01-15T12:00:00')
+            """, (record_type, value, qso_id))
+
+    def test_honorable_mention_better_outside_olympiad(self):
+        """Test that a QSO outside olympiad dates gets honorable mention if better than record."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()  # 2026-01-01 to 2026-12-31
+        self._create_competitor("W1RECORD", "Record")
+        self._create_competitor("W1OUTSIDE", "Outside")
+
+        # Create a sport and match (needed for competition QSO)
+        self._create_sport_and_match("continent", "EU")
+
+        # Competition QSO (inside olympiad, matches target)
+        qso_id_1 = self._create_qso("W1RECORD", "DL1ABC", 8000.0, 5.0,
+                                     qso_datetime="2026-01-15T12:00:00")
+
+        # Create world record from the competition QSO
+        self._create_world_record("longest_distance", 8000.0, qso_id_1)
+
+        # QSO outside olympiad with BETTER distance
+        self._create_qso("W1OUTSIDE", "VK3ABC", 15000.0, 5.0,
+                        qso_datetime="2025-06-15T12:00:00")  # Before olympiad
+
+        mentions = get_honorable_mentions()
+
+        # Should have an honorable mention for longest distance
+        assert mentions['longest_distance'] is not None
+        assert mentions['longest_distance']['callsign'] == "W1OUTSIDE"
+        assert mentions['longest_distance']['value'] == 15000.0
+
+    def test_honorable_mention_better_no_target_match(self):
+        """Test QSO inside olympiad but not matching any target gets honorable mention."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()
+        self._create_competitor("W1RECORD", "Record")
+        self._create_competitor("W1NOMATCH", "NoMatch")
+
+        # Create a sport targeting EU continent
+        self._create_sport_and_match("continent", "EU")
+
+        # Competition QSO (inside olympiad, matches EU target via dx_dxcc=230 Germany)
+        qso_id_1 = self._create_qso("W1RECORD", "DL1ABC", 8000.0, 5.0,
+                                     qso_datetime="2026-01-15T12:00:00")
+
+        self._create_world_record("longest_distance", 8000.0, qso_id_1)
+
+        # QSO inside olympiad but to Oceania (doesn't match EU target)
+        with get_db() as conn:
+            cursor = conn.execute("""
+                INSERT INTO qsos (
+                    competitor_callsign, dx_callsign, qso_datetime_utc,
+                    tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed,
+                    distance_km, cool_factor, mode
+                ) VALUES ('W1NOMATCH', 'VK3XYZ', '2026-01-20T12:00:00', 5.0,
+                          'EM12', 'QF22', 150, 1, 15000.0, 3000.0, 'SSB')
+            """)
+
+        mentions = get_honorable_mentions()
+
+        # Should have honorable mention (better QSO, but target was OC not EU)
+        assert mentions['longest_distance'] is not None
+        assert mentions['longest_distance']['callsign'] == "W1NOMATCH"
+        assert mentions['longest_distance']['value'] == 15000.0
+
+    def test_no_honorable_mention_when_record_is_best(self):
+        """Test no honorable mention when the competition record IS the best QSO."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()
+        self._create_competitor("W1RECORD", "Record")
+        self._create_competitor("W1OUTSIDE", "Outside")
+
+        self._create_sport_and_match("continent", "EU")
+
+        # Competition QSO with best distance
+        qso_id_1 = self._create_qso("W1RECORD", "DL1ABC", 15000.0, 5.0,
+                                     qso_datetime="2026-01-15T12:00:00")
+        self._create_world_record("longest_distance", 15000.0, qso_id_1)
+
+        # QSO outside olympiad with WORSE distance
+        self._create_qso("W1OUTSIDE", "VK3ABC", 8000.0, 5.0,
+                        qso_datetime="2025-06-15T12:00:00")
+
+        mentions = get_honorable_mentions()
+
+        # No honorable mention - the record is already the best
+        assert mentions['longest_distance'] is None
+
+    def test_honorable_mention_requires_confirmed(self):
+        """Test that unconfirmed QSOs don't get honorable mention."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()
+        self._create_competitor("W1RECORD", "Record")
+        self._create_competitor("W1UNCONF", "Unconfirmed")
+
+        self._create_sport_and_match("continent", "EU")
+
+        # Competition QSO
+        qso_id_1 = self._create_qso("W1RECORD", "DL1ABC", 8000.0, 5.0,
+                                     qso_datetime="2026-01-15T12:00:00")
+        self._create_world_record("longest_distance", 8000.0, qso_id_1)
+
+        # Better QSO outside olympiad but UNCONFIRMED
+        self._create_qso("W1UNCONF", "VK3ABC", 15000.0, 5.0,
+                        qso_datetime="2025-06-15T12:00:00",
+                        is_confirmed=0)  # Unconfirmed
+
+        mentions = get_honorable_mentions()
+
+        # No honorable mention - unconfirmed doesn't count
+        assert mentions['longest_distance'] is None
+
+    def test_honorable_mention_cool_factor(self):
+        """Test honorable mention for cool factor records."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()
+        self._create_competitor("W1RECORD", "Record")
+        self._create_competitor("W1OUTSIDE", "Outside")
+
+        self._create_sport_and_match("continent", "EU")
+
+        # Competition QSO with moderate cool factor
+        qso_id_1 = self._create_qso("W1RECORD", "DL1ABC", 8000.0, 10.0,  # CF = 800
+                                     qso_datetime="2026-01-15T12:00:00")
+        self._create_world_record("highest_cool_factor", 800.0, qso_id_1)
+
+        # QSO outside olympiad with BETTER cool factor
+        self._create_qso("W1OUTSIDE", "VK3ABC", 15000.0, 5.0,  # CF = 3000
+                        qso_datetime="2025-06-15T12:00:00")
+
+        mentions = get_honorable_mentions()
+
+        # Should have honorable mention for cool factor
+        assert mentions['highest_cool_factor'] is not None
+        assert mentions['highest_cool_factor']['callsign'] == "W1OUTSIDE"
+        assert mentions['highest_cool_factor']['value'] == 3000.0
+
+    def test_no_honorable_mention_without_records(self):
+        """Test no honorable mention when there are no existing records."""
+        from scoring import get_honorable_mentions
+
+        self._setup_olympiad()
+        self._create_competitor("W1TEST", "Test")
+
+        # QSO outside olympiad - no record to beat
+        self._create_qso("W1TEST", "DL1ABC", 8000.0, 5.0,
+                        qso_datetime="2025-06-15T12:00:00")
+
+        mentions = get_honorable_mentions()
+
+        # No honorable mention - but it should be the new record, not honorable mention
+        # (Honorable mention only when there's a competition record that's worse)
+        assert mentions['longest_distance'] is None
+        assert mentions['highest_cool_factor'] is None
+
+    def test_honorable_mention_no_active_olympiad(self):
+        """Test honorable mentions work when no olympiad is active."""
+        from scoring import get_honorable_mentions
+
+        # No olympiad - just competitors and QSOs
+        self._create_competitor("W1TEST", "Test")
+        qso_id = self._create_qso("W1TEST", "DL1ABC", 8000.0, 5.0,
+                                   qso_datetime="2026-01-15T12:00:00")
+
+        # Create a world record somehow (from previous olympiad)
+        self._create_world_record("longest_distance", 5000.0, qso_id)
+
+        self._create_competitor("W1BETTER", "Better")
+        self._create_qso("W1BETTER", "VK3ABC", 10000.0, 5.0,
+                        qso_datetime="2026-02-15T12:00:00")
+
+        mentions = get_honorable_mentions()
+
+        # With no active olympiad, all QSOs are "outside competition"
+        # The better QSO should be an honorable mention
+        assert mentions['longest_distance'] is not None
+        assert mentions['longest_distance']['value'] == 10000.0

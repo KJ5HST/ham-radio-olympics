@@ -1103,6 +1103,143 @@ def recompute_all_records():
             update_records(qso_id, callsign, match_id=match_id)
 
 
+def get_honorable_mentions() -> dict:
+    """
+    Find confirmed QSOs that beat current records but weren't during competition.
+
+    An honorable mention is awarded when a confirmed QSO has a better value than
+    the current world record, but the QSO wasn't made during competition (either
+    outside the olympiad date range or inside but doesn't match any match target).
+
+    Returns dict with keys:
+    - 'longest_distance': {callsign, value, date, qso_id, first_name} or None
+    - 'highest_cool_factor': {callsign, value, date, qso_id, first_name} or None
+    """
+    result = {
+        'longest_distance': None,
+        'highest_cool_factor': None,
+    }
+
+    with get_db() as conn:
+        # Get current world records
+        cursor = conn.execute("""
+            SELECT record_type, value, qso_id
+            FROM records
+            WHERE callsign IS NULL AND sport_id IS NULL
+            AND record_type IN ('longest_distance', 'highest_cool_factor')
+        """)
+        world_records = {row['record_type']: row for row in cursor.fetchall()}
+
+        # Get active olympiad date range
+        cursor = conn.execute("""
+            SELECT start_date, end_date FROM olympiads WHERE is_active = 1
+        """)
+        olympiad = cursor.fetchone()
+        olympiad_start = olympiad['start_date'] if olympiad else None
+        olympiad_end = olympiad['end_date'] if olympiad else None
+
+        # Get all match date ranges and their target info for the active olympiad
+        competition_qso_ids = set()
+        if olympiad:
+            cursor = conn.execute("""
+                SELECT m.id, m.start_date, m.end_date, m.target_value,
+                       COALESCE(m.target_type, s.target_type) as target_type,
+                       s.work_enabled, s.activate_enabled
+                FROM matches m
+                JOIN sports s ON m.sport_id = s.id
+                WHERE s.olympiad_id = (SELECT id FROM olympiads WHERE is_active = 1)
+            """)
+            matches = [dict(row) for row in cursor.fetchall()]
+
+            # Find all QSO IDs that matched any competition target
+            for match in matches:
+                cursor = conn.execute("""
+                    SELECT q.id, q.dx_dxcc, q.dx_grid, q.dx_sig_info,
+                           q.my_dxcc, q.my_grid, q.my_sig_info, q.dx_callsign,
+                           q.competitor_callsign
+                    FROM qsos q
+                    WHERE q.is_confirmed = 1
+                    AND q.qso_datetime_utc >= ?
+                    AND q.qso_datetime_utc <= ?
+                """, (match['start_date'], match['end_date']))
+
+                for qso in cursor.fetchall():
+                    qso_dict = dict(qso)
+                    # Check if this QSO matches the match target
+                    qso_matches = False
+                    if match['work_enabled'] and matches_target(
+                        qso_dict, match['target_type'], match['target_value'], "work"
+                    ):
+                        qso_matches = True
+                    if match['activate_enabled'] and matches_target(
+                        qso_dict, match['target_type'], match['target_value'], "activate"
+                    ):
+                        qso_matches = True
+
+                    if qso_matches:
+                        competition_qso_ids.add(qso_dict['id'])
+
+        # Find best overall confirmed QSOs (excluding competition QSOs)
+        # For longest distance
+        cursor = conn.execute("""
+            SELECT q.id, q.competitor_callsign, q.distance_km, q.qso_datetime_utc,
+                   c.first_name
+            FROM qsos q
+            JOIN competitors c ON q.competitor_callsign = c.callsign
+            WHERE q.is_confirmed = 1
+            AND q.distance_km IS NOT NULL
+            AND q.distance_km > 0
+            ORDER BY q.distance_km DESC
+            LIMIT 100
+        """)
+        distance_candidates = [dict(row) for row in cursor.fetchall()]
+
+        # Find the best non-competition QSO
+        current_distance_record = world_records.get('longest_distance')
+        for qso in distance_candidates:
+            if qso['id'] not in competition_qso_ids:
+                # Only an honorable mention if there IS a record and this QSO beats it
+                if current_distance_record and qso['distance_km'] > current_distance_record['value']:
+                    result['longest_distance'] = {
+                        'callsign': qso['competitor_callsign'],
+                        'value': qso['distance_km'],
+                        'date': qso['qso_datetime_utc'],
+                        'qso_id': qso['id'],
+                        'first_name': qso['first_name'],
+                    }
+                break  # Only consider the best non-competition QSO
+
+        # For highest cool factor
+        cursor = conn.execute("""
+            SELECT q.id, q.competitor_callsign, q.cool_factor, q.qso_datetime_utc,
+                   c.first_name
+            FROM qsos q
+            JOIN competitors c ON q.competitor_callsign = c.callsign
+            WHERE q.is_confirmed = 1
+            AND q.cool_factor IS NOT NULL
+            AND q.cool_factor > 0
+            ORDER BY q.cool_factor DESC
+            LIMIT 100
+        """)
+        cf_candidates = [dict(row) for row in cursor.fetchall()]
+
+        current_cf_record = world_records.get('highest_cool_factor')
+        for qso in cf_candidates:
+            if qso['id'] not in competition_qso_ids:
+                # Only an honorable mention if there IS a record and this QSO beats it
+                if current_cf_record and qso['cool_factor'] > current_cf_record['value']:
+                    result['highest_cool_factor'] = {
+                        'callsign': qso['competitor_callsign'],
+                        'value': qso['cool_factor'],
+                        'date': qso['qso_datetime_utc'],
+                        'qso_id': qso['id'],
+                        'first_name': qso['first_name'],
+                    }
+                break
+
+    return result
+
+
 def compute_triathlon_leaders(limit: int = 3) -> List[dict]:
     """
     Compute top Triathlon QSOs across the active olympiad.

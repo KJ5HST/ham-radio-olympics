@@ -9,7 +9,7 @@
  * - User guide: Stale-while-revalidate
  */
 
-const SW_VERSION = '2.0.5';
+const SW_VERSION = '2.0.6';
 const CACHE_PREFIX = 'hro-';
 const STATIC_CACHE = `${CACHE_PREFIX}static-v${SW_VERSION}`;
 const PAGES_CACHE = `${CACHE_PREFIX}pages-v${SW_VERSION}`;

@@ -424,6 +424,15 @@ Ham Radio Olympics automatically tracks world records across all competitions. R
 
 View current records at `/records`.
 
+#### Honorable Mentions
+
+When a confirmed QSO exists that surpasses the current world record but wasn't made during competition, it appears as an "Honorable Mention" below the records table. A QSO is considered "outside competition" if it was either:
+
+- Made outside the active Olympiad date range, OR
+- Made during the Olympiad but doesn't match any active match target
+
+This feature recognizes exceptional QSOs while maintaining the integrity of competition records. Think of it as a humbling reminder: someone out there did better when it didn't count.
+
 ### 6.2 Personal Bests
 
 Your competitor profile tracks your personal best performances:
