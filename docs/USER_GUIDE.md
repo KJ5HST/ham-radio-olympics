@@ -2,7 +2,7 @@
 
 **A Competition Platform for Amateur Radio Operators**
 
-*Version 1.8 — February 2026*
+*Version 1.8.1 — February 2026*
 
 ---
 
