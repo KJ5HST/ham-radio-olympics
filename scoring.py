@@ -714,10 +714,20 @@ def _notify_records_broken(callsign: str, records: list):
         return
 
     try:
-        from notifications import notify_record_broken
+        from notifications import notify_record_broken, discord_notify_record
 
         for record in records:
+            # Send push notification to the user
             notify_record_broken(
+                callsign=callsign,
+                record_type=record["record_type"],
+                value=record["value"],
+                is_world_record=record["is_world_record"],
+                sport_name=record.get("sport_name"),
+                dx_callsign=record.get("dx_callsign"),
+            )
+            # Send Discord notification (only for world records)
+            discord_notify_record(
                 callsign=callsign,
                 record_type=record["record_type"],
                 value=record["value"],

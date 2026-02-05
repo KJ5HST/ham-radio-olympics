@@ -2545,6 +2545,13 @@ async def signup(request: Request, signup_data: UserSignup):
         except Exception:
             pass  # Don't fail signup if email fails
 
+    # Send Discord notification for new signup
+    try:
+        from notifications import discord_notify_signup
+        discord_notify_signup(callsign)
+    except Exception:
+        pass  # Don't fail signup if Discord notification fails
+
     # Auto-login after signup
     session_id = authenticate_user(callsign, signup_data.password)
 
@@ -5455,6 +5462,10 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     admin_bcc_emails = get_setting("admin_bcc_emails") == "1"
     admin_email = config.ADMIN_EMAIL
 
+    # Get Discord settings
+    discord_webhook_url = get_setting("discord_webhook_url")
+    discord_configured = bool(discord_webhook_url)
+
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
         "user": get_current_user(request),
@@ -5466,6 +5477,8 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
         "public_results": public_results,
         "admin_bcc_emails": admin_bcc_emails,
         "admin_email": admin_email,
+        "discord_webhook_url": discord_webhook_url,
+        "discord_configured": discord_configured,
     })
 
 
@@ -5602,6 +5615,49 @@ async def update_email_settings(
 
     status = "enabled" if admin_bcc else "disabled"
     return {"message": f"Admin BCC on emails {status}"}
+
+
+@app.post("/admin/settings/discord")
+async def update_discord_settings(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update Discord webhook URL."""
+    from database import set_setting
+
+    data = await request.json()
+    webhook_url = data.get("webhook_url", "").strip()
+
+    if webhook_url and not webhook_url.startswith("https://discord.com/api/webhooks/"):
+        raise HTTPException(status_code=400, detail="Invalid Discord webhook URL format")
+
+    if webhook_url:
+        set_setting("discord_webhook_url", webhook_url)
+        return {"message": "Discord webhook URL saved successfully"}
+    else:
+        set_setting("discord_webhook_url", None)
+        return {"message": "Discord webhook URL cleared"}
+
+
+@app.post("/admin/settings/discord/test")
+async def test_discord_webhook(_: bool = Depends(verify_admin)):
+    """Test Discord webhook connection."""
+    from notifications import test_discord_webhook
+
+    result = test_discord_webhook()
+    if result["success"]:
+        return {"message": result["message"]}
+    else:
+        raise HTTPException(status_code=400, detail=result["message"])
+
+
+@app.delete("/admin/settings/discord")
+async def clear_discord_settings(_: bool = Depends(verify_admin)):
+    """Clear Discord webhook URL."""
+    from database import set_setting
+
+    set_setting("discord_webhook_url", None)
+    return {"message": "Discord webhook URL cleared"}
 
 
 # ============================================================

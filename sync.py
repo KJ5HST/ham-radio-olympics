@@ -1266,7 +1266,7 @@ def _notify_new_confirmations(callsign: str, dx_callsigns: list):
 def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
     """Send push notifications for medal changes."""
     try:
-        from notifications import notify_medal_change
+        from notifications import notify_medal_change, discord_notify_medal
 
         # Find matches where medals changed
         all_keys = set(old_medals.keys()) | set(new_medals.keys())
@@ -1286,6 +1286,7 @@ def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
                 target = new.get("target_value") or old.get("target_value", "Unknown")
                 points = new.get("total_points", 0)
 
+                # Send push notification to the user
                 notify_medal_change(
                     callsign=callsign,
                     sport_name=sport_name,
@@ -1294,5 +1295,11 @@ def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
                     new_medals={"qso_race": new_qso, "cool_factor": new_cf},
                     total_points=points
                 )
+
+                # Send Discord notifications for newly won medals
+                if new_qso and not old_qso:
+                    discord_notify_medal(callsign, sport_name, target, new_qso, "QSO Race")
+                if new_cf and not old_cf:
+                    discord_notify_medal(callsign, sport_name, target, new_cf, "Cool Factor")
     except Exception as e:
         logger.error(f"Failed to send medal notification for {callsign}: {e}")

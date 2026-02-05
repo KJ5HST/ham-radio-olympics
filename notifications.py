@@ -908,3 +908,261 @@ def cleanup_stale_subscriptions(days: int = 90) -> int:
     except Exception as e:
         logger.error(f"Failed to cleanup subscriptions: {e}")
         return 0
+
+
+# ============================================================================
+# Discord Webhook Notifications
+# ============================================================================
+
+def get_discord_webhook_url() -> Optional[str]:
+    """Get Discord webhook URL from settings."""
+    from database import get_setting
+    return get_setting("discord_webhook_url")
+
+
+def is_discord_configured() -> bool:
+    """Check if Discord webhook is configured."""
+    url = get_discord_webhook_url()
+    return bool(url and url.strip())
+
+
+def send_discord_notification(embed: Dict[str, Any]) -> bool:
+    """
+    Send a notification to Discord webhook.
+
+    Args:
+        embed: Discord embed object with title, description, color, fields, etc.
+
+    Returns:
+        True if sent successfully, False otherwise.
+    """
+    webhook_url = get_discord_webhook_url()
+    if not webhook_url:
+        return False
+
+    try:
+        import httpx
+
+        payload = {"embeds": [embed]}
+        response = httpx.post(
+            webhook_url,
+            json=payload,
+            timeout=10.0
+        )
+        if response.status_code in (200, 204):
+            return True
+        else:
+            logger.error(f"Discord webhook failed with status {response.status_code}: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Discord webhook error: {e}")
+        return False
+
+
+def discord_notify_record(
+    callsign: str,
+    record_type: str,
+    value: float,
+    is_world_record: bool,
+    sport_name: Optional[str] = None,
+    dx_callsign: Optional[str] = None
+) -> bool:
+    """
+    Send Discord notification for a new record.
+
+    Args:
+        callsign: The competitor's callsign
+        record_type: Type of record (distance, cool_factor, lowest_power)
+        value: The record value
+        is_world_record: Whether this is a world record (vs personal best)
+        sport_name: Name of the sport (optional)
+        dx_callsign: DX station worked (optional)
+    """
+    if not is_discord_configured():
+        return False
+
+    # Only notify on world records for Discord (to avoid spam)
+    if not is_world_record:
+        return False
+
+    # Format the value based on type
+    if record_type == "distance":
+        value_str = f"{value:,.0f} km"
+        type_name = "Distance"
+        emoji = "📏"
+    elif record_type == "cool_factor":
+        value_str = f"{value:.1f} km/W"
+        type_name = "Cool Factor"
+        emoji = "❄️"
+    elif record_type == "lowest_power":
+        value_str = f"{value:.1f} W"
+        type_name = "Lowest Power DX"
+        emoji = "🔋"
+    else:
+        value_str = f"{value:.1f}"
+        type_name = record_type.replace("_", " ").title()
+        emoji = "🏆"
+
+    title = f"🥇 New World Record! {emoji}"
+    description = f"**{callsign}** set a new {type_name.lower()} record!"
+
+    fields = [
+        {"name": type_name, "value": value_str, "inline": True}
+    ]
+    if dx_callsign:
+        fields.append({"name": "QSO With", "value": dx_callsign, "inline": True})
+    if sport_name:
+        fields.append({"name": "Sport", "value": sport_name, "inline": True})
+
+    embed = {
+        "title": title,
+        "description": description,
+        "color": 0xFFD700,  # Gold
+        "fields": fields,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    return send_discord_notification(embed)
+
+
+def discord_notify_medal(
+    callsign: str,
+    sport_name: str,
+    match_target: str,
+    medal_type: str,
+    competition: str
+) -> bool:
+    """
+    Send Discord notification for a medal award.
+
+    Args:
+        callsign: The competitor's callsign
+        sport_name: Name of the sport
+        match_target: Target value (e.g., "EU", "K-0001")
+        medal_type: "gold", "silver", or "bronze"
+        competition: "QSO Race" or "Cool Factor"
+    """
+    if not is_discord_configured():
+        return False
+
+    medal_colors = {
+        "gold": 0xFFD700,
+        "silver": 0xC0C0C0,
+        "bronze": 0xCD7F32
+    }
+    medal_emojis = {
+        "gold": "🥇",
+        "silver": "🥈",
+        "bronze": "🥉"
+    }
+
+    emoji = medal_emojis.get(medal_type, "🏅")
+    color = medal_colors.get(medal_type, 0x808080)
+
+    title = f"{emoji} {medal_type.title()} Medal Awarded!"
+    description = f"**{callsign}** earned {medal_type} in {competition}"
+
+    embed = {
+        "title": title,
+        "description": description,
+        "color": color,
+        "fields": [
+            {"name": "Sport", "value": sport_name, "inline": True},
+            {"name": "Target", "value": match_target, "inline": True},
+            {"name": "Competition", "value": competition, "inline": True}
+        ],
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    return send_discord_notification(embed)
+
+
+def discord_notify_signup(callsign: str) -> bool:
+    """
+    Send Discord notification for a new competitor signup.
+
+    Args:
+        callsign: The new competitor's callsign
+    """
+    if not is_discord_configured():
+        return False
+
+    embed = {
+        "title": "👋 New Competitor Joined!",
+        "description": f"Welcome **{callsign}** to Ham Radio Olympics!",
+        "color": 0x00FF00,  # Green
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    return send_discord_notification(embed)
+
+
+def discord_notify_match_reminder(
+    sport_name: str,
+    match_target: str,
+    days_until: int,
+    start_date: str
+) -> bool:
+    """
+    Send Discord notification for an upcoming match.
+
+    Args:
+        sport_name: Name of the sport
+        match_target: Target value (e.g., "EU", "K-0001")
+        days_until: Number of days until match starts
+        start_date: Match start date (YYYY-MM-DD)
+    """
+    if not is_discord_configured():
+        return False
+
+    if days_until == 0:
+        title = "🚀 Match Starting Today!"
+        time_text = "starts **today**"
+        color = 0xFF0000  # Red - urgent
+    elif days_until == 1:
+        title = "⏰ Match Starting Tomorrow!"
+        time_text = "starts **tomorrow**"
+        color = 0xFFA500  # Orange
+    else:
+        title = f"📅 Match in {days_until} Days"
+        time_text = f"starts in **{days_until} days**"
+        color = 0x0099FF  # Blue
+
+    embed = {
+        "title": title,
+        "description": f"**{sport_name}** targeting **{match_target}** {time_text}",
+        "color": color,
+        "fields": [
+            {"name": "Start Date", "value": start_date, "inline": True}
+        ],
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    return send_discord_notification(embed)
+
+
+def test_discord_webhook() -> Dict[str, Any]:
+    """
+    Send a test message to the configured Discord webhook.
+
+    Returns:
+        Dict with success status and message
+    """
+    if not is_discord_configured():
+        return {"success": False, "message": "Discord webhook URL not configured"}
+
+    embed = {
+        "title": "🔔 Test Notification",
+        "description": "This is a test message from Ham Radio Olympics!",
+        "color": 0x7289DA,  # Discord blurple
+        "fields": [
+            {"name": "Status", "value": "Webhook is working correctly", "inline": False}
+        ],
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    success = send_discord_notification(embed)
+    if success:
+        return {"success": True, "message": "Test notification sent successfully!"}
+    else:
+        return {"success": False, "message": "Failed to send test notification. Check the webhook URL."}

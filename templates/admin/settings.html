@@ -79,6 +79,28 @@
 </div>
 
 <div class="card">
+    <h3>Discord Notifications</h3>
+    <p style="color: #718096; margin-bottom: 1rem;">
+        Send server-wide notifications to a Discord channel when events occur (new records, medals, signups, match reminders).
+        <br>Create a webhook in your Discord server settings under Integrations &rarr; Webhooks.
+    </p>
+    <form id="discord-form">
+        <div class="form-group">
+            <label for="discord_webhook_url">Webhook URL</label>
+            <input type="url" id="discord_webhook_url" value="{{ discord_webhook_url or '' }}" placeholder="https://discord.com/api/webhooks/...">
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Save</button>
+            {% if discord_configured %}
+            <button type="button" onclick="testDiscord()" class="btn btn-info">Test</button>
+            <button type="button" onclick="clearDiscord()" class="btn btn-danger">Clear</button>
+            {% endif %}
+        </div>
+    </form>
+    <div id="discord-result" style="margin-top: 1rem;"></div>
+</div>
+
+<div class="card">
     <h3>QRZ XML API Credentials</h3>
     <p style="color: #718096; margin-bottom: 1rem;">
         These credentials are used for callsign lookups to fetch competitor names and country information.
@@ -108,6 +130,74 @@
 </div>
 
 <script>
+// Discord form handler
+document.getElementById('discord-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const result = document.getElementById('discord-result');
+    const webhookUrl = document.getElementById('discord_webhook_url').value.trim();
+
+    try {
+        const resp = await fetch('/admin/settings/discord', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin',
+            body: JSON.stringify({ webhook_url: webhookUrl })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+});
+
+async function testDiscord() {
+    const result = document.getElementById('discord-result');
+    result.innerHTML = '<div class="alert">Sending test message...</div>';
+
+    try {
+        const resp = await fetch('/admin/settings/discord/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+}
+
+async function clearDiscord() {
+    if (!confirm('Clear Discord webhook? Notifications will no longer be sent to Discord.')) return;
+
+    const result = document.getElementById('discord-result');
+    try {
+        const resp = await fetch('/admin/settings/discord', {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            credentials: 'same-origin'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            result.innerHTML = '<div class="alert alert-success">' + data.message + '</div>';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            result.innerHTML = '<div class="alert alert-error">' + data.detail + '</div>';
+        }
+    } catch (err) {
+        result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+    }
+}
+
 // Email settings form handler
 document.getElementById('email-settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
