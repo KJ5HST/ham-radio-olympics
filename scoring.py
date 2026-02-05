@@ -1407,18 +1407,27 @@ def compute_mode_records() -> Tuple[List[dict], List[dict]]:
         modes = [row["mode"] for row in cursor.fetchall()]
 
         # For each mode, find the best distance and cool factor records
+        # Only include QSOs that qualified for medals (made during competition)
+        # Join through medals to find competitors who medaled, then find their
+        # QSOs that fall within the match date range
         for mode in modes:
-            # Best distance for this mode
+            # Best distance for this mode (only from medal-qualifying QSOs)
             cursor = conn.execute("""
                 SELECT q.id, q.competitor_callsign as holder, q.dx_callsign,
                        q.distance_km as value, q.tx_power_w as power, q.cool_factor,
                        q.qso_datetime_utc as date, q.my_sig_info,
                        c.first_name as holder_name,
-                       NULL as target, NULL as match_id,
-                       NULL as sport_id, NULL as sport_name
-                FROM qsos q
+                       m.target_value as target, m.id as match_id,
+                       s.id as sport_id, s.name as sport_name
+                FROM medals med
+                JOIN matches m ON med.match_id = m.id
+                JOIN sports s ON m.sport_id = s.id
+                JOIN qsos q ON q.competitor_callsign = med.callsign
+                    AND q.qso_datetime_utc >= m.start_date
+                    AND q.qso_datetime_utc <= m.end_date || ' 23:59:59'
+                    AND q.is_confirmed = 1
                 JOIN competitors c ON q.competitor_callsign = c.callsign
-                WHERE q.is_confirmed = 1
+                WHERE med.qualified = 1
                 AND q.mode = ?
                 AND q.distance_km IS NOT NULL
                 AND q.distance_km > 0
@@ -1443,17 +1452,23 @@ def compute_mode_records() -> Tuple[List[dict], List[dict]]:
                     "my_sig_info": row["my_sig_info"],
                 })
 
-            # Best cool factor for this mode
+            # Best cool factor for this mode (only from medal-qualifying QSOs)
             cursor = conn.execute("""
                 SELECT q.id, q.competitor_callsign as holder, q.dx_callsign,
                        q.cool_factor as value, q.tx_power_w as power, q.distance_km as distance,
                        q.qso_datetime_utc as date, q.my_sig_info,
                        c.first_name as holder_name,
-                       NULL as target, NULL as match_id,
-                       NULL as sport_id, NULL as sport_name
-                FROM qsos q
+                       m.target_value as target, m.id as match_id,
+                       s.id as sport_id, s.name as sport_name
+                FROM medals med
+                JOIN matches m ON med.match_id = m.id
+                JOIN sports s ON m.sport_id = s.id
+                JOIN qsos q ON q.competitor_callsign = med.callsign
+                    AND q.qso_datetime_utc >= m.start_date
+                    AND q.qso_datetime_utc <= m.end_date || ' 23:59:59'
+                    AND q.is_confirmed = 1
                 JOIN competitors c ON q.competitor_callsign = c.callsign
-                WHERE q.is_confirmed = 1
+                WHERE med.qualified = 1
                 AND q.mode = ?
                 AND q.cool_factor IS NOT NULL
                 AND q.cool_factor > 0

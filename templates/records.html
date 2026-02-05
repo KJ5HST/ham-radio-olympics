@@ -204,7 +204,9 @@
                 <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
             <td>
+                {% if record.sport_id and record.match_id %}
                 <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
+                {% else %}-{% endif %}
             </td>
         </tr>
         <tr class="details-row" id="details-dist-{{ loop.index }}" style="display: none;">
@@ -248,7 +250,9 @@
                 <a href="/competitor/{{ record.holder }}">{{ record.holder_name | competitor_display(record.holder) }}</a>
             </td>
             <td>
+                {% if record.sport_id and record.match_id %}
                 <a href="/olympiad/sport/{{ record.sport_id }}/match/{{ record.match_id }}">{{ record.sport_name }}: {{ record.target | pota_tooltip }}</a>
+                {% else %}-{% endif %}
             </td>
         </tr>
         <tr class="details-row" id="details-cf-{{ loop.index }}" style="display: none;">
