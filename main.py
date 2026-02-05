@@ -156,6 +156,34 @@ async def background_sync():
             logger.exception(f"Background sync failed: {e}")
 
 
+_pota_spot_task = None
+POTA_SPOT_CHECK_INTERVAL = 30 * 60  # 30 minutes
+
+
+async def background_pota_spot_check():
+    """Background task that checks POTA spots every 30 minutes."""
+    from notifications import check_pota_spots_and_notify
+
+    # Run immediately on startup
+    try:
+        results = await check_pota_spots_and_notify()
+        logger.info(f"POTA spot check (startup): {results['sports_with_spots']} sports, "
+                   f"{results['notifications_sent']} push, {results['discord_sent']} Discord")
+    except Exception as e:
+        logger.exception(f"POTA spot check (startup) failed: {e}")
+
+    # Then run every 30 minutes
+    while True:
+        await asyncio.sleep(POTA_SPOT_CHECK_INTERVAL)
+        try:
+            results = await check_pota_spots_and_notify()
+            if results["discord_sent"] or results["notifications_sent"]:
+                logger.info(f"POTA spot check: {results['sports_with_spots']} sports, "
+                           f"{results['notifications_sent']} push, {results['discord_sent']} Discord")
+        except Exception as e:
+            logger.exception(f"POTA spot check failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown."""
@@ -191,12 +219,16 @@ async def lifespan(app: FastAPI):
     # Run startup sync in background (non-blocking)
     asyncio.create_task(startup_sync_if_needed())
 
-    # Start background sync task
+    # Start background tasks
+    global _pota_spot_task
     _sync_task = asyncio.create_task(background_sync())
+    _pota_spot_task = asyncio.create_task(background_pota_spot_check())
     yield
-    # Cancel background task on shutdown
+    # Cancel background tasks on shutdown
     if _sync_task:
         _sync_task.cancel()
+    if _pota_spot_task:
+        _pota_spot_task.cancel()
         try:
             await _sync_task
         except asyncio.CancelledError:

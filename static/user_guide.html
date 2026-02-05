@@ -1334,9 +1334,9 @@ Ham Radio Olympics can send automatic notifications to a Discord channel when ke
 <td>Once per match</td>
 </tr>
 <tr>
-<td><strong>POTA Spot Alerts</strong></td>
-<td>An activator goes live on a park that's an active match target</td>
-<td>4 hours (or if mode/frequency changes)</td>
+<td><strong>POTA Activity Summary</strong></td>
+<td>Every 30 minutes if parks have active spots</td>
+<td>Once per 30 minutes</td>
 </tr>
 </tbody>
 </table>
@@ -1405,9 +1405,9 @@ Each notification type has a distinct appearance in Discord:
 <td>Blue</td>
 </tr>
 <tr>
-<td><strong>POTA Spot</strong></td>
-<td>📡 POTA Spot Alert!</td>
-<td><strong>W1ABC</strong> is activating <strong>K-0001</strong> (Freq: 14.074, Mode: FT8)</td>
+<td><strong>POTA Activity</strong></td>
+<td>📡 POTA Activity (X spots)</td>
+<td>• POTA Championship: 5 active spots</td>
 <td>Green</td>
 </tr>
 </tbody>
@@ -1419,7 +1419,7 @@ All Discord notifications are deduplicated to prevent spam:
 </p>
 <ul>
 <li><strong>Records and medals</strong> are only announced once, even if data is recomputed</li>
-<li><strong>POTA spots</strong> are announced once per 4-hour window, but a new notification is sent if the activator changes frequency or mode</li>
+<li><strong>POTA activity</strong> summary is sent once every 30 minutes (batched, not per-spot)</li>
 <li><strong>Match reminders</strong> are sent once per match at each reminder interval</li>
 </ul>
 <h4 id="setting-up-discord-notifications">Setting Up Discord Notifications</h4>

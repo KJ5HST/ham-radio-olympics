@@ -733,9 +733,9 @@ def notify_pota_spot(
         return False
 
     # Create reference to avoid duplicate notifications for same activator at same park
-    # Reset after 4 hours, but new mode/freq = new notification
-    time_bucket = datetime.utcnow().strftime("%Y%m%d") + str(datetime.utcnow().hour // 4)
-    reference = f"spot-{park_reference}-{activator_callsign}-{mode}-{frequency}-{time_bucket}"
+    # Daily dedupe - one notification per activator/park per day
+    today = datetime.utcnow().strftime("%Y%m%d")
+    reference = f"spot-{park_reference}-{activator_callsign}-{today}"
 
     if was_notification_sent(callsign, "pota_spot", reference):
         return False
@@ -765,15 +765,19 @@ def notify_pota_spot(
 
 async def check_pota_spots_and_notify() -> Dict[str, int]:
     """
-    Check POTA spots for active matches and notify entered users.
+    Check POTA spots for active matches and notify users.
 
-    Should be called periodically (e.g., every 5 minutes) or during sync.
+    Should be called on a schedule (every 30 minutes).
+
+    - Discord: Sends a single batched summary (e.g., "POTA Championship: 5 spots")
+    - Push: Notifies individual users about spots (daily dedupe per activator/park)
 
     Returns dict with counts of spots found and notifications sent.
     """
     import httpx
+    from config import config
 
-    results = {"spots_checked": 0, "matches_with_spots": 0, "notifications_sent": 0, "discord_sent": 0, "errors": 0}
+    results = {"spots_checked": 0, "sports_with_spots": 0, "notifications_sent": 0, "discord_sent": 0, "errors": 0}
 
     try:
         # Fetch current POTA spots
@@ -813,7 +817,7 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
             # Get active matches with park targets (POTA)
             now = datetime.utcnow().isoformat()
             matches = conn.execute("""
-                SELECT m.id, m.target_value, s.id as sport_id, s.name as sport_name
+                SELECT m.id, m.target_value, s.id as sport_id, s.name as sport_name, s.allowed_modes
                 FROM matches m
                 JOIN sports s ON m.sport_id = s.id
                 WHERE s.olympiad_id = ?
@@ -822,48 +826,45 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
                   AND m.end_date >= ?
             """, (olympiad["id"], now, now)).fetchall()
 
+            # Import mode filter
+            from scoring import is_mode_allowed
+
+            # Collect spot counts per sport for Discord summary
+            sport_spot_counts: Dict[str, Dict[str, Any]] = {}
+
             for match in matches:
                 park_ref = match["target_value"]
-                spots = spots_by_park.get(park_ref, [])
+                all_park_spots = spots_by_park.get(park_ref, [])
+
+                if not all_park_spots:
+                    continue
+
+                sport_name = match["sport_name"]
+                sport_id = match["sport_id"]
+                allowed_modes = match["allowed_modes"]
+
+                # Filter spots by allowed modes for this sport
+                if allowed_modes:
+                    spots = [s for s in all_park_spots if is_mode_allowed(s.get("mode", ""), allowed_modes)]
+                else:
+                    spots = all_park_spots
 
                 if not spots:
                     continue
 
-                results["matches_with_spots"] += 1
+                # Count spots per sport (not per match)
+                if sport_name not in sport_spot_counts:
+                    sport_spot_counts[sport_name] = {"count": 0, "sport_id": sport_id}
+                sport_spot_counts[sport_name]["count"] += len(spots)
 
-                # Send Discord notification once per unique spot (not per subscriber)
-                for spot in spots:
-                    activator = spot.get("activator", "Unknown")
-                    frequency = spot.get("frequency", "?")
-                    mode = spot.get("mode", "?")
-
-                    # Deduplicate Discord notifications (4-hour window, but new mode/freq = new notification)
-                    time_bucket = datetime.utcnow().strftime("%Y%m%d") + str(datetime.utcnow().hour // 4)
-                    discord_ref = f"discord-spot-{park_ref}-{activator}-{mode}-{frequency}-{time_bucket}"
-
-                    if not was_notification_sent("_discord_", "pota_spot", discord_ref):
-                        try:
-                            if discord_notify_pota_spot(
-                                park_reference=park_ref,
-                                activator_callsign=activator,
-                                frequency=frequency,
-                                mode=mode,
-                                sport_name=match["sport_name"]
-                            ):
-                                results["discord_sent"] += 1
-                                mark_notification_sent("_discord_", "pota_spot", discord_ref)
-                        except Exception as e:
-                            logger.error(f"Failed to send Discord POTA spot notification: {e}")
-
-                # Get users entered in this sport with push subscriptions
+                # Push notifications: notify each subscriber (daily dedupe)
                 subscribers = conn.execute("""
                     SELECT DISTINCT se.callsign
                     FROM sport_entries se
                     JOIN push_subscriptions ps ON se.callsign = ps.callsign
                     WHERE se.sport_id = ?
-                """, (match["sport_id"],)).fetchall()
+                """, (sport_id,)).fetchall()
 
-                # Notify each subscriber about each spot
                 for sub in subscribers:
                     user_callsign = sub["callsign"]
 
@@ -883,13 +884,30 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
                                 activator_callsign=activator,
                                 frequency=frequency,
                                 mode=mode,
-                                sport_name=match["sport_name"],
-                                sport_id=match["sport_id"]
+                                sport_name=sport_name,
+                                sport_id=sport_id
                             ):
                                 results["notifications_sent"] += 1
                         except Exception as e:
                             logger.error(f"Failed to send POTA spot notification to {user_callsign}: {e}")
                             results["errors"] += 1
+
+            # Discord: send batched summary if there are any spots
+            if sport_spot_counts:
+                results["sports_with_spots"] = len(sport_spot_counts)
+
+                # Deduplicate Discord summary (30-minute window)
+                time_bucket = datetime.utcnow().strftime("%Y%m%d%H") + str(datetime.utcnow().minute // 30)
+                discord_ref = f"discord-pota-summary-{time_bucket}"
+
+                if not was_notification_sent("_discord_", "pota_summary", discord_ref):
+                    try:
+                        app_url = config.APP_BASE_URL.rstrip("/")
+                        if discord_notify_pota_summary(sport_spot_counts, app_url):
+                            results["discord_sent"] = 1
+                            mark_notification_sent("_discord_", "pota_summary", discord_ref)
+                    except Exception as e:
+                        logger.error(f"Failed to send Discord POTA summary: {e}")
 
     except httpx.RequestError as e:
         logger.error(f"Failed to fetch POTA spots: {e}")
@@ -899,7 +917,7 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
         results["errors"] += 1
 
     if results["notifications_sent"] > 0 or results["discord_sent"] > 0:
-        logger.info(f"POTA spot notifications: {results['notifications_sent']} push, {results['discord_sent']} Discord for {results['matches_with_spots']} matches")
+        logger.info(f"POTA spot notifications: {results['notifications_sent']} push, {results['discord_sent']} Discord for {results['sports_with_spots']} sports")
 
     return results
 
@@ -1183,35 +1201,43 @@ def discord_notify_match_reminder(
     return send_discord_notification(embed)
 
 
-def discord_notify_pota_spot(
-    park_reference: str,
-    activator_callsign: str,
-    frequency: str,
-    mode: str,
-    sport_name: str
+def discord_notify_pota_summary(
+    sport_spot_counts: Dict[str, Dict[str, Any]],
+    app_url: str = "https://kd5dx.fly.dev"
 ) -> bool:
     """
-    Send Discord notification for a POTA spot in an active match.
+    Send a batched Discord notification summarizing POTA activity across sports.
 
     Args:
-        park_reference: POTA park reference (e.g., "K-0001")
-        activator_callsign: Callsign of the activator
-        frequency: Frequency of the spot
-        mode: Mode (SSB, CW, FT8, etc.)
-        sport_name: Name of the sport/match
+        sport_spot_counts: Dict mapping sport_name -> {"count": int, "sport_id": int}
+        app_url: Base URL for the app
+
+    Example message:
+        📡 POTA Activity
+        • POTA Championship: 5 active spots
+        • Park Pursuit: 2 active spots
+        [View on Ham Radio Olympics]
     """
     if not is_discord_configured():
         return False
 
+    if not sport_spot_counts:
+        return False
+
+    # Build description with sport names and counts
+    lines = []
+    for sport_name, info in sorted(sport_spot_counts.items()):
+        count = info["count"]
+        sport_id = info["sport_id"]
+        spot_word = "spot" if count == 1 else "spots"
+        lines.append(f"• [{sport_name}]({app_url}/olympiad/sport/{sport_id}): **{count}** active {spot_word}")
+
+    total = sum(info["count"] for info in sport_spot_counts.values())
+
     embed = {
-        "title": "📡 POTA Spot Alert!",
-        "description": f"**{activator_callsign}** is activating **{park_reference}**",
+        "title": f"📡 POTA Activity ({total} spots)",
+        "description": "\n".join(lines),
         "color": 0x00AA00,  # Green
-        "fields": [
-            {"name": "Frequency", "value": frequency, "inline": True},
-            {"name": "Mode", "value": mode, "inline": True},
-            {"name": "Sport", "value": sport_name, "inline": True}
-        ],
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 

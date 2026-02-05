@@ -694,7 +694,7 @@ Ham Radio Olympics can send automatic notifications to a Discord channel when ke
 | **Medal Awards** | Competitors earn gold, silver, or bronze medals | Once per medal |
 | **New Signups** | A new competitor joins | Once per callsign |
 | **Match Reminders** | 7 days, 1 day, and day-of for upcoming matches | Once per match |
-| **POTA Spot Alerts** | An activator goes live on a park that's an active match target | 4 hours (or if mode/frequency changes) |
+| **POTA Activity Summary** | Every 30 minutes if parks have active spots | Once per 30 minutes |
 
 #### Message Formats
 
@@ -710,13 +710,13 @@ Each notification type has a distinct appearance in Discord:
 | **Match (Today)** | 🚀 Match Starting Today! | **DX Challenge** targeting **EU** starts today | Red |
 | **Match (Tomorrow)** | ⏰ Match Starting Tomorrow! | **POTA Championship** targeting **K-0001** starts tomorrow | Orange |
 | **Match (7 days)** | 📅 Match in 7 Days | **Grid Chase** targeting **FN31** starts in 7 days | Blue |
-| **POTA Spot** | 📡 POTA Spot Alert! | **W1ABC** is activating **K-0001** (Freq: 14.074, Mode: FT8) | Green |
+| **POTA Activity** | 📡 POTA Activity (X spots) | • POTA Championship: 5 active spots | Green |
 
 #### Deduplication
 
 All Discord notifications are deduplicated to prevent spam:
 - **Records and medals** are only announced once, even if data is recomputed
-- **POTA spots** are announced once per 4-hour window, but a new notification is sent if the activator changes frequency or mode
+- **POTA activity** summary is sent once every 30 minutes (batched, not per-spot)
 - **Match reminders** are sent once per match at each reminder interval
 
 #### Setting Up Discord Notifications
