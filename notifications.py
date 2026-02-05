@@ -733,9 +733,9 @@ def notify_pota_spot(
         return False
 
     # Create reference to avoid duplicate notifications for same activator at same park
-    # Reset after 30 minutes to allow re-notification if activator is still there
-    time_bucket = datetime.utcnow().strftime("%Y%m%d%H") + str(datetime.utcnow().minute // 30)
-    reference = f"spot-{park_reference}-{activator_callsign}-{time_bucket}"
+    # Reset after 4 hours, but new mode/freq = new notification
+    time_bucket = datetime.utcnow().strftime("%Y%m%d") + str(datetime.utcnow().hour // 4)
+    reference = f"spot-{park_reference}-{activator_callsign}-{mode}-{frequency}-{time_bucket}"
 
     if was_notification_sent(callsign, "pota_spot", reference):
         return False
@@ -773,7 +773,7 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
     """
     import httpx
 
-    results = {"spots_checked": 0, "matches_with_spots": 0, "notifications_sent": 0, "errors": 0}
+    results = {"spots_checked": 0, "matches_with_spots": 0, "notifications_sent": 0, "discord_sent": 0, "errors": 0}
 
     try:
         # Fetch current POTA spots
@@ -831,6 +831,30 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
 
                 results["matches_with_spots"] += 1
 
+                # Send Discord notification once per unique spot (not per subscriber)
+                for spot in spots:
+                    activator = spot.get("activator", "Unknown")
+                    frequency = spot.get("frequency", "?")
+                    mode = spot.get("mode", "?")
+
+                    # Deduplicate Discord notifications (4-hour window, but new mode/freq = new notification)
+                    time_bucket = datetime.utcnow().strftime("%Y%m%d") + str(datetime.utcnow().hour // 4)
+                    discord_ref = f"discord-spot-{park_ref}-{activator}-{mode}-{frequency}-{time_bucket}"
+
+                    if not was_notification_sent("_discord_", "pota_spot", discord_ref):
+                        try:
+                            if discord_notify_pota_spot(
+                                park_reference=park_ref,
+                                activator_callsign=activator,
+                                frequency=frequency,
+                                mode=mode,
+                                sport_name=match["sport_name"]
+                            ):
+                                results["discord_sent"] += 1
+                                mark_notification_sent("_discord_", "pota_spot", discord_ref)
+                        except Exception as e:
+                            logger.error(f"Failed to send Discord POTA spot notification: {e}")
+
                 # Get users entered in this sport with push subscriptions
                 subscribers = conn.execute("""
                     SELECT DISTINCT se.callsign
@@ -874,8 +898,8 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
         logger.error(f"Error checking POTA spots: {e}")
         results["errors"] += 1
 
-    if results["notifications_sent"] > 0:
-        logger.info(f"POTA spot notifications: {results['notifications_sent']} sent for {results['matches_with_spots']} matches")
+    if results["notifications_sent"] > 0 or results["discord_sent"] > 0:
+        logger.info(f"POTA spot notifications: {results['notifications_sent']} push, {results['discord_sent']} Discord for {results['matches_with_spots']} matches")
 
     return results
 
@@ -985,6 +1009,13 @@ def discord_notify_record(
     if not is_world_record:
         return False
 
+    # Deduplicate: only notify once per record type/value combination
+    # Use value in reference so a NEW world record still triggers
+    sport_key = sport_name or "global"
+    reference = f"discord-record-{record_type}-{sport_key}-{value}"
+    if was_notification_sent("_discord_", "record", reference):
+        return False
+
     # Format the value based on type
     if record_type == "distance":
         value_str = f"{value:,.0f} km"
@@ -1022,7 +1053,10 @@ def discord_notify_record(
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
-    return send_discord_notification(embed)
+    result = send_discord_notification(embed)
+    if result:
+        mark_notification_sent("_discord_", "record", reference)
+    return result
 
 
 def discord_notify_medal(
@@ -1043,6 +1077,11 @@ def discord_notify_medal(
         competition: "QSO Race" or "Cool Factor"
     """
     if not is_discord_configured():
+        return False
+
+    # Deduplicate: only notify once per callsign/sport/target/medal/competition
+    reference = f"discord-medal-{callsign}-{sport_name}-{match_target}-{medal_type}-{competition}"
+    if was_notification_sent("_discord_", "medal", reference):
         return False
 
     medal_colors = {
@@ -1074,7 +1113,10 @@ def discord_notify_medal(
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
-    return send_discord_notification(embed)
+    result = send_discord_notification(embed)
+    if result:
+        mark_notification_sent("_discord_", "medal", reference)
+    return result
 
 
 def discord_notify_signup(callsign: str) -> bool:
@@ -1134,6 +1176,41 @@ def discord_notify_match_reminder(
         "color": color,
         "fields": [
             {"name": "Start Date", "value": start_date, "inline": True}
+        ],
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    return send_discord_notification(embed)
+
+
+def discord_notify_pota_spot(
+    park_reference: str,
+    activator_callsign: str,
+    frequency: str,
+    mode: str,
+    sport_name: str
+) -> bool:
+    """
+    Send Discord notification for a POTA spot in an active match.
+
+    Args:
+        park_reference: POTA park reference (e.g., "K-0001")
+        activator_callsign: Callsign of the activator
+        frequency: Frequency of the spot
+        mode: Mode (SSB, CW, FT8, etc.)
+        sport_name: Name of the sport/match
+    """
+    if not is_discord_configured():
+        return False
+
+    embed = {
+        "title": "📡 POTA Spot Alert!",
+        "description": f"**{activator_callsign}** is activating **{park_reference}**",
+        "color": 0x00AA00,  # Green
+        "fields": [
+            {"name": "Frequency", "value": frequency, "inline": True},
+            {"name": "Mode", "value": mode, "inline": True},
+            {"name": "Sport", "value": sport_name, "inline": True}
         ],
         "timestamp": datetime.utcnow().isoformat() + "Z"
     }

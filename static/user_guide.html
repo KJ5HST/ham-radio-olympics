@@ -1304,11 +1304,123 @@ Ham Radio Olympics can send automatic notifications to a Discord channel when ke
 
 <h4 id="what-gets-posted-to-discord">What Gets Posted to Discord</h4>
 
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>When It Triggers</th>
+<th>Deduplication</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>New World Records</strong></td>
+<td>Someone sets a new distance or cool factor record</td>
+<td>Once per record value</td>
+</tr>
+<tr>
+<td><strong>Medal Awards</strong></td>
+<td>Competitors earn gold, silver, or bronze medals</td>
+<td>Once per medal</td>
+</tr>
+<tr>
+<td><strong>New Signups</strong></td>
+<td>A new competitor joins</td>
+<td>Once per callsign</td>
+</tr>
+<tr>
+<td><strong>Match Reminders</strong></td>
+<td>7 days, 1 day, and day-of for upcoming matches</td>
+<td>Once per match</td>
+</tr>
+<tr>
+<td><strong>POTA Spot Alerts</strong></td>
+<td>An activator goes live on a park that's an active match target</td>
+<td>4 hours (or if mode/frequency changes)</td>
+</tr>
+</tbody>
+</table>
+<h4 id="message-formats">Message Formats</h4>
+
+<p>
+Each notification type has a distinct appearance in Discord:
+</p>
+
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Title</th>
+<th>Example Message</th>
+<th>Color</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>World Record</strong></td>
+<td>🥇 New World Record! 📏</td>
+<td><strong>KJ5IRF</strong> set a new distance record! Distance: 15,234 km</td>
+<td>Gold</td>
+</tr>
+<tr>
+<td><strong>Medal (Gold)</strong></td>
+<td>🥇 Gold Medal Awarded!</td>
+<td><strong>KJ5IRF</strong> earned gold in QSO Race</td>
+<td>Gold</td>
+</tr>
+<tr>
+<td><strong>Medal (Silver)</strong></td>
+<td>🥈 Silver Medal Awarded!</td>
+<td><strong>W1AW</strong> earned silver in Cool Factor</td>
+<td>Silver</td>
+</tr>
+<tr>
+<td><strong>Medal (Bronze)</strong></td>
+<td>🥉 Bronze Medal Awarded!</td>
+<td><strong>N0CALL</strong> earned bronze in QSO Race</td>
+<td>Bronze</td>
+</tr>
+<tr>
+<td><strong>New Signup</strong></td>
+<td>👋 New Competitor Joined!</td>
+<td>Welcome <strong>KJ5IRF</strong> to Ham Radio Olympics!</td>
+<td>Green</td>
+</tr>
+<tr>
+<td><strong>Match (Today)</strong></td>
+<td>🚀 Match Starting Today!</td>
+<td><strong>DX Challenge</strong> targeting <strong>EU</strong> starts today</td>
+<td>Red</td>
+</tr>
+<tr>
+<td><strong>Match (Tomorrow)</strong></td>
+<td>⏰ Match Starting Tomorrow!</td>
+<td><strong>POTA Championship</strong> targeting <strong>K-0001</strong> starts tomorrow</td>
+<td>Orange</td>
+</tr>
+<tr>
+<td><strong>Match (7 days)</strong></td>
+<td>📅 Match in 7 Days</td>
+<td><strong>Grid Chase</strong> targeting <strong>FN31</strong> starts in 7 days</td>
+<td>Blue</td>
+</tr>
+<tr>
+<td><strong>POTA Spot</strong></td>
+<td>📡 POTA Spot Alert!</td>
+<td><strong>W1ABC</strong> is activating <strong>K-0001</strong> (Freq: 14.074, Mode: FT8)</td>
+<td>Green</td>
+</tr>
+</tbody>
+</table>
+<h4 id="deduplication">Deduplication</h4>
+
+<p>
+All Discord notifications are deduplicated to prevent spam:
+</p>
 <ul>
-<li><strong>New World Records</strong> — When someone sets a new distance or cool factor record</li>
-<li><strong>Medal Awards</strong> — When competitors earn gold, silver, or bronze medals</li>
-<li><strong>New Signups</strong> — When a new competitor joins</li>
-<li><strong>Match Reminders</strong> — Notifications at 7 days, 1 day, and day-of for upcoming matches</li>
+<li><strong>Records and medals</strong> are only announced once, even if data is recomputed</li>
+<li><strong>POTA spots</strong> are announced once per 4-hour window, but a new notification is sent if the activator changes frequency or mode</li>
+<li><strong>Match reminders</strong> are sent once per match at each reminder interval</li>
 </ul>
 <h4 id="setting-up-discord-notifications">Setting Up Discord Notifications</h4>
 

@@ -394,12 +394,19 @@ function filterMatches() {
         {% endfor %}
     };
 
+    function formatSpotTooltip(spots) {
+        // Format spot details for tooltip: "W1ABC on SSB, K2XYZ on FT8"
+        if (!spots || spots.length === 0) return 'Active on air now!';
+        return spots.map(s => s.activator + ' on ' + s.mode).join(', ');
+    }
+
     async function updateLiveIndicators() {
         try {
-            const resp = await fetch('/api/v1/spots');
+            const resp = await fetch('/api/v1/spots?sport_id={{ sport.id }}');
             if (!resp.ok) return;
             const data = await resp.json();
             const activeParks = new Set(data.parks_with_spots || []);
+            const spotDetails = data.spot_details || {};
 
             let activeCount = 0;
             const activeMatchParks = [];
@@ -407,9 +414,14 @@ function filterMatches() {
                 const park = el.getAttribute('data-park');
                 if (activeParks.has(park)) {
                     el.style.display = 'inline';
+                    el.title = formatSpotTooltip(spotDetails[park]);
                     activeCount++;
                     if (parkMatches[park]) {
-                        activeMatchParks.push({ park: park, ...parkMatches[park] });
+                        activeMatchParks.push({
+                            park: park,
+                            spots: spotDetails[park] || [],
+                            ...parkMatches[park]
+                        });
                     }
                 } else {
                     el.style.display = 'none';
@@ -424,16 +436,17 @@ function filterMatches() {
                     summary.innerHTML = '<span class="live-indicator">📡</span> ' + activeCount + ' of {{ total_matches }} parks have activators on the air right now';
                     summary.style.color = 'var(--text-primary)';
 
-                    // Build list of active parks with links
+                    // Build list of active parks with links and tooltips
                     if (parksList && activeMatchParks.length > 0) {
-                        const links = activeMatchParks.map(p =>
-                            '<a href="/olympiad/sport/{{ sport.id }}/match/' + p.id + '" style="margin-right: 12px; white-space: nowrap;">📡 ' + p.display + '</a>'
-                        ).join('');
+                        const links = activeMatchParks.map(p => {
+                            const tooltip = formatSpotTooltip(p.spots);
+                            return '<a href="/olympiad/sport/{{ sport.id }}/match/' + p.id + '" style="margin-right: 12px; white-space: nowrap;" title="' + tooltip.replace(/"/g, '&quot;') + '">📡 ' + p.display + '</a>';
+                        }).join('');
                         parksList.innerHTML = '<strong style="margin-right: 10px;">Active now:</strong>' + links;
                         parksList.style.display = 'block';
                     }
                 } else {
-                    summary.innerHTML = 'No parks reporting spots right now';
+                    summary.innerHTML = 'No parks reporting spots right now{% if sport.allowed_modes %} (filtering for {{ sport.allowed_modes }}){% endif %}';
                     summary.style.color = 'var(--text-secondary)';
                     if (parksList) parksList.style.display = 'none';
                 }

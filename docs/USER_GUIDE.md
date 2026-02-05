@@ -688,10 +688,36 @@ Ham Radio Olympics can send automatic notifications to a Discord channel when ke
 
 #### What Gets Posted to Discord
 
-- **New World Records** — When someone sets a new distance or cool factor record
-- **Medal Awards** — When competitors earn gold, silver, or bronze medals
-- **New Signups** — When a new competitor joins
-- **Match Reminders** — Notifications at 7 days, 1 day, and day-of for upcoming matches
+| Event | When It Triggers | Deduplication |
+|-------|------------------|---------------|
+| **New World Records** | Someone sets a new distance or cool factor record | Once per record value |
+| **Medal Awards** | Competitors earn gold, silver, or bronze medals | Once per medal |
+| **New Signups** | A new competitor joins | Once per callsign |
+| **Match Reminders** | 7 days, 1 day, and day-of for upcoming matches | Once per match |
+| **POTA Spot Alerts** | An activator goes live on a park that's an active match target | 4 hours (or if mode/frequency changes) |
+
+#### Message Formats
+
+Each notification type has a distinct appearance in Discord:
+
+| Event | Title | Example Message | Color |
+|-------|-------|-----------------|-------|
+| **World Record** | 🥇 New World Record! 📏 | **KJ5IRF** set a new distance record! Distance: 15,234 km | Gold |
+| **Medal (Gold)** | 🥇 Gold Medal Awarded! | **KJ5IRF** earned gold in QSO Race | Gold |
+| **Medal (Silver)** | 🥈 Silver Medal Awarded! | **W1AW** earned silver in Cool Factor | Silver |
+| **Medal (Bronze)** | 🥉 Bronze Medal Awarded! | **N0CALL** earned bronze in QSO Race | Bronze |
+| **New Signup** | 👋 New Competitor Joined! | Welcome **KJ5IRF** to Ham Radio Olympics! | Green |
+| **Match (Today)** | 🚀 Match Starting Today! | **DX Challenge** targeting **EU** starts today | Red |
+| **Match (Tomorrow)** | ⏰ Match Starting Tomorrow! | **POTA Championship** targeting **K-0001** starts tomorrow | Orange |
+| **Match (7 days)** | 📅 Match in 7 Days | **Grid Chase** targeting **FN31** starts in 7 days | Blue |
+| **POTA Spot** | 📡 POTA Spot Alert! | **W1ABC** is activating **K-0001** (Freq: 14.074, Mode: FT8) | Green |
+
+#### Deduplication
+
+All Discord notifications are deduplicated to prevent spam:
+- **Records and medals** are only announced once, even if data is recomputed
+- **POTA spots** are announced once per 4-hour window, but a new notification is sent if the activator changes frequency or mode
+- **Match reminders** are sent once per match at each reminder interval
 
 #### Setting Up Discord Notifications
 

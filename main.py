@@ -7004,9 +7004,24 @@ async def api_park_lookup(request: Request, reference: str):
 
 @app.get("/api/v1/spots")
 @limiter.limit("30/minute")
-async def api_all_spots(request: Request):
-    """Get all current POTA spots (returns list of park references with spots)."""
+async def api_all_spots(request: Request, sport_id: Optional[int] = None):
+    """Get all current POTA spots (returns list of park references with spots).
+
+    If sport_id is provided, filters spots to only include modes allowed by that sport.
+    Also returns spot details (activator, mode) for tooltip display.
+    """
     import httpx
+    from scoring import is_mode_allowed
+
+    # Get allowed_modes for the sport if specified
+    allowed_modes = None
+    if sport_id:
+        with get_db() as conn:
+            sport = conn.execute(
+                "SELECT allowed_modes FROM sports WHERE id = ?", (sport_id,)
+            ).fetchone()
+            if sport:
+                allowed_modes = sport["allowed_modes"]
 
     try:
         async with httpx.AsyncClient() as client:
@@ -7017,20 +7032,37 @@ async def api_all_spots(request: Request):
             if response.status_code == 200:
                 all_spots = response.json()
                 if not all_spots:
-                    return {"parks_with_spots": []}
+                    return {"parks_with_spots": [], "spot_details": {}}
 
-                # Get unique park references that have spots
-                parks_with_spots = list(set(
-                    spot.get("reference")
-                    for spot in all_spots
-                    if spot.get("reference")
-                ))
+                # Filter by allowed modes if specified
+                if allowed_modes:
+                    all_spots = [
+                        spot for spot in all_spots
+                        if is_mode_allowed(spot.get("mode", ""), allowed_modes)
+                    ]
 
-                return {"parks_with_spots": parks_with_spots}
+                # Build park -> spot details mapping for tooltips
+                # Group by park, showing activator and mode
+                spot_details = {}
+                for spot in all_spots:
+                    park = spot.get("reference")
+                    if not park:
+                        continue
+                    if park not in spot_details:
+                        spot_details[park] = []
+                    spot_details[park].append({
+                        "activator": spot.get("activator", "Unknown"),
+                        "mode": spot.get("mode", "?"),
+                        "frequency": spot.get("frequency", "")
+                    })
+
+                parks_with_spots = list(spot_details.keys())
+
+                return {"parks_with_spots": parks_with_spots, "spot_details": spot_details}
             else:
-                return {"parks_with_spots": []}
+                return {"parks_with_spots": [], "spot_details": {}}
     except httpx.RequestError:
-        return {"parks_with_spots": []}
+        return {"parks_with_spots": [], "spot_details": {}}
 
 
 @app.get("/api/v1/park/{reference}/spots")
