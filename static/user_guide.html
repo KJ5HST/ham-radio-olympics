@@ -266,6 +266,7 @@
 <li><a href="#95-managing-competitors">Managing Competitors</a></li>
 <li><a href="#96-managing-teams">Managing Teams</a></li>
 <li><a href="#97-site-settings">Site Settings</a></li>
+<li><a href="#98-discord-notifications">Discord Notifications</a></li>
 </ul>
 </li>
 <li><a href="#10-deployment--configuration">Deployment & Configuration</a>
@@ -1294,6 +1295,61 @@ Administrators can customize the site appearance:
 <li><strong>Site Name:</strong> Customize the site title</li>
 <li><strong>Tagline:</strong> Set a custom tagline displayed in the header</li>
 <li><strong>QRZ Credentials:</strong> Configure QRZ XML API for callsign lookups</li>
+</ul>
+<h3 id="98-discord-notifications">9.8 Discord Notifications</h3>
+
+<p>
+Ham Radio Olympics can send automatic notifications to a Discord channel when key events occur. This keeps your club informed about competition activity in real-time.
+</p>
+
+<h4 id="what-gets-posted-to-discord">What Gets Posted to Discord</h4>
+
+<ul>
+<li><strong>New World Records</strong> — When someone sets a new distance or cool factor record</li>
+<li><strong>Medal Awards</strong> — When competitors earn gold, silver, or bronze medals</li>
+<li><strong>New Signups</strong> — When a new competitor joins</li>
+<li><strong>Match Reminders</strong> — Notifications at 7 days, 1 day, and day-of for upcoming matches</li>
+</ul>
+<h4 id="setting-up-discord-notifications">Setting Up Discord Notifications</h4>
+
+<p>
+<strong>Step 1: Create a Webhook in Discord</strong>
+</p>
+
+<ol>
+<li>Open Discord and go to your server
+<li>Click the server name at the top → <strong>Server Settings</strong>
+<li>In the left menu, go to <strong>Apps</strong> → <strong>Integrations</strong>
+<li>Click <strong>Webhooks</strong> → <strong>New Webhook</strong>
+<li>Configure the webhook:
+<ul>
+<li><strong>Name:</strong> Give it a name like "Ham Radio Olympics" (this appears as the sender)</li>
+<li><strong>Channel:</strong> Select which channel should receive notifications</li>
+<li><strong>Avatar (optional):</strong> Use the Ham Radio Olympics icon: <code>https://kd5dx.fly.dev/static/icon-512.png</code></li>
+</ul>
+</li>
+<li>Click <strong>Copy Webhook URL</strong>
+</li>
+</ol>
+<p>
+<strong>Step 2: Add the Webhook to Ham Radio Olympics</strong>
+</p>
+
+<ol>
+<li>Log in as an administrator
+<li>Go to <strong>Admin</strong> → <strong>Settings</strong>
+<li>Find the <strong>Discord Notifications</strong> section
+<li>Paste the webhook URL
+<li>Click <strong>Save</strong>
+<li>Click <strong>Test</strong> to verify — you should see a test message in your Discord channel
+</li>
+</ol>
+<h4 id="troubleshooting">Troubleshooting</h4>
+
+<ul>
+<li><strong>Test message not appearing:</strong> Verify the webhook URL starts with <code>https://discord.com/api/webhooks/</code></li>
+<li><strong>Wrong channel:</strong> Edit the webhook in Discord Server Settings to change the target channel</li>
+<li><strong>Want to disable:</strong> Click <strong>Clear</strong> in the admin settings to stop Discord notifications</li>
 </ul>
 <hr>
 

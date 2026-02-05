@@ -58,6 +58,7 @@
    - [Managing Competitors](#95-managing-competitors)
    - [Managing Teams](#96-managing-teams)
    - [Site Settings](#97-site-settings)
+   - [Discord Notifications](#98-discord-notifications)
 10. [Deployment & Configuration](#10-deployment--configuration)
     - [Environment Variables](#101-environment-variables)
     - [Local Development](#102-local-development)
@@ -680,6 +681,46 @@ Administrators can customize the site appearance:
 - **Site Name:** Customize the site title
 - **Tagline:** Set a custom tagline displayed in the header
 - **QRZ Credentials:** Configure QRZ XML API for callsign lookups
+
+### 9.8 Discord Notifications
+
+Ham Radio Olympics can send automatic notifications to a Discord channel when key events occur. This keeps your club informed about competition activity in real-time.
+
+#### What Gets Posted to Discord
+
+- **New World Records** — When someone sets a new distance or cool factor record
+- **Medal Awards** — When competitors earn gold, silver, or bronze medals
+- **New Signups** — When a new competitor joins
+- **Match Reminders** — Notifications at 7 days, 1 day, and day-of for upcoming matches
+
+#### Setting Up Discord Notifications
+
+**Step 1: Create a Webhook in Discord**
+
+1. Open Discord and go to your server
+2. Click the server name at the top → **Server Settings**
+3. In the left menu, go to **Apps** → **Integrations**
+4. Click **Webhooks** → **New Webhook**
+5. Configure the webhook:
+   - **Name:** Give it a name like "Ham Radio Olympics" (this appears as the sender)
+   - **Channel:** Select which channel should receive notifications
+   - **Avatar (optional):** Use the Ham Radio Olympics icon: `https://kd5dx.fly.dev/static/icon-512.png`
+6. Click **Copy Webhook URL**
+
+**Step 2: Add the Webhook to Ham Radio Olympics**
+
+1. Log in as an administrator
+2. Go to **Admin** → **Settings**
+3. Find the **Discord Notifications** section
+4. Paste the webhook URL
+5. Click **Save**
+6. Click **Test** to verify — you should see a test message in your Discord channel
+
+#### Troubleshooting
+
+- **Test message not appearing:** Verify the webhook URL starts with `https://discord.com/api/webhooks/`
+- **Wrong channel:** Edit the webhook in Discord Server Settings to change the target channel
+- **Want to disable:** Click **Clear** in the admin settings to stop Discord notifications
 
 ---
 
