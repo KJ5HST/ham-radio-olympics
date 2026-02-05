@@ -384,9 +384,9 @@ function filterMatches() {
 {% if sport.target_type == 'park' %}
 <script>
 (function() {
-    // Build map of park -> match info
+    // Build map of park -> match info from ACTIVE matches (by date, not pagination)
     const parkMatches = {
-        {% for match in matches %}
+        {% for match in active_matches %}
         "{{ match.target_value }}": {
             id: {{ match.id }},
             display: "{{ match.target_display | replace('"', '\\"') }}"
@@ -394,10 +394,11 @@ function filterMatches() {
         {% endfor %}
     };
 
-    function formatSpotTooltip(spots) {
-        // Format spot details for tooltip: "W1ABC on SSB, K2XYZ on FT8"
-        if (!spots || spots.length === 0) return 'Active on air now!';
-        return spots.map(s => s.activator + ' on ' + s.mode).join(', ');
+    function formatSpotTooltip(parkName, spots) {
+        // Format: "Park Name: W1ABC on SSB, K2XYZ on FT8"
+        if (!spots || spots.length === 0) return parkName + ': Active on air now!';
+        const activators = spots.map(s => s.activator + ' on ' + s.mode).join(', ');
+        return parkName + ': ' + activators;
     }
 
     async function updateLiveIndicators() {
@@ -414,13 +415,15 @@ function filterMatches() {
                 const park = el.getAttribute('data-park');
                 if (activeParks.has(park)) {
                     el.style.display = 'inline';
-                    el.title = formatSpotTooltip(spotDetails[park]);
+                    const parkInfo = parkMatches[park];
+                    const parkName = parkInfo ? parkInfo.display : park;
+                    el.title = formatSpotTooltip(parkName, spotDetails[park]);
                     activeCount++;
-                    if (parkMatches[park]) {
+                    if (parkInfo) {
                         activeMatchParks.push({
                             park: park,
                             spots: spotDetails[park] || [],
-                            ...parkMatches[park]
+                            ...parkInfo
                         });
                     }
                 } else {
@@ -439,7 +442,7 @@ function filterMatches() {
                     // Build list of active parks with links and tooltips
                     if (parksList && activeMatchParks.length > 0) {
                         const links = activeMatchParks.map(p => {
-                            const tooltip = formatSpotTooltip(p.spots);
+                            const tooltip = formatSpotTooltip(p.display, p.spots);
                             return '<a href="/olympiad/sport/{{ sport.id }}/match/' + p.id + '" style="margin-right: 12px; white-space: nowrap;" title="' + tooltip.replace(/"/g, '&quot;') + '">📡 ' + p.display + '</a>';
                         }).join('');
                         parksList.innerHTML = '<strong style="margin-right: 10px;">Active now:</strong>' + links;

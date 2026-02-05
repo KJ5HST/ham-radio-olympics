@@ -1346,11 +1346,25 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: Option
         )
         entry_count = cursor.fetchone()["count"]
 
+        # Get currently active matches (by date) for POTA spot indicators
+        # This is separate from paginated matches to ensure spots always show
+        active_matches = []
+        if sport["target_type"] == "park":
+            now = datetime.utcnow().strftime("%Y-%m-%d")
+            cursor = conn.execute("""
+                SELECT id, target_value FROM matches
+                WHERE sport_id = ? AND start_date <= ? AND end_date >= ?
+            """, (sport_id, now, now))
+            active_matches = [dict(row) for row in cursor.fetchall()]
+            for match in active_matches:
+                match["target_display"] = format_target_display(match["target_value"], sport["target_type"])
+
         return templates.TemplateResponse("sport.html", {
             "request": request,
             "user": user,
             "sport": dict(sport),
             "matches": matches,
+            "active_matches": active_matches,
             "standings": standings,
             "medal_details": medal_details,
             "is_entered": is_entered,
