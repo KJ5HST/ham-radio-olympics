@@ -303,7 +303,7 @@ function toggleQsoDetails(qsoId) {
                 <span class="live-indicator" data-park="{{ match.target_value }}" style="display: none;" title="Active on air now!">📡</span>
                 {% endif %}
             </td>
-            <td><span class="status-badge" data-start="{{ match.start_date }}" data-end="{{ match.end_date }}">...</span></td>
+            <td><span class="status-badge" data-start="{{ match.start_date }}" data-end="{{ match.end_date }}"></span></td>
             <td>{{ match.start_date | format_date }}</td>
             <td>{{ match.end_date | format_date }}</td>
             <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn btn-sm"><span class="icon">👁️</span> View</a></td>
@@ -333,19 +333,24 @@ function toggleQsoDetails(qsoId) {
 <script>
 (function() {
     document.querySelectorAll('.status-badge[data-start]').forEach(function(badge) {
-        var start = new Date(badge.dataset.start + 'T00:00:00');
-        var end = new Date(badge.dataset.end + 'T23:59:59');
+        // Parse dates - handle "YYYY-MM-DD" or "YYYY-MM-DD HH:MM:SS" formats
+        // Treat as UTC by appending Z
+        var startStr = badge.dataset.start.replace(' ', 'T');
+        var endStr = badge.dataset.end.replace(' ', 'T');
+        // If no time component, add it
+        if (startStr.length === 10) startStr += 'T00:00:00';
+        if (endStr.length === 10) endStr += 'T23:59:59';
+        // Append Z to treat as UTC
+        var start = new Date(startStr + 'Z');
+        var end = new Date(endStr + 'Z');
         var now = new Date();
 
-        if (now < start) {
-            badge.textContent = 'Upcoming';
-            badge.classList.add('status-upcoming');
-        } else if (now > end) {
-            badge.textContent = 'Ended';
-            badge.classList.add('status-ended');
-        } else {
-            badge.textContent = '● Active';
+        if (now >= start && now <= end) {
             badge.classList.add('status-active');
+            badge.title = 'Active - eligible for points';
+        } else {
+            badge.classList.add('status-inactive');
+            badge.title = now < start ? 'Upcoming' : 'Ended';
         }
     });
 

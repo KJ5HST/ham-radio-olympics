@@ -17,8 +17,64 @@ from crypto import decrypt_api_key
 from qrz_client import fetch_qsos, QSOData, QRZAPIError
 from lotw_client import fetch_lotw_qsos, LoTWError
 from grid_distance import grid_distance
-from scoring import recompute_match_medals, compute_team_standings
+from scoring import (
+    recompute_match_medals, compute_team_standings,
+    compute_triathlon_leaders, get_honorable_mentions, compute_mode_records
+)
 from dxcc import get_continent_from_callsign
+import json
+
+
+def precompute_records_cache():
+    """
+    Pre-compute expensive records data and cache in settings table.
+
+    This runs during sync to avoid expensive on-the-fly computation
+    when the /records page is loaded.
+
+    Caches:
+    - triathlon_leaders: Top triathlon QSOs
+    - honorable_mentions: Best QSOs outside competition
+    - distance_records: Mode-specific distance records
+    - cool_factor_records: Mode-specific cool factor records
+    """
+    from database import set_setting
+
+    logger.info("Pre-computing records cache...")
+
+    # Compute triathlon leaders
+    try:
+        triathlon = compute_triathlon_leaders(limit=3)
+        set_setting("cache_triathlon_leaders", json.dumps(triathlon))
+        logger.info(f"Cached {len(triathlon)} triathlon leaders")
+    except Exception as e:
+        logger.error(f"Error computing triathlon leaders: {e}")
+        set_setting("cache_triathlon_leaders", json.dumps([]))
+
+    # Compute honorable mentions
+    try:
+        mentions = get_honorable_mentions()
+        set_setting("cache_honorable_mentions", json.dumps(mentions))
+        logger.info(f"Cached honorable mentions: {mentions}")
+    except Exception as e:
+        logger.error(f"Error computing honorable mentions: {e}")
+        set_setting("cache_honorable_mentions", json.dumps({
+            'longest_distance': None,
+            'highest_cool_factor': None,
+        }))
+
+    # Compute mode records
+    try:
+        distance_recs, cf_recs = compute_mode_records()
+        set_setting("cache_distance_records", json.dumps(distance_recs))
+        set_setting("cache_cool_factor_records", json.dumps(cf_recs))
+        logger.info(f"Cached {len(distance_recs)} distance records, {len(cf_recs)} cool factor records")
+    except Exception as e:
+        logger.error(f"Error computing mode records: {e}")
+        set_setting("cache_distance_records", json.dumps([]))
+        set_setting("cache_cool_factor_records", json.dumps([]))
+
+    logger.info("Records cache pre-computation complete")
 
 
 def delete_competitor_qsos(callsign: str) -> int:
@@ -1082,6 +1138,9 @@ def recompute_all_active_matches():
         for match_id in sport_matches:
             compute_team_standings(sport_id, match_id)
 
+    # Pre-compute records cache for the /records page
+    precompute_records_cache()
+
     # Regenerate cached PDF once after all medals/records are updated
     from pdf_export import regenerate_active_olympiad_pdf
     regenerate_active_olympiad_pdf()
@@ -1103,6 +1162,9 @@ def recompute_sport_matches(sport_id: int):
     compute_team_standings(sport_id)
     for match_id in match_ids:
         compute_team_standings(sport_id, match_id)
+
+    # Pre-compute records cache for the /records page
+    precompute_records_cache()
 
     # Regenerate cached PDF once after all medals/records are updated
     from pdf_export import regenerate_active_olympiad_pdf

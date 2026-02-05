@@ -1364,3 +1364,122 @@ def compute_triathlon_leaders(limit: int = 3) -> List[dict]:
                     break
 
         return unique_leaders
+
+
+def compute_mode_records() -> Tuple[List[dict], List[dict]]:
+    """
+    Compute distance and cool factor records by mode.
+
+    Returns:
+        Tuple of (distance_records, cool_factor_records)
+        Each record contains: mode, value, holder, holder_name, sport_id,
+        match_id, sport_name, target, dx_callsign, power, cool_factor/distance,
+        date, my_sig_info
+    """
+    distance_records = []
+    cool_factor_records = []
+
+    with get_db() as conn:
+        # Get all global records that have a qso_id (actual records, not placeholders)
+        cursor = conn.execute("""
+            SELECT r.record_type, r.value, r.qso_id, r.match_id,
+                   q.competitor_callsign as holder, q.dx_callsign, q.mode, q.band,
+                   q.tx_power_w, q.distance_km, q.cool_factor, q.qso_datetime_utc,
+                   q.my_sig_info,
+                   c.first_name as holder_name,
+                   m.target_value as target,
+                   s.id as sport_id, s.name as sport_name
+            FROM records r
+            JOIN qsos q ON r.qso_id = q.id
+            JOIN competitors c ON q.competitor_callsign = c.callsign
+            LEFT JOIN matches m ON r.match_id = m.id
+            LEFT JOIN sports s ON m.sport_id = s.id
+            WHERE r.callsign IS NULL AND r.sport_id IS NULL
+            AND q.mode IS NOT NULL
+        """)
+        world_records = [dict(row) for row in cursor.fetchall()]
+
+        # Get distinct modes from confirmed QSOs
+        cursor = conn.execute("""
+            SELECT DISTINCT mode FROM qsos
+            WHERE is_confirmed = 1 AND mode IS NOT NULL AND mode != ''
+        """)
+        modes = [row["mode"] for row in cursor.fetchall()]
+
+        # For each mode, find the best distance and cool factor records
+        for mode in modes:
+            # Best distance for this mode
+            cursor = conn.execute("""
+                SELECT q.id, q.competitor_callsign as holder, q.dx_callsign,
+                       q.distance_km as value, q.tx_power_w as power, q.cool_factor,
+                       q.qso_datetime_utc as date, q.my_sig_info,
+                       c.first_name as holder_name,
+                       NULL as target, NULL as match_id,
+                       NULL as sport_id, NULL as sport_name
+                FROM qsos q
+                JOIN competitors c ON q.competitor_callsign = c.callsign
+                WHERE q.is_confirmed = 1
+                AND q.mode = ?
+                AND q.distance_km IS NOT NULL
+                AND q.distance_km > 0
+                ORDER BY q.distance_km DESC
+                LIMIT 1
+            """, (mode,))
+            row = cursor.fetchone()
+            if row:
+                distance_records.append({
+                    "mode": mode,
+                    "value": row["value"],
+                    "holder": row["holder"],
+                    "holder_name": row["holder_name"],
+                    "sport_id": row["sport_id"],
+                    "match_id": row["match_id"],
+                    "sport_name": row["sport_name"],
+                    "target": row["target"],
+                    "dx_callsign": row["dx_callsign"],
+                    "power": row["power"],
+                    "cool_factor": row["cool_factor"],
+                    "date": row["date"],
+                    "my_sig_info": row["my_sig_info"],
+                })
+
+            # Best cool factor for this mode
+            cursor = conn.execute("""
+                SELECT q.id, q.competitor_callsign as holder, q.dx_callsign,
+                       q.cool_factor as value, q.tx_power_w as power, q.distance_km as distance,
+                       q.qso_datetime_utc as date, q.my_sig_info,
+                       c.first_name as holder_name,
+                       NULL as target, NULL as match_id,
+                       NULL as sport_id, NULL as sport_name
+                FROM qsos q
+                JOIN competitors c ON q.competitor_callsign = c.callsign
+                WHERE q.is_confirmed = 1
+                AND q.mode = ?
+                AND q.cool_factor IS NOT NULL
+                AND q.cool_factor > 0
+                ORDER BY q.cool_factor DESC
+                LIMIT 1
+            """, (mode,))
+            row = cursor.fetchone()
+            if row:
+                cool_factor_records.append({
+                    "mode": mode,
+                    "value": row["value"],
+                    "holder": row["holder"],
+                    "holder_name": row["holder_name"],
+                    "sport_id": row["sport_id"],
+                    "match_id": row["match_id"],
+                    "sport_name": row["sport_name"],
+                    "target": row["target"],
+                    "dx_callsign": row["dx_callsign"],
+                    "power": row["power"],
+                    "distance": row["distance"],
+                    "date": row["date"],
+                    "my_sig_info": row["my_sig_info"],
+                })
+
+    # Sort by value descending
+    distance_records.sort(key=lambda x: x["value"], reverse=True)
+    cool_factor_records.sort(key=lambda x: x["value"], reverse=True)
+
+    return distance_records, cool_factor_records

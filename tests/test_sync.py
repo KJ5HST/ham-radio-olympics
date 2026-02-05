@@ -95,7 +95,7 @@ class TestUpsertQSO:
         with get_db() as conn:
             result = _upsert_qso(conn, "W1TEST", qso)
 
-        assert result == "new"
+        assert result["status"] == "new"
 
         with get_db() as conn:
             cursor = conn.execute("SELECT * FROM qsos WHERE competitor_callsign = ?", ("W1TEST",))
@@ -131,7 +131,7 @@ class TestUpsertQSO:
         with get_db() as conn:
             result = _upsert_qso(conn, "W1TEST", qso)
 
-        assert result == "updated"
+        assert result["status"] == "updated"
 
         with get_db() as conn:
             cursor = conn.execute("SELECT is_confirmed FROM qsos WHERE qrz_logid = ?", ("12345",))
@@ -161,7 +161,7 @@ class TestUpsertQSO:
             result = _upsert_qso(conn, "W1TEST", qso)
 
         # Always returns "updated" to ensure we never miss field changes
-        assert result == "updated"
+        assert result["status"] == "updated"
 
     def test_distance_calculated(self, registered_competitor):
         """Test that distance is calculated from grids."""
@@ -534,7 +534,7 @@ class TestSyncEdgeCases:
         with get_db() as conn:
             result = _upsert_qso(conn, "W1TEST", qso)
 
-        assert result == "new"
+        assert result["status"] == "new"
 
         # Verify QSO was saved but without distance/cool_factor
         with get_db() as conn:
@@ -812,12 +812,12 @@ class TestSyncCompetitorWithKey:
         assert result["callsign"] == "W1TEST"
         assert result["new_qsos"] == 1
         # Verify fetch was called with correct API key and confirmed_only flag
-        # since_date is now passed for incremental sync optimization
+        # after_logid is now used for incremental sync (more reliable than date filter)
         mock_fetch.assert_called_once()
         call_args = mock_fetch.call_args
         assert call_args[0][0] == "provided-api-key"
         assert call_args[1]["confirmed_only"] is False
-        assert "since_date" in call_args[1]  # Incremental sync uses date filtering
+        assert "after_logid" in call_args[1]  # Incremental sync uses logid filtering
 
     @patch('sync.fetch_qsos')
     def test_sync_with_key_empty(self, mock_fetch, registered_competitor):

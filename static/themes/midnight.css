@@ -290,29 +290,21 @@ tr {
     text-shadow: 0 0 8px rgba(160, 82, 45, 0.4) !important;
 }
 
-/* Status badges */
+/* Status dots - eligibility indicator */
 .status-badge {
-    border-radius: var(--radius-sm) !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.05em !important;
-    font-size: 0.75rem !important;
+    display: inline-block !important;
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    vertical-align: middle !important;
 }
 
 .status-active {
-    background: linear-gradient(135deg, #2e7d32 0%, #388e3c 100%) !important;
-    color: white !important;
-    box-shadow: 0 2px 8px rgba(46, 125, 50, 0.3) !important;
+    background: #2e7d32 !important;
 }
 
-.status-upcoming {
-    background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%) !important;
-    color: white !important;
-    box-shadow: 0 2px 8px rgba(21, 101, 192, 0.3) !important;
-}
-
-.status-ended {
-    background: var(--bg-card-solid) !important;
-    color: var(--text-secondary) !important;
+.status-inactive {
+    background: #546e7a !important;
 }
 
 /* Alerts */

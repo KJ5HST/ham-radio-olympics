@@ -1175,7 +1175,7 @@ async def get_sport(request: Request, sport_id: int, page: int = 1, user: Option
             LEFT JOIN competitors c ON m.callsign = c.callsign
             WHERE ma.sport_id = ?
             GROUP BY m.callsign, m.role, c.first_name
-            ORDER BY total_points DESC
+            ORDER BY total_points DESC, gold DESC, silver DESC, bronze DESC, m.callsign
         """, (sport_id,))
         standings = [dict(row) for row in cursor.fetchall()]
 
@@ -1590,7 +1590,10 @@ async def leave_sport(sport_id: int, user: User = Depends(require_user)):
 
 @app.get("/records", response_class=HTMLResponse)
 async def get_records(request: Request, user: Optional[User] = Depends(require_user_or_public)):
-    """Get world records page."""
+    """Get world records page. Records are pre-computed during sync."""
+    import json
+    from database import get_setting
+
     with get_db() as conn:
         # Global records (sport_id IS NULL, callsign IS NULL) with holder names and match info
         cursor = conn.execute("""
@@ -1611,141 +1614,30 @@ async def get_records(request: Request, user: Optional[User] = Depends(require_u
         """)
         world_records = [dict(row) for row in cursor.fetchall()]
 
-        # Per-mode records from medal-qualifying QSOs only
-        # Join medals with QSOs to find actual QSOs that earned medals
-        # Then rank by distance/cool_factor per mode
-        # Note: We filter by target matching and allowed_modes in Python
-        cursor = conn.execute("""
-            WITH medal_competitor_matches AS (
-                -- Get all competitor/match pairs that have medals
-                SELECT DISTINCT med.callsign, med.match_id
-                FROM medals med
-                WHERE med.qualified = 1
-            )
-            SELECT q.id, q.mode, q.distance_km, q.cool_factor, q.competitor_callsign,
-                   q.qso_datetime_utc, q.tx_power_w, q.dx_callsign, q.my_sig_info,
-                   q.dx_sig_info, q.dx_dxcc, q.my_dxcc, q.dx_grid, q.my_grid,
-                   c.first_name, m.id as match_id, m.target_value,
-                   s.id as sport_id, s.name as sport_name, s.target_type,
-                   s.work_enabled, s.activate_enabled,
-                   COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes
-            FROM medal_competitor_matches mcm
-            INNER JOIN matches m ON mcm.match_id = m.id
-            INNER JOIN sports s ON m.sport_id = s.id
-            INNER JOIN qsos q ON q.competitor_callsign = mcm.callsign
-                             AND q.qso_datetime_utc >= m.start_date
-                             AND q.qso_datetime_utc <= m.end_date
-                             AND q.is_confirmed = 1
-            LEFT JOIN competitors c ON q.competitor_callsign = c.callsign
-            WHERE q.mode IS NOT NULL AND q.mode != ''
-        """)
-        candidate_qsos = cursor.fetchall()
+    # Load pre-computed data from cache
+    triathlon_json = get_setting("cache_triathlon_leaders")
+    triathlon_leaders = json.loads(triathlon_json) if triathlon_json else []
 
-        # Import filtering functions
-        from scoring import is_mode_allowed, matches_target, normalize_mode, compute_triathlon_leaders, get_honorable_mentions
+    mentions_json = get_setting("cache_honorable_mentions")
+    honorable_mentions = json.loads(mentions_json) if mentions_json else {}
 
-        # Build mode records (filtering by target matching and allowed_modes)
-        mode_best = {}
-        for qso in candidate_qsos:
-            qso_dict = dict(qso)
-            raw_mode = qso_dict['mode']
+    distance_json = get_setting("cache_distance_records")
+    distance_records = json.loads(distance_json) if distance_json else []
 
-            # Skip QSOs whose mode isn't allowed for the sport/match
-            allowed_modes = qso_dict.get('allowed_modes')
-            if not is_mode_allowed(raw_mode, allowed_modes):
-                continue
+    cf_json = get_setting("cache_cool_factor_records")
+    cool_factor_records = json.loads(cf_json) if cf_json else []
 
-            # Skip QSOs that don't match the target for this match
-            target_type = qso_dict.get('target_type')
-            target_value = qso_dict.get('target_value')
-            work_enabled = qso_dict.get('work_enabled')
-            activate_enabled = qso_dict.get('activate_enabled')
-
-            qso_matches = False
-            if work_enabled and matches_target(qso_dict, target_type, target_value, "work"):
-                qso_matches = True
-            if activate_enabled and matches_target(qso_dict, target_type, target_value, "activate"):
-                qso_matches = True
-
-            if not qso_matches:
-                continue
-
-            # Normalize mode (USB/LSB -> SSB, etc.)
-            mode = normalize_mode(raw_mode)
-
-            if mode not in mode_best:
-                mode_best[mode] = {'max_distance': 0, 'max_cool_factor': 0}
-
-            if qso_dict['distance_km'] and qso_dict['distance_km'] > mode_best[mode]['max_distance']:
-                mode_best[mode]['max_distance'] = qso_dict['distance_km']
-                mode_best[mode]['distance_qso'] = qso_dict
-
-            if qso_dict['cool_factor'] and qso_dict['cool_factor'] > mode_best[mode]['max_cool_factor']:
-                mode_best[mode]['max_cool_factor'] = qso_dict['cool_factor']
-                mode_best[mode]['cool_factor_qso'] = qso_dict
-
-        # Build separate lists for distance and cool factor records
-        distance_records = []
-        cool_factor_records = []
-
-        for mode, data in mode_best.items():
-            if 'distance_qso' in data and data['max_distance']:
-                d = data['distance_qso']
-                distance_records.append({
-                    'mode': mode,
-                    'value': data['max_distance'],
-                    'holder': d['competitor_callsign'],
-                    'holder_name': d['first_name'],
-                    'match_id': d['match_id'],
-                    'sport_id': d['sport_id'],
-                    'sport_name': d['sport_name'],
-                    'target': d['target_value'],
-                    'date': d['qso_datetime_utc'],
-                    'dx_callsign': d.get('dx_callsign'),
-                    'power': d.get('tx_power_w'),
-                    'cool_factor': d.get('cool_factor'),
-                    'my_sig_info': d.get('my_sig_info'),  # Activation indicator
-                })
-
-            if 'cool_factor_qso' in data and data['max_cool_factor']:
-                cf = data['cool_factor_qso']
-                cool_factor_records.append({
-                    'mode': mode,
-                    'value': data['max_cool_factor'],
-                    'holder': cf['competitor_callsign'],
-                    'holder_name': cf['first_name'],
-                    'match_id': cf['match_id'],
-                    'sport_id': cf['sport_id'],
-                    'sport_name': cf['sport_name'],
-                    'target': cf['target_value'],
-                    'date': cf['qso_datetime_utc'],
-                    'dx_callsign': cf.get('dx_callsign'),
-                    'power': cf.get('tx_power_w'),
-                    'distance': cf.get('distance_km'),
-                    'my_sig_info': cf.get('my_sig_info'),  # Activation indicator
-                })
-
-        # Sort each by date (newest first)
-        distance_records.sort(key=lambda x: x.get('date') or '', reverse=True)
-        cool_factor_records.sort(key=lambda x: x.get('date') or '', reverse=True)
-
-        # Get triathlon leaders
-        triathlon_leaders = compute_triathlon_leaders(limit=3)
-
-        # Get honorable mentions (non-competition QSOs that beat records)
-        honorable_mentions = get_honorable_mentions()
-
-        display_prefs = get_display_prefs(user)
-        return templates.TemplateResponse("records.html", {
-            "request": request,
-            "user": user,
-            "world_records": world_records,
-            "distance_records": distance_records,
-            "cool_factor_records": cool_factor_records,
-            "triathlon_leaders": triathlon_leaders,
-            "honorable_mentions": honorable_mentions,
-            "display_prefs": display_prefs,
-        })
+    display_prefs = get_display_prefs(user)
+    return templates.TemplateResponse("records.html", {
+        "request": request,
+        "user": user,
+        "world_records": world_records,
+        "distance_records": distance_records,
+        "cool_factor_records": cool_factor_records,
+        "triathlon_leaders": triathlon_leaders,
+        "honorable_mentions": honorable_mentions,
+        "display_prefs": display_prefs,
+    })
 
 
 @app.get("/medals", response_class=HTMLResponse)

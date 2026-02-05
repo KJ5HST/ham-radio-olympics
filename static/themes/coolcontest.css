@@ -243,33 +243,21 @@ tr {
     text-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
 }
 
-/* Status badges - modern pill style */
+/* Status dots - simple eligibility indicator */
 .status-badge {
-    border-radius: 9999px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    vertical-align: middle;
 }
 
 .status-active {
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    background: #10b981;
 }
 
-.status-upcoming {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-}
-
-.status-ended {
-    background: var(--bg-card-solid);
-    color: var(--text-secondary);
-}
-
-[data-theme="dark"] .status-active,
-[data-theme="dark"] .status-upcoming {
-    box-shadow: 0 2px 12px rgba(16, 185, 129, 0.4);
+.status-inactive {
+    background: #9ca3af;
 }
 
 /* Alerts with modern styling */

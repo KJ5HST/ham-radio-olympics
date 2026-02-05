@@ -9,7 +9,7 @@
  * - User guide: Stale-while-revalidate
  */
 
-const SW_VERSION = '2.0.7';
+const SW_VERSION = '2.0.8';
 const CACHE_PREFIX = 'hro-';
 const STATIC_CACHE = `${CACHE_PREFIX}static-v${SW_VERSION}`;
 const PAGES_CACHE = `${CACHE_PREFIX}pages-v${SW_VERSION}`;
@@ -60,7 +60,8 @@ const NEVER_CACHE = [
 const MAX_RUNTIME_CACHE_ITEMS = 50;
 
 // Network timeout before falling back to cache (ms)
-const NETWORK_TIMEOUT = 3000;
+// 8 seconds to allow for Fly.io cold starts (~1-2s) plus network latency
+const NETWORK_TIMEOUT = 8000;
 
 /**
  * Install Event - Precache static assets
