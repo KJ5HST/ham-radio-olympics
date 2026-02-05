@@ -648,6 +648,30 @@ def init_db():
                 conn.execute(f"DROP TABLE {leftover}")
                 conn.commit()
 
+        # Migration: remove FK constraint from sent_notifications table
+        # (we use synthetic callsigns like '_discord_' that don't exist in competitors)
+        if 'sent_notifications' in tables:
+            table_sql = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='sent_notifications'"
+            ).fetchone()
+            if table_sql and 'FOREIGN KEY' in table_sql[0]:
+                # Backup, drop, recreate without FK
+                conn.execute("ALTER TABLE sent_notifications RENAME TO sent_notifications_old")
+                conn.execute("""
+                    CREATE TABLE sent_notifications (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        callsign TEXT NOT NULL,
+                        notification_type TEXT NOT NULL,
+                        reference_id TEXT,
+                        sent_at TEXT NOT NULL
+                    )
+                """)
+                conn.execute("INSERT INTO sent_notifications SELECT * FROM sent_notifications_old")
+                conn.execute("DROP TABLE sent_notifications_old")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sent_notifications_callsign ON sent_notifications(callsign)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_sent_notifications_type ON sent_notifications(notification_type, reference_id)")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -968,13 +992,14 @@ def init_db():
             );
 
             -- Sent Notifications table (tracks sent notifications to avoid duplicates)
+            -- Note: No foreign key constraint because we use synthetic callsigns like '_discord_'
+            -- for server-wide notifications that aren't tied to a specific competitor
             CREATE TABLE IF NOT EXISTS sent_notifications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 callsign TEXT NOT NULL,
                 notification_type TEXT NOT NULL,
                 reference_id TEXT,
-                sent_at TEXT NOT NULL,
-                FOREIGN KEY (callsign) REFERENCES competitors(callsign) ON DELETE CASCADE
+                sent_at TEXT NOT NULL
             );
 
             -- Indexes for performance
