@@ -896,18 +896,25 @@ async def check_pota_spots_and_notify() -> Dict[str, int]:
             if sport_spot_counts:
                 results["sports_with_spots"] = len(sport_spot_counts)
 
-                # Deduplicate Discord summary (30-minute window)
-                time_bucket = datetime.utcnow().strftime("%Y%m%d%H") + str(datetime.utcnow().minute // 30)
-                discord_ref = f"discord-pota-summary-{time_bucket}"
+                # Check if POTA Discord notifications are enabled
+                if is_discord_notification_enabled("pota"):
+                    # Deduplicate Discord summary using configurable interval
+                    interval_minutes = get_discord_pota_interval()
+                    now = datetime.utcnow()
+                    # Calculate time bucket based on interval
+                    minutes_since_midnight = now.hour * 60 + now.minute
+                    bucket_number = minutes_since_midnight // interval_minutes
+                    time_bucket = now.strftime("%Y%m%d") + f"-{interval_minutes}m-{bucket_number}"
+                    discord_ref = f"discord-pota-summary-{time_bucket}"
 
-                if not was_notification_sent("_discord_", "pota_summary", discord_ref):
-                    try:
-                        app_url = config.APP_BASE_URL.rstrip("/")
-                        if discord_notify_pota_summary(sport_spot_counts, app_url):
-                            results["discord_sent"] = 1
-                            mark_notification_sent("_discord_", "pota_summary", discord_ref)
-                    except Exception as e:
-                        logger.error(f"Failed to send Discord POTA summary: {e}")
+                    if not was_notification_sent("_discord_", "pota_summary", discord_ref):
+                        try:
+                            app_url = config.APP_BASE_URL.rstrip("/")
+                            if discord_notify_pota_summary(sport_spot_counts, app_url):
+                                results["discord_sent"] = 1
+                                mark_notification_sent("_discord_", "pota_summary", discord_ref)
+                        except Exception as e:
+                            logger.error(f"Failed to send Discord POTA summary: {e}")
 
     except httpx.RequestError as e:
         logger.error(f"Failed to fetch POTA spots: {e}")
@@ -968,6 +975,31 @@ def is_discord_configured() -> bool:
     return bool(url and url.strip())
 
 
+def is_discord_notification_enabled(notification_type: str) -> bool:
+    """
+    Check if a specific Discord notification type is enabled.
+
+    Args:
+        notification_type: One of 'signups', 'records', 'medals', 'pota'
+
+    Returns:
+        True if enabled (default), False if explicitly disabled
+    """
+    from database import get_setting
+    setting_key = f"discord_notify_{notification_type}"
+    # Default to enabled (return True unless explicitly set to "0")
+    return get_setting(setting_key) != "0"
+
+
+def get_discord_pota_interval() -> int:
+    """Get the POTA notification interval in minutes (default 30)."""
+    from database import get_setting
+    try:
+        return int(get_setting("discord_pota_interval") or "30")
+    except (ValueError, TypeError):
+        return 30
+
+
 def send_discord_notification(embed: Dict[str, Any]) -> bool:
     """
     Send a notification to Discord webhook.
@@ -1021,6 +1053,9 @@ def discord_notify_record(
         dx_callsign: DX station worked (optional)
     """
     if not is_discord_configured():
+        return False
+
+    if not is_discord_notification_enabled("records"):
         return False
 
     # Only notify on world records for Discord (to avoid spam)
@@ -1097,6 +1132,9 @@ def discord_notify_medal(
     if not is_discord_configured():
         return False
 
+    if not is_discord_notification_enabled("medals"):
+        return False
+
     # Deduplicate: only notify once per callsign/sport/target/medal/competition
     reference = f"discord-medal-{callsign}-{sport_name}-{match_target}-{medal_type}-{competition}"
     if was_notification_sent("_discord_", "medal", reference):
@@ -1145,6 +1183,9 @@ def discord_notify_signup(callsign: str) -> bool:
         callsign: The new competitor's callsign
     """
     if not is_discord_configured():
+        return False
+
+    if not is_discord_notification_enabled("signups"):
         return False
 
     embed = {

@@ -5512,6 +5512,13 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     discord_webhook_url = get_setting("discord_webhook_url")
     discord_configured = bool(discord_webhook_url)
 
+    # Discord notification options (default to enabled)
+    discord_notify_signups = get_setting("discord_notify_signups") != "0"
+    discord_notify_records = get_setting("discord_notify_records") != "0"
+    discord_notify_medals = get_setting("discord_notify_medals") != "0"
+    discord_notify_pota = get_setting("discord_notify_pota") != "0"
+    discord_pota_interval = int(get_setting("discord_pota_interval") or "30")
+
     return templates.TemplateResponse("admin/settings.html", {
         "request": request,
         "user": get_current_user(request),
@@ -5525,6 +5532,11 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
         "admin_email": admin_email,
         "discord_webhook_url": discord_webhook_url,
         "discord_configured": discord_configured,
+        "discord_notify_signups": discord_notify_signups,
+        "discord_notify_records": discord_notify_records,
+        "discord_notify_medals": discord_notify_medals,
+        "discord_notify_pota": discord_notify_pota,
+        "discord_pota_interval": discord_pota_interval,
     })
 
 
@@ -5704,6 +5716,31 @@ async def clear_discord_settings(_: bool = Depends(verify_admin)):
 
     set_setting("discord_webhook_url", None)
     return {"message": "Discord webhook URL cleared"}
+
+
+@app.post("/admin/settings/discord/options")
+async def update_discord_options(
+    request: Request,
+    _: bool = Depends(verify_admin)
+):
+    """Update Discord notification options."""
+    from database import set_setting
+
+    data = await request.json()
+
+    # Save each option
+    set_setting("discord_notify_signups", "1" if data.get("notify_signups", True) else "0")
+    set_setting("discord_notify_records", "1" if data.get("notify_records", True) else "0")
+    set_setting("discord_notify_medals", "1" if data.get("notify_medals", True) else "0")
+    set_setting("discord_notify_pota", "1" if data.get("notify_pota", True) else "0")
+
+    # Save POTA interval (default 30 minutes)
+    pota_interval = data.get("pota_interval", 30)
+    if pota_interval not in [15, 30, 60, 120, 240]:
+        pota_interval = 30
+    set_setting("discord_pota_interval", str(pota_interval))
+
+    return {"message": "Discord notification options saved"}
 
 
 # ============================================================

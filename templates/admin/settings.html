@@ -81,7 +81,7 @@
 <div class="card">
     <h3>Discord Notifications</h3>
     <p style="color: #718096; margin-bottom: 1rem;">
-        Send server-wide notifications to a Discord channel when events occur (new records, medals, signups, match reminders).
+        Send server-wide notifications to a Discord channel when events occur.
         <br>Create a webhook in your Discord server settings under Integrations &rarr; Webhooks.
     </p>
     <form id="discord-form">
@@ -98,6 +98,54 @@
         </div>
     </form>
     <div id="discord-result" style="margin-top: 1rem;"></div>
+
+    {% if discord_configured %}
+    <hr style="margin: 1.5rem 0; border-color: #4a5568;">
+    <h4 style="margin-bottom: 1rem;">Notification Types</h4>
+    <form id="discord-options-form">
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="discord_notify_signups" {% if discord_notify_signups %}checked{% endif %} style="width: auto;">
+                <span>New competitor signups</span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="discord_notify_records" {% if discord_notify_records %}checked{% endif %} style="width: auto;">
+                <span>World records</span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="discord_notify_medals" {% if discord_notify_medals %}checked{% endif %} style="width: auto;">
+                <span>Medal awards</span>
+            </label>
+        </div>
+        <div class="form-group">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="discord_notify_pota" {% if discord_notify_pota %}checked{% endif %} style="width: auto;">
+                <span>POTA spot summaries</span>
+            </label>
+        </div>
+        <div class="form-group" id="pota-interval-group" style="margin-left: 2rem; {% if not discord_notify_pota %}display: none;{% endif %}">
+            <label for="discord_pota_interval">POTA summary interval (minutes)</label>
+            <select id="discord_pota_interval" style="width: auto;">
+                <option value="15" {% if discord_pota_interval == 15 %}selected{% endif %}>15 minutes</option>
+                <option value="30" {% if discord_pota_interval == 30 or not discord_pota_interval %}selected{% endif %}>30 minutes</option>
+                <option value="60" {% if discord_pota_interval == 60 %}selected{% endif %}>1 hour</option>
+                <option value="120" {% if discord_pota_interval == 120 %}selected{% endif %}>2 hours</option>
+                <option value="240" {% if discord_pota_interval == 240 %}selected{% endif %}>4 hours</option>
+            </select>
+            <small style="color: #718096; display: block; margin-top: 0.5rem;">
+                How often to post POTA activity summaries (deduplicated per interval)
+            </small>
+        </div>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success">Save Options</button>
+        </div>
+    </form>
+    <div id="discord-options-result" style="margin-top: 1rem;"></div>
+    {% endif %}
 </div>
 
 <div class="card">
@@ -196,6 +244,49 @@ async function clearDiscord() {
     } catch (err) {
         result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
     }
+}
+
+// Discord options form handler
+const discordOptionsForm = document.getElementById('discord-options-form');
+if (discordOptionsForm) {
+    // Show/hide POTA interval based on checkbox
+    const potaCheckbox = document.getElementById('discord_notify_pota');
+    const potaIntervalGroup = document.getElementById('pota-interval-group');
+    if (potaCheckbox && potaIntervalGroup) {
+        potaCheckbox.addEventListener('change', () => {
+            potaIntervalGroup.style.display = potaCheckbox.checked ? 'block' : 'none';
+        });
+    }
+
+    discordOptionsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const result = document.getElementById('discord-options-result');
+
+        const data = {
+            notify_signups: document.getElementById('discord_notify_signups').checked,
+            notify_records: document.getElementById('discord_notify_records').checked,
+            notify_medals: document.getElementById('discord_notify_medals').checked,
+            notify_pota: document.getElementById('discord_notify_pota').checked,
+            pota_interval: parseInt(document.getElementById('discord_pota_interval').value)
+        };
+
+        try {
+            const resp = await fetch('/admin/settings/discord/options', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'same-origin',
+                body: JSON.stringify(data)
+            });
+            const respData = await resp.json();
+            if (resp.ok) {
+                result.innerHTML = '<div class="alert alert-success">' + respData.message + '</div>';
+            } else {
+                result.innerHTML = '<div class="alert alert-error">' + respData.detail + '</div>';
+            }
+        } catch (err) {
+            result.innerHTML = '<div class="alert alert-error">Error: ' + err.message + '</div>';
+        }
+    });
 }
 
 // Email settings form handler
