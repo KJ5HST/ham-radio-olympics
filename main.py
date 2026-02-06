@@ -805,6 +805,7 @@ class MatchCreate(BaseModel):
     allowed_modes: Optional[str] = None
     max_power_w: Optional[int] = None
     confirmation_deadline: Optional[str] = None  # Deadline for QSO confirmations
+    show_live_results: bool = False  # Show unconfirmed QSOs in standings
 
     @field_validator('start_date', 'end_date', 'confirmation_deadline')
     @classmethod
@@ -1458,7 +1459,11 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: Option
         if user:
             is_sport_referee = user.is_admin or (user.is_referee and is_referee_for_sport(user.callsign, sport_id))
 
-        # Get confirmed QSOs for each competitor in this match (for expandable rows)
+        # Check if live results mode is enabled for this match
+        show_live_results = bool(match_dict.get("show_live_results"))
+
+        # Get QSOs for each competitor in this match (for expandable rows)
+        # In live mode, include unconfirmed QSOs; otherwise only confirmed
         # Include all fields needed for target matching, plus disqualification status
         cursor = conn.execute("""
             SELECT q.id, q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
@@ -1470,9 +1475,9 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: Option
             WHERE q.competitor_callsign IN (SELECT callsign FROM medals WHERE match_id = ?)
               AND datetime(q.qso_datetime_utc) >= datetime(?)
               AND datetime(q.qso_datetime_utc) <= datetime(?)
-              AND q.is_confirmed = 1
+              AND (q.is_confirmed = 1 OR ? = 1)
             ORDER BY q.qso_datetime_utc ASC
-        """, (sport_id, match_id, match_dict["start_date"], match_dict["end_date"]))
+        """, (sport_id, match_id, match_dict["start_date"], match_dict["end_date"], 1 if show_live_results else 0))
 
         # Filter QSOs to only those matching the target
         # Use match's target_type override if set, otherwise use sport's target_type
@@ -1568,6 +1573,7 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: Option
             "qso_details": qso_details,
             "display_prefs": display_prefs,
             "is_sport_referee": is_sport_referee,
+            "show_live_results": show_live_results,
         })
 
 
@@ -4832,9 +4838,9 @@ async def create_match(request: Request, sport_id: int, match: MatchCreate):
             )
 
         cursor = conn.execute("""
-            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w, target_type, confirmation_deadline)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline))
+            INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w, target_type, confirmation_deadline, show_live_results)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, 1 if match.show_live_results else 0))
 
         return {"id": cursor.lastrowid, "message": "Match created"}
 
@@ -4891,9 +4897,9 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
 
         conn.execute("""
             UPDATE matches
-            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?, max_power_w = ?, target_type = ?, confirmation_deadline = ?
+            SET start_date = ?, end_date = ?, target_value = ?, allowed_modes = ?, max_power_w = ?, target_type = ?, confirmation_deadline = ?, show_live_results = ?
             WHERE id = ?
-        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, match_id))
+        """, (match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, 1 if match.show_live_results else 0, match_id))
 
     # Recompute medals for this match (run in thread pool to avoid blocking/locks)
     await asyncio.to_thread(recompute_match_medals, match_id)

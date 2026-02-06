@@ -2,7 +2,7 @@
 
 **A Competition Platform for Amateur Radio Operators**
 
-*Version 1.8.1 — February 2026*
+*Version 1.9.0 — February 2026*
 
 ---
 
@@ -55,10 +55,11 @@
    - [Creating an Olympiad](#92-creating-an-olympiad)
    - [Creating Sports](#93-creating-sports)
    - [Creating Matches](#94-creating-matches)
-   - [Managing Competitors](#95-managing-competitors)
-   - [Managing Teams](#96-managing-teams)
-   - [Site Settings](#97-site-settings)
-   - [Discord Notifications](#98-discord-notifications)
+   - [Live Results Mode](#95-live-results-mode)
+   - [Managing Competitors](#96-managing-competitors)
+   - [Managing Teams](#97-managing-teams)
+   - [Site Settings](#98-site-settings)
+   - [Discord Notifications](#99-discord-notifications)
 10. [Deployment & Configuration](#10-deployment--configuration)
     - [Environment Variables](#101-environment-variables)
     - [Local Development](#102-local-development)
@@ -651,7 +652,46 @@ Optional match settings:
 - **Allowed Modes:** Override sport-level mode restrictions for this match only (e.g., "CW,SSB")
 - **Max Power (watts):** Limit the match to QRP contacts — only QSOs at or below this power will qualify
 
-### 9.5 Managing Competitors
+### 9.5 Live Results Mode
+
+Live Results mode allows you to display provisional standings during a match, including QSOs that haven't yet been confirmed. This is useful during competition day events like field days or special event stations, where participants want real-time feedback on their standings.
+
+#### When to Use Live Results
+
+Live Results mode is ideal for:
+
+- Single-day competitions where waiting for confirmations would delay results
+- Field day or special event operations where real-time excitement matters
+- Matches where most participants will sync their logs shortly after the event
+
+#### How Live Results Works
+
+When Live Results is enabled for a match:
+
+- **Unconfirmed QSOs are included** in medal calculations and standings
+- **A banner appears** on the match page indicating provisional status
+- **Pending QSOs are marked** with a "⏳ Pending" badge in QSO details
+- **Standings may change** as confirmations arrive and finalize results
+
+#### Enabling Live Results
+
+To enable Live Results for a match:
+
+1. Go to **Admin** → **Sports** → select your sport → **Matches**
+2. Edit an existing match or create a new one
+3. Check the **⚡ Show Live Results** checkbox
+4. Save the match
+
+The match page will immediately begin showing all QSOs (confirmed and unconfirmed) in standings.
+
+#### Important Considerations
+
+- **Final results still require confirmation:** While live results show provisional standings, official medals are only awarded based on confirmed QSOs after the confirmation deadline
+- **Use sparingly:** Live results can show misleading standings if participants don't sync their logs promptly
+- **Clear communication:** Inform participants that standings are provisional until confirmations arrive
+- **Disable after event:** Consider disabling live results after the match ends to show only confirmed standings
+
+### 9.6 Managing Competitors
 
 Administrators can:
 
@@ -663,7 +703,7 @@ Administrators can:
 - Reset competitor passwords
 - Remove competitors if necessary
 
-### 9.6 Managing Teams
+### 9.7 Managing Teams
 
 Administrators have full team management capabilities:
 
@@ -673,7 +713,7 @@ Administrators have full team management capabilities:
 - Transfer team captaincy
 - Delete teams if necessary
 
-### 9.7 Site Settings
+### 9.8 Site Settings
 
 Administrators can customize the site appearance:
 
@@ -682,7 +722,7 @@ Administrators can customize the site appearance:
 - **Tagline:** Set a custom tagline displayed in the header
 - **QRZ Credentials:** Configure QRZ XML API for callsign lookups
 
-### 9.8 Discord Notifications
+### 9.9 Discord Notifications
 
 Ham Radio Olympics can send automatic notifications to a Discord channel when key events occur. This keeps your club informed about competition activity in real-time.
 
@@ -928,6 +968,7 @@ These endpoints require administrator privileges (admin user login or `X-Admin-K
 | **Cool Factor** | A scoring metric calculated as distance divided by transmit power, rewarding efficient operating. |
 | **DXCC** | DX Century Club, an ARRL award program. Also refers to the list of recognized "entities" (countries/territories) for award purposes. |
 | **Grid Square** | A Maidenhead Locator System designation for geographic location (e.g., FN31). |
+| **Live Results** | A match setting that displays provisional standings including unconfirmed QSOs for real-time feedback during competitions. |
 | **LoTW** | Logbook of The World, an ARRL-operated QSO confirmation service. |
 | **Match** | A timed competition event within a sport, targeting a specific entity. |
 | **Olympiad** | A competition season containing multiple sports. |

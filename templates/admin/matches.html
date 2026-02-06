@@ -31,6 +31,7 @@
             <th scope="col">Confirm Deadline</th>
             <th scope="col">Mode Override</th>
             <th scope="col">Max Power</th>
+            <th scope="col">Live</th>
             <th scope="col">Actions</th>
         </tr>
     </thead>
@@ -44,9 +45,10 @@
             <td>{% if match.confirmation_deadline %}{{ match.confirmation_deadline | format_datetime_short }}{% else %}-{% endif %}</td>
             <td>{{ match.allowed_modes or '-' }}</td>
             <td>{% if match.max_power_w %}{{ match.max_power_w }}W{% else %}-{% endif %}</td>
+            <td>{% if match.show_live_results %}<span title="Live results enabled" style="color: #38a169;">⚡</span>{% else %}-{% endif %}</td>
             <td>
                 <div class="btn-group">
-                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}', {{ match.max_power_w or 'null' }}, '{{ match.target_type or '' }}', '{{ (match.confirmation_deadline or '')[:16] }}')" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
+                    <button type="button" onclick="editMatch({{ match.id }}, '{{ match.target_value }}', '{{ match.start_date[:16] }}', '{{ match.end_date[:16] }}', '{{ match.allowed_modes or '' }}', {{ match.max_power_w or 'null' }}, '{{ match.target_type or '' }}', '{{ (match.confirmation_deadline or '')[:16] }}', {{ 'true' if match.show_live_results else 'false' }})" class="btn btn-sm btn-icon btn-secondary" title="Edit"><span class="icon">✏️</span></button>
                     <button type="button" onclick="deleteMatch({{ match.id }})" class="btn btn-sm btn-icon btn-danger" title="Delete"><span class="icon">🗑️</span></button>
                 </div>
             </td>
@@ -123,6 +125,13 @@
             </div>
             <small style="color: #718096;">If checked, overrides sport-level mode restrictions for this match only.</small>
         </div>
+        <div style="margin-bottom: 15px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="show_live_results">
+                <span style="color: var(--text-primary);">⚡ Show Live Results</span>
+            </div>
+            <small style="color: var(--text-secondary); display: block; margin-top: 5px;">Enable to show unconfirmed QSOs in standings. Useful during competition day for real-time feedback.</small>
+        </div>
         <div class="btn-group">
             <button type="submit" class="btn btn-success" id="submit-btn"><span class="icon">➕</span> Create Match</button>
             <button type="button" id="cancel-btn" onclick="cancelEdit()" class="btn btn-secondary" style="display: none;"><span class="icon">✕</span> Cancel</button>
@@ -178,7 +187,7 @@ document.getElementById('confirmation_deadline').addEventListener('change', func
     this.dataset.userModified = 'true';
 });
 
-function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW, targetType, confirmationDeadline) {
+function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW, targetType, confirmationDeadline, showLiveResults) {
     editingId = id;
     document.getElementById('match_id').value = id;
     document.getElementById('target_value').value = targetValue;
@@ -191,6 +200,7 @@ function editMatch(id, targetValue, startDate, endDate, allowedModes, maxPowerW,
     confirmField.value = confirmationDeadline || endDate;
     // Mark as user-modified if different from end date
     confirmField.dataset.userModified = (confirmationDeadline && confirmationDeadline !== endDate) ? 'true' : '';
+    document.getElementById('show_live_results').checked = showLiveResults || false;
     document.getElementById('form-title').textContent = 'Edit Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">💾</span> Save';
     document.getElementById('cancel-btn').style.display = 'inline-flex';
@@ -205,6 +215,7 @@ function cancelEdit() {
     setSelectedModes(null);
     document.getElementById('max_power_w').value = '';
     document.getElementById('confirmation_deadline').dataset.userModified = '';
+    document.getElementById('show_live_results').checked = false;
     document.getElementById('form-title').textContent = 'Create Match';
     document.getElementById('submit-btn').innerHTML = '<span class="icon">➕</span> Create Match';
     document.getElementById('cancel-btn').style.display = 'none';
@@ -223,7 +234,8 @@ document.getElementById('match-form').addEventListener('submit', async (e) => {
         allowed_modes: getSelectedModes(),
         max_power_w: maxPowerVal ? parseInt(maxPowerVal, 10) : null,
         target_type: targetTypeVal || null,
-        confirmation_deadline: confirmDeadlineVal ? confirmDeadlineVal + ':00' : null
+        confirmation_deadline: confirmDeadlineVal ? confirmDeadlineVal + ':00' : null,
+        show_live_results: document.getElementById('show_live_results').checked
     };
     try {
         let resp;

@@ -672,6 +672,14 @@ def init_db():
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_sent_notifications_type ON sent_notifications(notification_type, reference_id)")
                 conn.commit()
 
+        # Migration: add show_live_results column to matches table
+        if 'matches' in tables:
+            cursor = conn.execute("PRAGMA table_info(matches)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'show_live_results' not in columns:
+                conn.execute("ALTER TABLE matches ADD COLUMN show_live_results INTEGER NOT NULL DEFAULT 0")
+                conn.commit()
+
         conn.executescript("""
             -- Competitors table
             CREATE TABLE IF NOT EXISTS competitors (
@@ -765,6 +773,7 @@ def init_db():
                 allowed_modes TEXT,
                 max_power_w INTEGER,
                 confirmation_deadline TEXT,
+                show_live_results INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
             );
 

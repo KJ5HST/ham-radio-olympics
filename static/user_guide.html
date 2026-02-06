@@ -183,7 +183,7 @@
 </p>
 
 <p>
-<em>Version 1.8.1 — February 2026</em>
+<em>Version 1.9.0 — February 2026</em>
 </p>
 
 <hr>
@@ -263,10 +263,11 @@
 <li><a href="#92-creating-an-olympiad">Creating an Olympiad</a></li>
 <li><a href="#93-creating-sports">Creating Sports</a></li>
 <li><a href="#94-creating-matches">Creating Matches</a></li>
-<li><a href="#95-managing-competitors">Managing Competitors</a></li>
-<li><a href="#96-managing-teams">Managing Teams</a></li>
-<li><a href="#97-site-settings">Site Settings</a></li>
-<li><a href="#98-discord-notifications">Discord Notifications</a></li>
+<li><a href="#95-live-results-mode">Live Results Mode</a></li>
+<li><a href="#96-managing-competitors">Managing Competitors</a></li>
+<li><a href="#97-managing-teams">Managing Teams</a></li>
+<li><a href="#98-site-settings">Site Settings</a></li>
+<li><a href="#99-discord-notifications">Discord Notifications</a></li>
 </ul>
 </li>
 <li><a href="#10-deployment--configuration">Deployment & Configuration</a>
@@ -1256,7 +1257,61 @@ Optional match settings:
 <li><strong>Allowed Modes:</strong> Override sport-level mode restrictions for this match only (e.g., "CW,SSB")</li>
 <li><strong>Max Power (watts):</strong> Limit the match to QRP contacts — only QSOs at or below this power will qualify</li>
 </ul>
-<h3 id="95-managing-competitors">9.5 Managing Competitors</h3>
+<h3 id="95-live-results-mode">9.5 Live Results Mode</h3>
+
+<p>
+Live Results mode allows you to display provisional standings during a match, including QSOs that haven't yet been confirmed. This is useful during competition day events like field days or special event stations, where participants want real-time feedback on their standings.
+</p>
+
+<h4 id="when-to-use-live-results">When to Use Live Results</h4>
+
+<p>
+Live Results mode is ideal for:
+</p>
+
+<ul>
+<li>Single-day competitions where waiting for confirmations would delay results</li>
+<li>Field day or special event operations where real-time excitement matters</li>
+<li>Matches where most participants will sync their logs shortly after the event</li>
+</ul>
+<h4 id="how-live-results-works">How Live Results Works</h4>
+
+<p>
+When Live Results is enabled for a match:
+</p>
+
+<ul>
+<li><strong>Unconfirmed QSOs are included</strong> in medal calculations and standings</li>
+<li><strong>A banner appears</strong> on the match page indicating provisional status</li>
+<li><strong>Pending QSOs are marked</strong> with a "⏳ Pending" badge in QSO details</li>
+<li><strong>Standings may change</strong> as confirmations arrive and finalize results</li>
+</ul>
+<h4 id="enabling-live-results">Enabling Live Results</h4>
+
+<p>
+To enable Live Results for a match:
+</p>
+
+<ol>
+<li>Go to <strong>Admin</strong> → <strong>Sports</strong> → select your sport → <strong>Matches</strong>
+<li>Edit an existing match or create a new one
+<li>Check the <strong>⚡ Show Live Results</strong> checkbox
+<li>Save the match
+</li>
+</ol>
+<p>
+The match page will immediately begin showing all QSOs (confirmed and unconfirmed) in standings.
+</p>
+
+<h4 id="important-considerations">Important Considerations</h4>
+
+<ul>
+<li><strong>Final results still require confirmation:</strong> While live results show provisional standings, official medals are only awarded based on confirmed QSOs after the confirmation deadline</li>
+<li><strong>Use sparingly:</strong> Live results can show misleading standings if participants don't sync their logs promptly</li>
+<li><strong>Clear communication:</strong> Inform participants that standings are provisional until confirmations arrive</li>
+<li><strong>Disable after event:</strong> Consider disabling live results after the match ends to show only confirmed standings</li>
+</ul>
+<h3 id="96-managing-competitors">9.6 Managing Competitors</h3>
 
 <p>
 Administrators can:
@@ -1271,7 +1326,7 @@ Administrators can:
 <li>Reset competitor passwords</li>
 <li>Remove competitors if necessary</li>
 </ul>
-<h3 id="96-managing-teams">9.6 Managing Teams</h3>
+<h3 id="97-managing-teams">9.7 Managing Teams</h3>
 
 <p>
 Administrators have full team management capabilities:
@@ -1284,7 +1339,7 @@ Administrators have full team management capabilities:
 <li>Transfer team captaincy</li>
 <li>Delete teams if necessary</li>
 </ul>
-<h3 id="97-site-settings">9.7 Site Settings</h3>
+<h3 id="98-site-settings">9.8 Site Settings</h3>
 
 <p>
 Administrators can customize the site appearance:
@@ -1296,7 +1351,7 @@ Administrators can customize the site appearance:
 <li><strong>Tagline:</strong> Set a custom tagline displayed in the header</li>
 <li><strong>QRZ Credentials:</strong> Configure QRZ XML API for callsign lookups</li>
 </ul>
-<h3 id="98-discord-notifications">9.8 Discord Notifications</h3>
+<h3 id="99-discord-notifications">9.9 Discord Notifications</h3>
 
 <p>
 Ham Radio Olympics can send automatic notifications to a Discord channel when key events occur. This keeps your club informed about competition activity in real-time.
@@ -2123,6 +2178,10 @@ These endpoints require administrator privileges (admin user login or <code>X-Ad
 <tr>
 <td><strong>Grid Square</strong></td>
 <td>A Maidenhead Locator System designation for geographic location (e.g., FN31).</td>
+</tr>
+<tr>
+<td><strong>Live Results</strong></td>
+<td>A match setting that displays provisional standings including unconfirmed QSOs for real-time feedback during competitions.</td>
 </tr>
 <tr>
 <td><strong>LoTW</strong></td>

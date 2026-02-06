@@ -14,6 +14,16 @@
     {% endif %}
 </div>
 
+{% if show_live_results %}
+<div class="alert alert-info" style="display: flex; align-items: center; gap: 10px; margin: 15px 0;">
+    <span style="font-size: 1.5em;">⚡</span>
+    <div>
+        <strong>Live Results</strong><br>
+        <span style="font-size: 0.9em;">Provisional standings include unconfirmed QSOs. Results may change as confirmations arrive.</span>
+    </div>
+</div>
+{% endif %}
+
 {% if target_type == 'park' %}
 <h3>Live Spots at {{ target_value }}</h3>
 <div id="spots-container" class="card">
@@ -167,7 +177,7 @@
                                 <td>{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>
                                 <td>{% if qso.cool_factor %}{% if display_prefs.distance_unit == 'mi' %}{{ "%.1f" | format(qso.cool_factor * 0.621371) }}{% else %}{{ "%.1f" | format(qso.cool_factor) }}{% endif %}{% else %}-{% endif %}</td>
                                 <td>
-                                    {% if qso.confirmed %}<span style="color: #22543d;">Yes</span>{% else %}<span style="color: #c53030;">No</span>{% endif %}
+                                    {% if qso.confirmed %}<span style="color: #22543d;">Yes</span>{% else %}<span class="badge badge-pending" title="Awaiting confirmation from the other station">⏳ Pending</span>{% endif %}
                                     {% if is_sport_referee %}
                                     {% if qso.dq_status != 'disqualified' %}
                                     <button class="btn btn-sm btn-danger" style="margin-left: 5px; padding: 2px 6px; font-size: 0.7em;" onclick="showDqModal({{ qso.id }}, '{{ qso.dx_callsign }}')" title="Disqualify this QSO">DQ</button>
@@ -310,6 +320,12 @@ function toggleQsoDetails(callsign) {
 .badge-rq {
     background: #38a169;
     color: white;
+}
+.badge-pending {
+    background: #4299e1;
+    color: white;
+    font-size: 0.75em;
+    text-transform: none;
 }
 .btn-danger {
     background: #c53030;

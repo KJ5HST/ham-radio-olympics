@@ -42,6 +42,7 @@ class MatchingQSO:
     cool_factor: float
     role: str  # 'work', 'activate', or 'combined'
     has_pota: bool  # competitor was at a park
+    is_confirmed: bool = True  # whether QSO is confirmed (False in live mode for unconfirmed)
 
 
 @dataclass
@@ -201,7 +202,7 @@ def matches_target(
     return False
 
 
-def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
+def validate_qso_for_mode(qso: dict, mode: str, live_mode: bool = False) -> Tuple[bool, Optional[str]]:
     """
     Validate that a QSO has required fields for the given mode.
 
@@ -212,12 +213,13 @@ def validate_qso_for_mode(qso: dict, mode: str) -> Tuple[bool, Optional[str]]:
     Args:
         qso: QSO dictionary
         mode: 'work' or 'activate'
+        live_mode: If True, allow unconfirmed QSOs (for live results display)
 
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Must be confirmed
-    if not qso.get("is_confirmed"):
+    # Must be confirmed (unless in live mode)
+    if not live_mode and not qso.get("is_confirmed"):
         return False, "QSO not confirmed"
 
     if mode == "work":
@@ -249,6 +251,7 @@ def get_matching_qsos(
     max_power_w: int = None,
     match_target_type: str = None,
     confirmation_deadline: datetime = None,
+    live_mode: bool = False,
 ) -> List[MatchingQSO]:
     """
     Find all QSOs that match a specific Match.
@@ -264,6 +267,7 @@ def get_matching_qsos(
         max_power_w: Maximum allowed TX power in watts (None means no limit)
         match_target_type: Match-level target_type override (None = use sport's)
         confirmation_deadline: QSOs confirmed after this time are excluded (None = no limit)
+        live_mode: If True, include unconfirmed QSOs (for live results display)
 
     Returns:
         List of MatchingQSO objects
@@ -284,8 +288,9 @@ def get_matching_qsos(
     POTA_MIN_QSOS = 10
 
     with get_db() as conn:
-        # Get all confirmed QSOs in the time window from competitors who opted in
+        # Get QSOs in the time window from competitors who opted in
         # Exclude QSOs that are disqualified for this sport
+        # In live_mode, include unconfirmed QSOs; otherwise require confirmation
         # If confirmation_deadline is set, only include QSOs confirmed before the deadline
         if confirmation_deadline:
             cursor = conn.execute("""
@@ -295,12 +300,12 @@ def get_matching_qsos(
                 JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
                 LEFT JOIN qso_disqualifications dq
                     ON q.id = dq.qso_id AND dq.sport_id = ? AND dq.status = 'disqualified'
-                WHERE q.is_confirmed = 1
+                WHERE (q.is_confirmed = 1 OR ? = 1)
                 AND q.qso_datetime_utc >= ?
                 AND q.qso_datetime_utc <= ?
                 AND (q.confirmed_at IS NULL OR q.confirmed_at <= ?)
                 AND dq.id IS NULL
-            """, (sport_id, sport_id, start_date.isoformat(), end_date.isoformat(), confirmation_deadline.isoformat()))
+            """, (sport_id, sport_id, 1 if live_mode else 0, start_date.isoformat(), end_date.isoformat(), confirmation_deadline.isoformat()))
         else:
             cursor = conn.execute("""
                 SELECT q.*, c.registered_at
@@ -309,11 +314,11 @@ def get_matching_qsos(
                 JOIN sport_entries se ON q.competitor_callsign = se.callsign AND se.sport_id = ?
                 LEFT JOIN qso_disqualifications dq
                     ON q.id = dq.qso_id AND dq.sport_id = ? AND dq.status = 'disqualified'
-                WHERE q.is_confirmed = 1
+                WHERE (q.is_confirmed = 1 OR ? = 1)
                 AND q.qso_datetime_utc >= ?
                 AND q.qso_datetime_utc <= ?
                 AND dq.id IS NULL
-            """, (sport_id, sport_id, start_date.isoformat(), end_date.isoformat()))
+            """, (sport_id, sport_id, 1 if live_mode else 0, start_date.isoformat(), end_date.isoformat()))
 
         all_qsos = [dict(row) for row in cursor.fetchall()]
 
@@ -355,7 +360,7 @@ def get_matching_qsos(
 
             # Check work mode
             if work_enabled:
-                valid, _ = validate_qso_for_mode(qso, "work")
+                valid, _ = validate_qso_for_mode(qso, "work", live_mode=live_mode)
                 if valid and matches_target(qso, target_type, target_value, "work"):
                     role = "work" if separate_pools else "combined"
                     has_pota = bool(qso.get("my_sig_info"))
@@ -370,11 +375,12 @@ def get_matching_qsos(
                         cool_factor=qso["cool_factor"] or 0,
                         role=role,
                         has_pota=has_pota,
+                        is_confirmed=bool(qso.get("is_confirmed")),
                     ))
 
             # Check activate mode
             if activate_enabled:
-                valid, _ = validate_qso_for_mode(qso, "activate")
+                valid, _ = validate_qso_for_mode(qso, "activate", live_mode=live_mode)
                 if valid and matches_target(qso, target_type, target_value, "activate"):
                     # For park/pota activations, require 10+ QSOs on that day from that park
                     if target_type in ("park", "pota"):
@@ -405,6 +411,7 @@ def get_matching_qsos(
                             cool_factor=qso["cool_factor"] or 0,
                             role=role,
                             has_pota=has_pota,
+                            is_confirmed=bool(qso.get("is_confirmed")),
                         ))
 
     return matching
@@ -578,6 +585,8 @@ def recompute_match_medals(match_id: int):
 
         # Get matching QSOs (only from competitors who opted into this sport)
         # Match-level allowed_modes and target_type override sport-level if set
+        # live_mode includes unconfirmed QSOs for provisional standings
+        live_mode = bool(match_data.get("show_live_results"))
         matching = get_matching_qsos(
             match_id,
             sport_config,
@@ -589,6 +598,7 @@ def recompute_match_medals(match_id: int):
             max_power_w=match_data.get("max_power_w"),
             match_target_type=match_data.get("target_type"),  # Match-level override
             confirmation_deadline=confirmation_deadline,
+            live_mode=live_mode,
         )
 
         # Collect QSO info for record updates
