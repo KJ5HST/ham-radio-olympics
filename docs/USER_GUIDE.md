@@ -60,6 +60,7 @@
    - [Managing Teams](#97-managing-teams)
    - [Site Settings](#98-site-settings)
    - [Discord Notifications](#99-discord-notifications)
+   - [Resources (File Distribution)](#910-resources-file-distribution)
 10. [Deployment & Configuration](#10-deployment--configuration)
     - [Environment Variables](#101-environment-variables)
     - [Local Development](#102-local-development)
@@ -788,6 +789,45 @@ All Discord notifications are deduplicated to prevent spam:
 - **Wrong channel:** Edit the webhook in Discord Server Settings to change the target channel
 - **Want to disable:** Click **Clear** in the admin settings to stop Discord notifications
 
+### 9.10 Resources (File Distribution)
+
+Administrators can share files with competitors through the Resources system. This is useful for distributing contest rules, schedules, reference documents, ADIF templates, and other materials.
+
+#### Uploading Files
+
+1. Go to **Admin** → **Resources** (or click the Resources tile on the admin dashboard)
+2. Fill in the upload form:
+   - **Title:** A descriptive name for the file
+   - **Description:** Optional details about the file
+   - **File:** Select the file to upload (max 10 MB)
+   - **Access Control:** Choose who can see and download the file
+3. Click **Upload**
+
+**Supported file types:** PDF, images (PNG, JPG, GIF, SVG), text files (TXT, MD, CSV), ADIF files (ADI, ADIF), Office documents (DOC, DOCX, XLS, XLSX), and ZIP archives.
+
+#### Access Control
+
+Each file can have one or more access rules. A user can download a file if they match **any** rule:
+
+| Rule | Who Can Access |
+|------|----------------|
+| **Public** | Anyone, including visitors who aren't logged in |
+| **All Competitors** | Any registered, logged-in competitor |
+| **Admins** | Users with administrator privileges |
+| **Referees** | Users with the referee role |
+| **By Sport** | Competitors who have entered a specific sport |
+| **Individual** | Specific callsigns (comma-separated) |
+
+Rules combine with OR logic. For example, a file with "Referees" and "KJ5IRF" access is visible to all referees AND to KJ5IRF specifically.
+
+#### Managing Files
+
+The admin resources page shows all uploaded files with their title, filename, size, access summary, and upload date. From here you can download or delete any file.
+
+#### Competitor View
+
+Competitors can browse available resources at `/resources` (linked in the main navigation). They will only see files they have access to based on the rules above. Anonymous visitors will only see files marked as Public.
+
 ---
 
 ## 10. Deployment & Configuration
@@ -881,6 +921,8 @@ These endpoints require a logged-in user:
 | POST | `/sync` | Trigger QRZ/LoTW sync |
 | GET | `/export/qsos` | Export QSOs (CSV) |
 | GET | `/export/medals` | Export medals (CSV) |
+| GET | `/resources` | Browse available resource files |
+| GET | `/resources/{id}/download` | Download a resource file |
 | GET | `/teams` | Team listings |
 | GET | `/team/{id}` | Team profile |
 | POST | `/team` | Create team |
@@ -958,6 +1000,9 @@ These endpoints require administrator privileges (admin user login or `X-Admin-K
 | POST | `/admin/team/{id}/add/{call}` | Add member to team |
 | POST | `/admin/team/{id}/remove/{call}` | Remove member from team |
 | POST | `/admin/team/{id}/transfer/{call}` | Transfer team captain |
+| GET | `/admin/resources` | Resource file management |
+| POST | `/admin/resources/upload` | Upload resource file |
+| DELETE | `/admin/resources/{id}` | Delete resource file |
 
 ---
 
@@ -976,6 +1021,7 @@ These endpoints require administrator privileges (admin user login or `X-Admin-K
 | **POTA** | Parks on the Air, an amateur radio program encouraging portable operations from parks. |
 | **QRP** | Low-power amateur radio operation, typically 5 watts or less for CW and 10 watts or less for SSB. |
 | **QRZ** | QRZ.com, a callsign lookup database and online logbook service. |
+| **Resources** | Admin-uploaded files (rules, schedules, documents) distributed to competitors with granular access control. |
 | **QSO** | A radio contact between two stations. |
 | **QSO Race** | A medal event rewarding the first three confirmed contacts with a match target. |
 | **Sport** | A category of competition within an Olympiad (e.g., DX Challenge, POTA). |

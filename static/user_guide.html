@@ -268,6 +268,7 @@
 <li><a href="#97-managing-teams">Managing Teams</a></li>
 <li><a href="#98-site-settings">Site Settings</a></li>
 <li><a href="#99-discord-notifications">Discord Notifications</a></li>
+<li><a href="#910-resources-file-distribution">Resources (File Distribution)</a></li>
 </ul>
 </li>
 <li><a href="#10-deployment--configuration">Deployment & Configuration</a>
@@ -1518,6 +1519,87 @@ All Discord notifications are deduplicated to prevent spam:
 <li><strong>Wrong channel:</strong> Edit the webhook in Discord Server Settings to change the target channel</li>
 <li><strong>Want to disable:</strong> Click <strong>Clear</strong> in the admin settings to stop Discord notifications</li>
 </ul>
+<h3 id="910-resources-file-distribution">9.10 Resources (File Distribution)</h3>
+
+<p>
+Administrators can share files with competitors through the Resources system. This is useful for distributing contest rules, schedules, reference documents, ADIF templates, and other materials.
+</p>
+
+<h4 id="uploading-files">Uploading Files</h4>
+
+<ol>
+<li>Go to <strong>Admin</strong> → <strong>Resources</strong> (or click the Resources tile on the admin dashboard)
+<li>Fill in the upload form:
+<ul>
+<li><strong>Title:</strong> A descriptive name for the file</li>
+<li><strong>Description:</strong> Optional details about the file</li>
+<li><strong>File:</strong> Select the file to upload (max 10 MB)</li>
+<li><strong>Access Control:</strong> Choose who can see and download the file</li>
+</ul>
+</li>
+<li>Click <strong>Upload</strong>
+</li>
+</ol>
+<p>
+<strong>Supported file types:</strong> PDF, images (PNG, JPG, GIF, SVG), text files (TXT, MD, CSV), ADIF files (ADI, ADIF), Office documents (DOC, DOCX, XLS, XLSX), and ZIP archives.
+</p>
+
+<h4 id="access-control">Access Control</h4>
+
+<p>
+Each file can have one or more access rules. A user can download a file if they match <strong>any</strong> rule:
+</p>
+
+<table>
+<thead>
+<tr>
+<th>Rule</th>
+<th>Who Can Access</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Public</strong></td>
+<td>Anyone, including visitors who aren't logged in</td>
+</tr>
+<tr>
+<td><strong>All Competitors</strong></td>
+<td>Any registered, logged-in competitor</td>
+</tr>
+<tr>
+<td><strong>Admins</strong></td>
+<td>Users with administrator privileges</td>
+</tr>
+<tr>
+<td><strong>Referees</strong></td>
+<td>Users with the referee role</td>
+</tr>
+<tr>
+<td><strong>By Sport</strong></td>
+<td>Competitors who have entered a specific sport</td>
+</tr>
+<tr>
+<td><strong>Individual</strong></td>
+<td>Specific callsigns (comma-separated)</td>
+</tr>
+</tbody>
+</table>
+<p>
+Rules combine with OR logic. For example, a file with "Referees" and "KJ5IRF" access is visible to all referees AND to KJ5IRF specifically.
+</p>
+
+<h4 id="managing-files">Managing Files</h4>
+
+<p>
+The admin resources page shows all uploaded files with their title, filename, size, access summary, and upload date. From here you can download or delete any file.
+</p>
+
+<h4 id="competitor-view">Competitor View</h4>
+
+<p>
+Competitors can browse available resources at <code>/resources</code> (linked in the main navigation). They will only see files they have access to based on the rules above. Anonymous visitors will only see files marked as Public.
+</p>
+
 <hr>
 
 <h2 id="10-deployment--configuration">10. Deployment & Configuration</h2>
@@ -1803,6 +1885,16 @@ These endpoints require a logged-in user:
 <td>GET</td>
 <td><code>/export/medals</code></td>
 <td>Export medals (CSV)</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/resources</code></td>
+<td>Browse available resource files</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/resources/{id}/download</code></td>
+<td>Download a resource file</td>
 </tr>
 <tr>
 <td>GET</td>
@@ -2153,6 +2245,21 @@ These endpoints require administrator privileges (admin user login or <code>X-Ad
 <td><code>/admin/team/{id}/transfer/{call}</code></td>
 <td>Transfer team captain</td>
 </tr>
+<tr>
+<td>GET</td>
+<td><code>/admin/resources</code></td>
+<td>Resource file management</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/admin/resources/upload</code></td>
+<td>Upload resource file</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/admin/resources/{id}</code></td>
+<td>Delete resource file</td>
+</tr>
 </tbody>
 </table>
 <hr>
@@ -2210,6 +2317,10 @@ These endpoints require administrator privileges (admin user login or <code>X-Ad
 <tr>
 <td><strong>QRZ</strong></td>
 <td>QRZ.com, a callsign lookup database and online logbook service.</td>
+</tr>
+<tr>
+<td><strong>Resources</strong></td>
+<td>Admin-uploaded files (rules, schedules, documents) distributed to competitors with granular access control.</td>
 </tr>
 <tr>
 <td><strong>QSO</strong></td>

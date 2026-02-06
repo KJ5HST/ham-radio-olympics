@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Resources{% endblock %}
+
+{% block content %}
+<h2>Resources</h2>
+
+{% if resources %}
+<div class="table-responsive"><table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Size</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in resources %}
+        <tr>
+            <td><strong>{{ r.title }}</strong></td>
+            <td>{{ r.description or '' }}</td>
+            <td>{{ r.file_size | format_file_size }}</td>
+            <td><a href="/resources/{{ r.id }}/download" class="btn btn-sm">Download</a></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+{% else %}
+<p>No resources available.</p>
+{% endif %}
+{% endblock %}

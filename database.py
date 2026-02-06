@@ -1054,6 +1054,30 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_push_subscriptions_callsign ON push_subscriptions(callsign);
             CREATE INDEX IF NOT EXISTS idx_sent_notifications_callsign ON sent_notifications(callsign);
             CREATE INDEX IF NOT EXISTS idx_sent_notifications_type ON sent_notifications(notification_type, reference_id);
+
+            -- Resource files table (admin file distribution)
+            CREATE TABLE IF NOT EXISTS resource_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL,
+                stored_filename TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                file_size INTEGER NOT NULL,
+                mime_type TEXT NOT NULL,
+                uploaded_by TEXT NOT NULL,
+                uploaded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_resource_files_uploaded_at ON resource_files(uploaded_at);
+
+            -- Resource access control table
+            CREATE TABLE IF NOT EXISTS resource_access (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                resource_id INTEGER NOT NULL,
+                access_type TEXT NOT NULL,
+                access_value TEXT,
+                FOREIGN KEY (resource_id) REFERENCES resource_files(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_resource_access_resource_id ON resource_access(resource_id);
         """)
 
 

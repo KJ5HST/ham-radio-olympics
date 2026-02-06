@@ -192,6 +192,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_example_olympiad()  # Seeds example data on fresh deployments
     backfill_records()  # Backfill records for existing QSOs if needed
+    os.makedirs(config.UPLOAD_DIR, exist_ok=True)  # Ensure upload dir exists
 
     # Sync on wake if it's been more than an hour since the last sync (non-blocking subprocess)
     async def startup_sync_if_needed():
@@ -696,6 +697,19 @@ def format_time_local(value, home_grid: str = None, time_display: str = "utc") -
 
 
 templates.env.filters["format_time_local"] = format_time_local
+
+
+def format_file_size(size_bytes: int) -> str:
+    """Format file size in bytes to human-readable string."""
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    else:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+templates.env.filters["format_file_size"] = format_file_size
 
 
 # Admin key from environment
@@ -6210,6 +6224,287 @@ def get_team_members(conn, team_id: int):
         ORDER BY total_points DESC, c.callsign
     """, (team_id,))
     return cursor.fetchall()
+
+
+# --- Resource File Distribution ---
+
+def check_resource_access(resource_id: int, user: Optional[User]) -> bool:
+    """Check if user can access a resource. Returns True if any access rule matches."""
+    with get_db() as conn:
+        rules = conn.execute(
+            "SELECT access_type, access_value FROM resource_access WHERE resource_id = ?",
+            (resource_id,)
+        ).fetchall()
+
+    for rule in rules:
+        if rule["access_type"] == "public":
+            return True
+
+    if user is None:
+        return False
+
+    for rule in rules:
+        atype = rule["access_type"]
+        aval = rule["access_value"]
+        if atype == "all_competitors":
+            return True
+        if atype == "admin" and user.is_admin:
+            return True
+        if atype == "referee" and user.is_referee:
+            return True
+        if atype == "sport" and aval:
+            with get_db() as conn:
+                entry = conn.execute(
+                    "SELECT 1 FROM sport_entries WHERE callsign = ? AND sport_id = ?",
+                    (user.callsign, int(aval))
+                ).fetchone()
+            if entry:
+                return True
+        if atype == "individual" and aval and aval.upper() == user.callsign.upper():
+            return True
+
+    return False
+
+
+@app.get("/admin/resources", response_class=HTMLResponse)
+async def admin_resources_page(request: Request, _: bool = Depends(verify_admin)):
+    """Admin resource file management page."""
+    user = get_current_user(request)
+    with get_db() as conn:
+        resources = conn.execute(
+            "SELECT * FROM resource_files ORDER BY uploaded_at DESC"
+        ).fetchall()
+
+        # Build access summaries
+        resource_list = []
+        for r in resources:
+            access_rules = conn.execute(
+                "SELECT access_type, access_value FROM resource_access WHERE resource_id = ?",
+                (r["id"],)
+            ).fetchall()
+            # Build human-readable summary
+            parts = []
+            for rule in access_rules:
+                atype = rule["access_type"]
+                aval = rule["access_value"]
+                if atype == "public":
+                    parts.append("Public")
+                elif atype == "all_competitors":
+                    parts.append("All Competitors")
+                elif atype == "admin":
+                    parts.append("Admins")
+                elif atype == "referee":
+                    parts.append("Referees")
+                elif atype == "sport":
+                    sport = conn.execute("SELECT name FROM sports WHERE id = ?", (aval,)).fetchone()
+                    parts.append(f"{sport['name']} competitors" if sport else f"Sport #{aval}")
+                elif atype == "individual":
+                    parts.append(aval or "")
+            resource_list.append({
+                "id": r["id"],
+                "title": r["title"],
+                "filename": r["filename"],
+                "file_size": r["file_size"],
+                "uploaded_at": r["uploaded_at"],
+                "uploaded_by": r["uploaded_by"],
+                "access_summary": ", ".join(parts) if parts else "No access rules",
+            })
+
+        # Get sports for the form
+        active_olympiad = conn.execute(
+            "SELECT id FROM olympiads WHERE is_active = 1"
+        ).fetchone()
+        sports = []
+        if active_olympiad:
+            sports = conn.execute(
+                "SELECT id, name FROM sports WHERE olympiad_id = ? ORDER BY name",
+                (active_olympiad["id"],)
+            ).fetchall()
+
+    return templates.TemplateResponse("admin/resources.html", {
+        "request": request,
+        "user": user,
+        "resources": resource_list,
+        "sports": sports,
+        "csrf_token": request.state.csrf_token,
+    })
+
+
+@app.post("/admin/resources/upload")
+async def admin_upload_resource(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    title: str = Form(...),
+    description: str = Form(""),
+    file: UploadFile = File(...),
+    access_types: List[str] = Form([]),
+    sport_ids: List[str] = Form([]),
+    callsigns: str = Form(""),
+):
+    """Upload a resource file."""
+    import uuid
+    import mimetypes
+    from audit import log_action
+
+    user = get_current_user(request)
+
+    # Validate title
+    if not title or not title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    title = title.strip()
+
+    # Validate extension
+    _, ext = os.path.splitext(file.filename or "")
+    ext = ext.lower()
+    if ext not in config.ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
+
+    # Read file and check size
+    content = await file.read()
+    if len(content) > config.MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail=f"File exceeds maximum size of {config.MAX_UPLOAD_SIZE // (1024*1024)} MB")
+
+    # Save to disk
+    stored_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(config.UPLOAD_DIR, stored_filename)
+    os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    # Determine MIME type
+    mime_type = mimetypes.guess_type(file.filename or "")[0] or "application/octet-stream"
+
+    # Insert DB records
+    with get_db() as conn:
+        cursor = conn.execute(
+            """INSERT INTO resource_files (filename, stored_filename, title, description, file_size, mime_type, uploaded_by, uploaded_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (file.filename, stored_filename, title, description.strip(), len(content), mime_type,
+             user.callsign if user else "unknown", datetime.utcnow().isoformat())
+        )
+        resource_id = cursor.lastrowid
+
+        # Insert access rules
+        for atype in access_types:
+            if atype in ("public", "all_competitors", "admin", "referee"):
+                conn.execute(
+                    "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, ?, NULL)",
+                    (resource_id, atype)
+                )
+            elif atype == "sport":
+                for sid in sport_ids:
+                    conn.execute(
+                        "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'sport', ?)",
+                        (resource_id, str(sid))
+                    )
+            elif atype == "individual":
+                for cs in [c.strip().upper() for c in callsigns.split(",") if c.strip()]:
+                    conn.execute(
+                        "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'individual', ?)",
+                        (resource_id, cs)
+                    )
+
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="resource_upload",
+        target_type="resource",
+        target_id=str(resource_id),
+        details=f"Uploaded '{title}' ({file.filename})",
+        ip_address=get_client_ip(request)
+    )
+
+    return RedirectResponse(url="/admin/resources", status_code=303)
+
+
+@app.delete("/admin/resources/{file_id}")
+async def admin_delete_resource(
+    request: Request,
+    file_id: int,
+    _: bool = Depends(verify_admin),
+):
+    """Delete a resource file."""
+    from audit import log_action
+
+    user = get_current_user(request)
+
+    with get_db() as conn:
+        resource = conn.execute(
+            "SELECT * FROM resource_files WHERE id = ?", (file_id,)
+        ).fetchone()
+        if not resource:
+            raise HTTPException(status_code=404, detail="Resource not found")
+
+        # Remove from disk (gracefully handle missing file)
+        disk_path = os.path.join(config.UPLOAD_DIR, resource["stored_filename"])
+        if os.path.exists(disk_path):
+            os.remove(disk_path)
+
+        # Delete DB rows (CASCADE handles resource_access)
+        conn.execute("DELETE FROM resource_files WHERE id = ?", (file_id,))
+
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="resource_delete",
+        target_type="resource",
+        target_id=str(file_id),
+        details=f"Deleted '{resource['title']}' ({resource['filename']})",
+        ip_address=get_client_ip(request)
+    )
+
+    return {"message": "Resource deleted"}
+
+
+@app.get("/resources", response_class=HTMLResponse)
+async def resources_page(request: Request):
+    """Public resource file browser, filtered by access."""
+    user = get_current_user(request)
+
+    with get_db() as conn:
+        all_resources = conn.execute(
+            "SELECT * FROM resource_files ORDER BY uploaded_at DESC"
+        ).fetchall()
+
+    accessible = []
+    for r in all_resources:
+        if check_resource_access(r["id"], user):
+            accessible.append(r)
+
+    return templates.TemplateResponse("resources.html", {
+        "request": request,
+        "user": user,
+        "resources": accessible,
+    })
+
+
+@app.get("/resources/{file_id}/download")
+async def download_resource(request: Request, file_id: int):
+    """Download a resource file."""
+    from starlette.responses import FileResponse
+
+    user = get_current_user(request)
+
+    with get_db() as conn:
+        resource = conn.execute(
+            "SELECT * FROM resource_files WHERE id = ?", (file_id,)
+        ).fetchone()
+
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    if not check_resource_access(file_id, user):
+        if user is None:
+            return RedirectResponse(url="/login", status_code=303)
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    disk_path = os.path.join(config.UPLOAD_DIR, resource["stored_filename"])
+    if not os.path.exists(disk_path):
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    return FileResponse(
+        path=disk_path,
+        filename=resource["filename"],
+        media_type=resource["mime_type"],
+    )
 
 
 @app.get("/teams", response_class=HTMLResponse)

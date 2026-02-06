@@ -98,6 +98,18 @@ class Config:
     EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@hamradio-olympics.com")
     ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "")  # Email for error notifications
 
+    # File uploads (resources)
+    UPLOAD_DIR: str = os.getenv(
+        "UPLOAD_DIR",
+        os.path.join(os.path.dirname(os.getenv("DATABASE_PATH", "ham_olympics.db")), "uploads", "resources")
+    )
+    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", str(10 * 1024 * 1024)))  # 10 MB
+    ALLOWED_UPLOAD_EXTENSIONS: set = {
+        ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".svg",
+        ".txt", ".md", ".csv", ".adi", ".adif",
+        ".doc", ".docx", ".xls", ".xlsx", ".zip"
+    }
+
     # Testing mode
     TESTING: bool = bool(os.getenv("TESTING", ""))
 
