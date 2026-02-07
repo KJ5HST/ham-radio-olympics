@@ -6334,11 +6334,11 @@ async def admin_resources_page(request: Request, _: bool = Depends(verify_admin)
 async def admin_upload_resource(
     request: Request,
     _: bool = Depends(verify_admin),
-    title: str = Form(...),
+    title: str = Form(""),
     description: str = Form(""),
     file: UploadFile = File(...),
-    access_types: List[str] = Form([]),
-    sport_ids: List[str] = Form([]),
+    access_types: str = Form(""),
+    sport_ids: str = Form(""),
     callsigns: str = Form(""),
 ):
     """Upload a resource file."""
@@ -6348,10 +6348,18 @@ async def admin_upload_resource(
 
     user = get_current_user(request)
 
+    # Parse comma-separated access types and sport IDs from hidden fields
+    access_type_list = [a.strip() for a in access_types.split(",") if a.strip()]
+    sport_id_list = [s.strip() for s in sport_ids.split(",") if s.strip()]
+
     # Validate title
     if not title or not title.strip():
         raise HTTPException(status_code=400, detail="Title is required")
     title = title.strip()
+
+    # Validate file
+    if not file or not hasattr(file, 'filename') or not file.filename:
+        raise HTTPException(status_code=400, detail="File is required")
 
     # Validate extension
     _, ext = os.path.splitext(file.filename or "")
@@ -6385,14 +6393,14 @@ async def admin_upload_resource(
         resource_id = cursor.lastrowid
 
         # Insert access rules
-        for atype in access_types:
+        for atype in access_type_list:
             if atype in ("public", "all_competitors", "admin", "referee"):
                 conn.execute(
                     "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, ?, NULL)",
                     (resource_id, atype)
                 )
             elif atype == "sport":
-                for sid in sport_ids:
+                for sid in sport_id_list:
                     conn.execute(
                         "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'sport', ?)",
                         (resource_id, str(sid))
@@ -6413,6 +6421,10 @@ async def admin_upload_resource(
         ip_address=get_client_ip(request)
     )
 
+    # Return JSON for AJAX requests, redirect for form submissions
+    accept = request.headers.get("Accept", "")
+    if "application/json" in accept:
+        return {"message": f"Uploaded '{title}' successfully", "id": resource_id}
     return RedirectResponse(url="/admin/resources", status_code=303)
 
 

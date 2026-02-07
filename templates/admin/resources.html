@@ -8,7 +8,7 @@
 
 <div class="card">
     <h3>Upload New Resource</h3>
-    <form action="/admin/resources/upload" method="post" enctype="multipart/form-data">
+    <form id="upload-form" action="/admin/resources/upload" method="post" enctype="multipart/form-data">
         <div class="form-group">
             <label for="title">Title <span style="color: red;">*</span></label>
             <input type="text" id="title" name="title" required placeholder="e.g., Contest Rules 2026">
@@ -24,30 +24,30 @@
         </div>
         <div class="form-group">
             <label>Access Control</label>
-            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px;">
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="public" checked> Public
+            <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 4px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="public" checked style="width: auto;"> Public
                 </label>
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="all_competitors"> All Competitors
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="all_competitors" style="width: auto;"> All Competitors
                 </label>
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="admin"> Admins
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="admin" style="width: auto;"> Admins
                 </label>
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="referee"> Referees
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="referee" style="width: auto;"> Referees
                 </label>
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="sport" id="sport-check"> By Sport
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="sport" id="sport-check" style="width: auto;"> By Sport
                 </label>
-                <label style="display: flex; align-items: center; gap: 4px; font-weight: normal;">
-                    <input type="checkbox" name="access_types" value="individual" id="individual-check"> Individual
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" class="access-cb" value="individual" id="individual-check" style="width: auto;"> Individual
                 </label>
             </div>
         </div>
         <div class="form-group" id="sport-select-group" style="display: none;">
-            <label for="sport_ids">Sports</label>
-            <select name="sport_ids" id="sport_ids" multiple style="min-height: 80px;">
+            <label for="sport_ids_select">Sports</label>
+            <select id="sport_ids_select" multiple style="min-height: 80px;">
                 {% for sport in sports %}
                 <option value="{{ sport.id }}">{{ sport.name }}</option>
                 {% endfor %}
@@ -59,7 +59,10 @@
             <input type="text" id="callsigns" name="callsigns" placeholder="e.g., KJ5IRF, W1AW, N0CALL">
             <small>Comma-separated callsigns</small>
         </div>
-        <button type="submit" class="btn btn-success">Upload</button>
+        <!-- Hidden fields populated by JS on submit -->
+        <input type="hidden" name="access_types" id="access_types_hidden">
+        <input type="hidden" name="sport_ids" id="sport_ids_hidden">
+        <button type="submit" class="btn btn-success" id="upload-btn">Upload</button>
     </form>
 </div>
 
@@ -104,6 +107,21 @@ document.getElementById('sport-check').addEventListener('change', function() {
 });
 document.getElementById('individual-check').addEventListener('change', function() {
     document.getElementById('callsigns-group').style.display = this.checked ? 'block' : 'none';
+});
+
+// Populate hidden fields before form submits
+document.getElementById('upload-form').addEventListener('submit', function() {
+    var checked = document.querySelectorAll('.access-cb:checked');
+    var types = [];
+    for (var i = 0; i < checked.length; i++) types.push(checked[i].value);
+    document.getElementById('access_types_hidden').value = types.join(',');
+
+    var sel = document.getElementById('sport_ids_select');
+    var sports = [];
+    for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].selected) sports.push(sel.options[i].value);
+    }
+    document.getElementById('sport_ids_hidden').value = sports.join(',');
 });
 
 async function deleteResource(id) {

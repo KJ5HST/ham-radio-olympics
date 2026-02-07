@@ -122,19 +122,20 @@ def _upload_file(admin_client, title="Test File", description="A test file",
     if access_types is None:
         access_types = ["public"]
 
-    # Build multipart fields — httpx requires all fields as list of tuples
-    # with files as (field, (filename, content, content_type)) tuples
+    # Build multipart fields — send access_types and sport_ids as comma-separated strings
     fields = [
         ("title", (None, title)),
         ("description", (None, description)),
+        ("access_types", (None, ",".join(access_types))),
     ]
-    for at in access_types:
-        fields.append(("access_types", (None, at)))
     if sport_ids:
-        for sid in sport_ids:
-            fields.append(("sport_ids", (None, str(sid))))
+        fields.append(("sport_ids", (None, ",".join(str(s) for s in sport_ids))))
+    else:
+        fields.append(("sport_ids", (None, "")))
     if callsigns:
         fields.append(("callsigns", (None, callsigns)))
+    else:
+        fields.append(("callsigns", (None, "")))
     fields.append(("file", (filename, content, "application/pdf")))
 
     return admin_client.post(
@@ -157,7 +158,10 @@ class TestResourceUpload:
             "/admin/resources/upload",
             files=[
                 ("title", (None, "Hack")),
+                ("description", (None, "")),
                 ("access_types", (None, "public")),
+                ("sport_ids", (None, "")),
+                ("callsigns", (None, "")),
                 ("file", ("test.pdf", b"data", "application/pdf")),
             ],
         )
@@ -181,7 +185,10 @@ class TestResourceUpload:
             "/admin/resources/upload",
             files=[
                 ("title", (None, "")),
+                ("description", (None, "")),
                 ("access_types", (None, "public")),
+                ("sport_ids", (None, "")),
+                ("callsigns", (None, "")),
                 ("file", ("test.pdf", _make_pdf_bytes(), "application/pdf")),
             ],
         )
