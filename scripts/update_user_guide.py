@@ -386,6 +386,7 @@ def main():
 
     md_path = app_dir / 'docs' / 'USER_GUIDE.md'
     html_path = app_dir / 'static' / 'user_guide.html'
+    pdf_path = app_dir / 'static' / 'user_guide.pdf'
 
     # Read markdown
     print(f"Reading {md_path}...")
@@ -398,6 +399,15 @@ def main():
     # Write HTML
     print(f"Writing {html_path}...")
     html_path.write_text(html_content)
+
+    # Generate PDF
+    print("Generating PDF...")
+    import sys
+    sys.path.insert(0, str(app_dir))
+    from user_guide_pdf import generate_user_guide_pdf
+    pdf_bytes = generate_user_guide_pdf(md_content)
+    pdf_path.write_bytes(pdf_bytes)
+    print(f"Writing {pdf_path} ({len(pdf_bytes):,} bytes)...")
 
     print("Done!")
 

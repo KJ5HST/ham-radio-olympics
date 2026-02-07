@@ -691,3 +691,176 @@ class TestFormatFileSize:
     def test_large_mb(self):
         from main import format_file_size
         assert format_file_size(10 * 1024 * 1024) == "10.0 MB"
+
+
+def _update_resource(client, file_id, title="Test File", description="",
+                     access_types="public", sport_ids="", callsigns="",
+                     file_tuple=None):
+    """Helper to PUT-update a resource via multipart form (matching upload pattern).
+
+    file_tuple: optional (filename, content, mime_type) to replace the file.
+    """
+    fields = [
+        ("title", (None, title)),
+        ("description", (None, description)),
+        ("access_types", (None, access_types)),
+        ("sport_ids", (None, sport_ids)),
+        ("callsigns", (None, callsigns)),
+    ]
+    if file_tuple:
+        fields.append(("file", file_tuple))
+    return client.put(f"/admin/resources/{file_id}", files=fields)
+
+
+class TestResourceEdit:
+    """Test resource metadata and access rule editing."""
+
+    def test_get_resource_metadata(self, admin_client):
+        """GET /admin/resources/{id} returns title, description, access_rules."""
+        from database import get_db
+        _upload_file(admin_client, title="Editable Doc", description="A description",
+                     access_types=["public", "admin"])
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+        resp = admin_client.get(f"/admin/resources/{rf['id']}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "Editable Doc"
+        assert data["description"] == "A description"
+        assert data["filename"] == "test.pdf"
+        assert len(data["access_rules"]) == 2
+        types = {r["access_type"] for r in data["access_rules"]}
+        assert types == {"public", "admin"}
+
+    def test_get_resource_not_found(self, admin_client):
+        """GET /admin/resources/9999 returns 404."""
+        resp = admin_client.get("/admin/resources/9999")
+        assert resp.status_code == 404
+
+    def test_get_resource_non_admin_rejected(self, admin_client, regular_client):
+        """GET /admin/resources/{id} rejected for non-admin."""
+        from database import get_db
+        _upload_file(admin_client)
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+        resp = regular_client.get(f"/admin/resources/{rf['id']}")
+        assert resp.status_code in (403, 303)
+
+    def test_update_title_and_description(self, admin_client):
+        """PUT updates title and description without replacing file."""
+        from database import get_db
+        _upload_file(admin_client, title="Old Title", description="Old desc",
+                     access_types=["public"])
+        with get_db() as conn:
+            rf = conn.execute("SELECT * FROM resource_files").fetchone()
+            old_stored = rf["stored_filename"]
+
+        resp = _update_resource(admin_client, rf["id"],
+                                title="New Title", description="New desc",
+                                access_types="public")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Resource updated"
+
+        with get_db() as conn:
+            updated = conn.execute("SELECT * FROM resource_files WHERE id = ?", (rf["id"],)).fetchone()
+        assert updated["title"] == "New Title"
+        assert updated["description"] == "New desc"
+        assert updated["stored_filename"] == old_stored  # file unchanged
+
+    def test_update_access_rules(self, admin_client):
+        """PUT replaces access rules (public -> sport-specific)."""
+        from database import get_db
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active) VALUES ('Test', '2026-01-01', '2026-12-31', 0, 1)"
+            )
+            conn.execute(
+                "INSERT INTO sports (olympiad_id, name, target_type) VALUES (1, 'DX Challenge', 'continent')"
+            )
+
+        _upload_file(admin_client, access_types=["public"])
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+
+        resp = _update_resource(admin_client, rf["id"],
+                                title="Test File", access_types="sport", sport_ids="1")
+        assert resp.status_code == 200
+
+        with get_db() as conn:
+            rules = conn.execute(
+                "SELECT access_type, access_value FROM resource_access WHERE resource_id = ?",
+                (rf["id"],)
+            ).fetchall()
+        assert len(rules) == 1
+        assert rules[0]["access_type"] == "sport"
+        assert rules[0]["access_value"] == "1"
+
+    def test_update_title_required(self, admin_client):
+        """PUT with empty title returns 400."""
+        from database import get_db
+        _upload_file(admin_client)
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+        resp = _update_resource(admin_client, rf["id"], title="  ")
+        assert resp.status_code == 400
+
+    def test_update_non_admin_rejected(self, admin_client, regular_client):
+        """PUT rejected for non-admin."""
+        from database import get_db
+        _upload_file(admin_client)
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+        resp = _update_resource(regular_client, rf["id"], title="Hacked")
+        assert resp.status_code in (403, 303)
+
+    def test_update_not_found(self, admin_client):
+        """PUT on non-existent resource returns 404."""
+        resp = _update_resource(admin_client, 9999, title="Ghost")
+        assert resp.status_code == 404
+
+    def test_update_audit_log(self, admin_client):
+        """PUT creates audit log entry."""
+        from database import get_db
+        _upload_file(admin_client, title="Audit Me")
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+        _update_resource(admin_client, rf["id"], title="Updated Title")
+        with get_db() as conn:
+            logs = conn.execute(
+                "SELECT * FROM audit_log WHERE action = 'resource_update'"
+            ).fetchall()
+        assert len(logs) == 1
+        assert logs[0]["actor_callsign"] == "W1ADM"
+
+    def test_update_replaces_file(self, admin_client):
+        """PUT with a new file replaces the old file on disk and updates DB."""
+        from database import get_db
+        _upload_file(admin_client, title="Original", filename="old.pdf",
+                     content=_make_pdf_bytes(500))
+        with get_db() as conn:
+            rf = conn.execute("SELECT * FROM resource_files").fetchone()
+        old_stored = rf["stored_filename"]
+        old_path = os.path.join(_test_upload_dir, old_stored)
+        assert os.path.exists(old_path)
+
+        new_content = _make_pdf_bytes(800)
+        resp = _update_resource(
+            admin_client, rf["id"],
+            title="Replaced",
+            access_types="public",
+            file_tuple=("new_doc.pdf", new_content, "application/pdf"),
+        )
+        assert resp.status_code == 200
+
+        # Old file removed from disk
+        assert not os.path.exists(old_path)
+
+        # DB updated with new file info
+        with get_db() as conn:
+            updated = conn.execute("SELECT * FROM resource_files WHERE id = ?", (rf["id"],)).fetchone()
+        assert updated["title"] == "Replaced"
+        assert updated["filename"] == "new_doc.pdf"
+        assert updated["stored_filename"] != old_stored
+        assert updated["file_size"] == 800
+        # New file exists on disk
+        assert os.path.exists(os.path.join(_test_upload_dir, updated["stored_filename"]))

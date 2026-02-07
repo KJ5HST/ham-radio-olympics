@@ -41,6 +41,9 @@ from email_service import (
     send_password_reset_email
 )
 
+# Path to the build-time generated User Guide PDF
+USER_GUIDE_PDF_PATH = os.path.join(os.path.dirname(__file__), "static", "user_guide.pdf")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -184,6 +187,64 @@ async def background_pota_spot_check():
             logger.exception(f"POTA spot check failed: {e}")
 
 
+def ensure_user_guide_pdf_resource():
+    """Auto-register or update the User Guide PDF as a public resource.
+
+    Called at startup to ensure the PDF (generated at build time by
+    scripts/update_user_guide.py) is available in the resources list.
+    """
+    import shutil
+    import uuid as _uuid
+
+    static_pdf = USER_GUIDE_PDF_PATH
+    if not os.path.exists(static_pdf):
+        logger.info("User guide PDF not found at %s, skipping resource registration", static_pdf)
+        return
+
+    file_size = os.path.getsize(static_pdf)
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, file_size, stored_filename FROM resource_files WHERE title = ?",
+            ("User Guide (PDF)",)
+        ).fetchone()
+
+        if row is None:
+            # Insert new resource
+            stored_filename = f"{_uuid.uuid4().hex}.pdf"
+            dest_path = os.path.join(config.UPLOAD_DIR, stored_filename)
+            os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+            shutil.copy2(static_pdf, dest_path)
+
+            cursor = conn.execute(
+                """INSERT INTO resource_files
+                   (filename, stored_filename, title, description, file_size, mime_type, uploaded_by, uploaded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                ("user_guide.pdf", stored_filename, "User Guide (PDF)",
+                 "Ham Radio Olympics User Guide",
+                 file_size, "application/pdf", "system",
+                 datetime.utcnow().isoformat())
+            )
+            resource_id = cursor.lastrowid
+            conn.execute(
+                "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'public', NULL)",
+                (resource_id,)
+            )
+            logger.info("Registered User Guide PDF as public resource (id=%s, %s bytes)", resource_id, file_size)
+
+        elif row["file_size"] != file_size:
+            # File changed — update on disk and in DB
+            dest_path = os.path.join(config.UPLOAD_DIR, row["stored_filename"])
+            shutil.copy2(static_pdf, dest_path)
+            conn.execute(
+                "UPDATE resource_files SET file_size = ?, uploaded_at = ? WHERE id = ?",
+                (file_size, datetime.utcnow().isoformat(), row["id"])
+            )
+            logger.info("Updated User Guide PDF resource (id=%s, %s bytes)", row["id"], file_size)
+        else:
+            logger.debug("User Guide PDF resource unchanged, skipping")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown."""
@@ -193,6 +254,7 @@ async def lifespan(app: FastAPI):
     seed_example_olympiad()  # Seeds example data on fresh deployments
     backfill_records()  # Backfill records for existing QSOs if needed
     os.makedirs(config.UPLOAD_DIR, exist_ok=True)  # Ensure upload dir exists
+    ensure_user_guide_pdf_resource()  # Auto-register User Guide PDF as public resource
 
     # Sync on wake if it's been more than an hour since the last sync (non-blocking subprocess)
     async def startup_sync_if_needed():
@@ -6331,6 +6393,147 @@ async def admin_resources_page(request: Request, _: bool = Depends(verify_admin)
         "sports": sports,
         "csrf_token": request.state.csrf_token,
     })
+
+
+@app.get("/admin/resources/{file_id}")
+async def admin_get_resource(
+    request: Request,
+    file_id: int,
+    _: bool = Depends(verify_admin),
+):
+    """Get resource metadata and access rules for editing."""
+    with get_db() as conn:
+        resource = conn.execute(
+            "SELECT id, title, description, filename FROM resource_files WHERE id = ?",
+            (file_id,)
+        ).fetchone()
+        if not resource:
+            raise HTTPException(status_code=404, detail="Resource not found")
+
+        access_rules = conn.execute(
+            "SELECT access_type, access_value FROM resource_access WHERE resource_id = ?",
+            (file_id,)
+        ).fetchall()
+
+    return {
+        "id": resource["id"],
+        "title": resource["title"],
+        "description": resource["description"] or "",
+        "filename": resource["filename"],
+        "access_rules": [{"access_type": r["access_type"], "access_value": r["access_value"]} for r in access_rules],
+    }
+
+
+@app.put("/admin/resources/{file_id}")
+async def admin_update_resource(
+    request: Request,
+    file_id: int,
+    _: bool = Depends(verify_admin),
+    title: str = Form(""),
+    description: str = Form(""),
+    file: Optional[UploadFile] = File(None),
+    access_types: str = Form(""),
+    sport_ids: str = Form(""),
+    callsigns: str = Form(""),
+):
+    """Update resource metadata, access rules, and optionally replace the file."""
+    import uuid
+    import mimetypes
+    from audit import log_action
+
+    user = get_current_user(request)
+
+    title = (title or "").strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title is required")
+
+    description = (description or "").strip()
+    access_type_list = [a.strip() for a in access_types.split(",") if a.strip()]
+    sport_id_list = [s.strip() for s in sport_ids.split(",") if s.strip()]
+
+    # Handle optional file replacement
+    new_file_data = None
+    if file and hasattr(file, 'filename') and file.filename:
+        _, ext = os.path.splitext(file.filename)
+        ext = ext.lower()
+        if ext not in config.ALLOWED_UPLOAD_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
+        content = await file.read()
+        if len(content) > config.MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=400, detail=f"File exceeds maximum size of {config.MAX_UPLOAD_SIZE // (1024*1024)} MB")
+        stored_filename = f"{uuid.uuid4().hex}{ext}"
+        mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+        new_file_data = {
+            "filename": file.filename,
+            "stored_filename": stored_filename,
+            "content": content,
+            "file_size": len(content),
+            "mime_type": mime_type,
+        }
+
+    with get_db() as conn:
+        resource = conn.execute(
+            "SELECT * FROM resource_files WHERE id = ?", (file_id,)
+        ).fetchone()
+        if not resource:
+            raise HTTPException(status_code=404, detail="Resource not found")
+
+        # Replace file on disk if new one provided
+        if new_file_data:
+            # Remove old file
+            old_path = os.path.join(config.UPLOAD_DIR, resource["stored_filename"])
+            if os.path.exists(old_path):
+                os.remove(old_path)
+            # Save new file
+            new_path = os.path.join(config.UPLOAD_DIR, new_file_data["stored_filename"])
+            os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+            with open(new_path, "wb") as f:
+                f.write(new_file_data["content"])
+            conn.execute(
+                "UPDATE resource_files SET title = ?, description = ?, filename = ?, stored_filename = ?, file_size = ?, mime_type = ? WHERE id = ?",
+                (title, description, new_file_data["filename"], new_file_data["stored_filename"],
+                 new_file_data["file_size"], new_file_data["mime_type"], file_id)
+            )
+        else:
+            conn.execute(
+                "UPDATE resource_files SET title = ?, description = ? WHERE id = ?",
+                (title, description, file_id)
+            )
+
+        # Replace access rules
+        conn.execute("DELETE FROM resource_access WHERE resource_id = ?", (file_id,))
+        for atype in access_type_list:
+            if atype in ("public", "all_competitors", "admin", "referee"):
+                conn.execute(
+                    "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, ?, NULL)",
+                    (file_id, atype)
+                )
+            elif atype == "sport":
+                for sid in sport_id_list:
+                    conn.execute(
+                        "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'sport', ?)",
+                        (file_id, str(sid))
+                    )
+            elif atype == "individual":
+                for cs in [c.strip().upper() for c in callsigns.split(",") if c.strip()]:
+                    conn.execute(
+                        "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'individual', ?)",
+                        (file_id, cs)
+                    )
+
+    details = f"Updated '{title}'"
+    if new_file_data:
+        details += f" (replaced file with {new_file_data['filename']})"
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="resource_update",
+        target_type="resource",
+        target_id=str(file_id),
+        details=details,
+        ip_address=get_client_ip(request)
+    )
+
+    return {"message": "Resource updated"}
 
 
 @app.post("/admin/resources/upload")

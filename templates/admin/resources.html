@@ -6,9 +6,10 @@
 <p><a href="/admin">&larr; Back to Admin</a></p>
 <h2>Resource Files</h2>
 
-<div class="card">
-    <h3>Upload New Resource</h3>
-    <form id="upload-form" action="/admin/resources/upload" method="post" enctype="multipart/form-data">
+<div class="card" id="resource-form-card">
+    <h3 id="form-heading">Upload New Resource</h3>
+    <form id="resource-form" action="/admin/resources/upload" method="post" enctype="multipart/form-data">
+        <input type="hidden" id="edit-resource-id" value="">
         <div class="form-group">
             <label for="title">Title <span style="color: red;">*</span></label>
             <input type="text" id="title" name="title" required placeholder="e.g., Contest Rules 2026">
@@ -17,10 +18,11 @@
             <label for="description">Description</label>
             <textarea id="description" name="description" rows="2" placeholder="Optional description"></textarea>
         </div>
-        <div class="form-group">
-            <label for="file">File <span style="color: red;">*</span></label>
+        <div class="form-group" id="file-group">
+            <label for="file" id="file-label">File <span id="file-required" style="color: red;">*</span></label>
             <input type="file" id="file" name="file" required>
-            <small>Max 10 MB. Allowed: PDF, images, text, CSV, ADIF, Office docs, ZIP</small>
+            <small id="file-help">Max 10 MB. Allowed: PDF, images, text, CSV, ADIF, Office docs, ZIP</small>
+            <small id="file-current" style="display: none; color: var(--text-muted, #888);"></small>
         </div>
         <div class="form-group">
             <label>Access Control</label>
@@ -62,7 +64,10 @@
         <!-- Hidden fields populated by JS on submit -->
         <input type="hidden" name="access_types" id="access_types_hidden">
         <input type="hidden" name="sport_ids" id="sport_ids_hidden">
-        <button type="submit" class="btn btn-success" id="upload-btn">Upload</button>
+        <div style="display: flex; gap: 8px;">
+            <button type="submit" class="btn btn-success" id="submit-btn">Upload</button>
+            <button type="button" class="btn" id="cancel-btn" style="display: none;" onclick="cancelEdit()">Cancel</button>
+        </div>
     </form>
 </div>
 
@@ -82,7 +87,7 @@
     <tbody>
         {% for r in resources %}
         <tr>
-            <td><strong>{{ r.title }}</strong></td>
+            <td><a href="#" onclick="editResource({{ r.id }}); return false;" style="font-weight: bold;">{{ r.title }}</a></td>
             <td>{{ r.filename }}</td>
             <td>{{ r.file_size | format_file_size }}</td>
             <td>{{ r.access_summary }}</td>
@@ -90,6 +95,7 @@
             <td>
                 <div class="btn-group">
                     <a href="/resources/{{ r.id }}/download" class="btn btn-sm">Download</a>
+                    <button type="button" onclick="editResource({{ r.id }})" class="btn btn-sm">Edit</button>
                     <button type="button" onclick="deleteResource({{ r.id }})" class="btn btn-sm btn-danger">Delete</button>
                 </div>
             </td>
@@ -109,8 +115,9 @@ document.getElementById('individual-check').addEventListener('change', function(
     document.getElementById('callsigns-group').style.display = this.checked ? 'block' : 'none';
 });
 
-// Populate hidden fields before form submits
-document.getElementById('upload-form').addEventListener('submit', function() {
+// Populate hidden fields and handle submit
+document.getElementById('resource-form').addEventListener('submit', function(e) {
+    // Populate hidden fields for access types and sport IDs
     var checked = document.querySelectorAll('.access-cb:checked');
     var types = [];
     for (var i = 0; i < checked.length; i++) types.push(checked[i].value);
@@ -122,19 +129,139 @@ document.getElementById('upload-form').addEventListener('submit', function() {
         if (sel.options[i].selected) sports.push(sel.options[i].value);
     }
     document.getElementById('sport_ids_hidden').value = sports.join(',');
+
+    // If editing, intercept and use fetch PUT instead of normal form POST
+    var editId = document.getElementById('edit-resource-id').value;
+    if (editId) {
+        e.preventDefault();
+        var formData = new FormData(document.getElementById('resource-form'));
+        fetch('/admin/resources/' + editId, {
+            method: 'PUT',
+            credentials: 'same-origin',
+            body: formData
+        }).then(function(resp) {
+            if (resp.ok) {
+                location.reload();
+            } else {
+                return resp.json().then(function(data) {
+                    alert('Error: ' + (data.detail || 'Failed to save'));
+                });
+            }
+        }).catch(function(err) {
+            alert('Error: ' + err.message);
+        });
+    }
+    // Otherwise, let the normal form POST proceed
 });
+
+async function editResource(id) {
+    try {
+        var resp = await fetch('/admin/resources/' + id, { credentials: 'same-origin' });
+        if (!resp.ok) {
+            var errData = await resp.json();
+            alert('Error: ' + (errData.detail || 'Failed to load resource'));
+            return;
+        }
+        var data = await resp.json();
+
+        // Switch to edit mode
+        document.getElementById('edit-resource-id').value = data.id;
+        document.getElementById('form-heading').textContent = 'Edit: ' + data.title;
+        document.getElementById('submit-btn').textContent = 'Save Changes';
+        document.getElementById('cancel-btn').style.display = '';
+
+        // Populate fields
+        document.getElementById('title').value = data.title;
+        document.getElementById('description').value = data.description;
+
+        // File is optional when editing
+        var fileInput = document.getElementById('file');
+        fileInput.removeAttribute('required');
+        fileInput.value = '';
+        document.getElementById('file-required').style.display = 'none';
+        document.getElementById('file-help').textContent = 'Leave empty to keep current file. Max 10 MB.';
+        document.getElementById('file-current').style.display = 'block';
+        document.getElementById('file-current').textContent = 'Current file: ' + data.filename;
+
+        // Reset all access checkboxes
+        var cbs = document.querySelectorAll('.access-cb');
+        for (var i = 0; i < cbs.length; i++) cbs[i].checked = false;
+
+        // Set access checkboxes from rules
+        var sportIds = [];
+        var callsignsList = [];
+        for (var i = 0; i < data.access_rules.length; i++) {
+            var rule = data.access_rules[i];
+            if (rule.access_type === 'sport') {
+                document.getElementById('sport-check').checked = true;
+                if (rule.access_value) sportIds.push(rule.access_value);
+            } else if (rule.access_type === 'individual') {
+                document.getElementById('individual-check').checked = true;
+                if (rule.access_value) callsignsList.push(rule.access_value);
+            } else {
+                var cb = document.querySelector('.access-cb[value="' + rule.access_type + '"]');
+                if (cb) cb.checked = true;
+            }
+        }
+
+        // Show/hide conditional groups
+        document.getElementById('sport-select-group').style.display =
+            document.getElementById('sport-check').checked ? 'block' : 'none';
+        document.getElementById('callsigns-group').style.display =
+            document.getElementById('individual-check').checked ? 'block' : 'none';
+
+        // Pre-select sports
+        var sel = document.getElementById('sport_ids_select');
+        for (var i = 0; i < sel.options.length; i++) {
+            sel.options[i].selected = sportIds.indexOf(sel.options[i].value) !== -1;
+        }
+
+        // Fill callsigns
+        document.getElementById('callsigns').value = callsignsList.join(', ');
+
+        // Scroll to form
+        document.getElementById('resource-form-card').scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+function cancelEdit() {
+    // Reset to upload mode
+    document.getElementById('edit-resource-id').value = '';
+    document.getElementById('form-heading').textContent = 'Upload New Resource';
+    document.getElementById('submit-btn').textContent = 'Upload';
+    document.getElementById('cancel-btn').style.display = 'none';
+
+    // Reset form fields
+    document.getElementById('resource-form').reset();
+
+    // Restore file input to required
+    var fileInput = document.getElementById('file');
+    fileInput.setAttribute('required', '');
+    document.getElementById('file-required').style.display = '';
+    document.getElementById('file-help').textContent = 'Max 10 MB. Allowed: PDF, images, text, CSV, ADIF, Office docs, ZIP';
+    document.getElementById('file-current').style.display = 'none';
+
+    // Reset conditional groups
+    document.getElementById('sport-select-group').style.display = 'none';
+    document.getElementById('callsigns-group').style.display = 'none';
+
+    // Re-check public by default
+    document.querySelector('.access-cb[value="public"]').checked = true;
+}
 
 async function deleteResource(id) {
     if (!confirm('Delete this resource? This cannot be undone.')) return;
     try {
-        const resp = await fetch('/admin/resources/' + id, {
+        var resp = await fetch('/admin/resources/' + id, {
             method: 'DELETE',
             credentials: 'same-origin'
         });
         if (resp.ok) {
             location.reload();
         } else {
-            const data = await resp.json();
+            var data = await resp.json();
             alert('Error: ' + (data.detail || 'Failed to delete'));
         }
     } catch (err) {
