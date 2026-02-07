@@ -1126,9 +1126,9 @@ def recompute_all_active_matches():
         # Get unique sport IDs
         sport_ids = list(set(sp[1] for sp in match_sport_pairs))
 
-    # Recompute individual medals
+    # Recompute individual medals (suppress notifications - no new data arrived)
     for match_id, _ in match_sport_pairs:
-        recompute_match_medals(match_id)
+        recompute_match_medals(match_id, notify=False)
 
     # Recompute team standings for each sport
     for sport_id in sport_ids:
@@ -1156,7 +1156,7 @@ def recompute_sport_matches(sport_id: int):
         match_ids = [row["id"] for row in cursor.fetchall()]
 
     for match_id in match_ids:
-        recompute_match_medals(match_id)
+        recompute_match_medals(match_id, notify=False)
 
     # Recompute team standings for this sport
     compute_team_standings(sport_id)

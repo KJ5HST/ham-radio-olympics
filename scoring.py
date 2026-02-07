@@ -544,7 +544,7 @@ def should_award_pota_bonus(target_type: str, role: str, competitor_at_park: boo
         return 0
 
 
-def recompute_match_medals(match_id: int):
+def recompute_match_medals(match_id: int, notify: bool = True):
     """
     Recompute all medals for a Match.
 
@@ -641,10 +641,10 @@ def recompute_match_medals(match_id: int):
 
     # Update records after exclusive block is released
     for qso_id, callsign in qsos_for_records:
-        update_records(qso_id, callsign, match_id=match_id)
+        update_records(qso_id, callsign, match_id=match_id, notify=notify)
 
 
-def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, match_id: Optional[int] = None):
+def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, match_id: Optional[int] = None, notify: bool = True):
     """
     Check and update records based on a QSO.
 
@@ -655,6 +655,7 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
         callsign: Competitor callsign
         sport_id: Sport ID (None for global records)
         match_id: Match ID where the QSO qualified
+        notify: Whether to send notifications for broken records (False during recomputes)
     """
     records_to_notify = []  # Collect records broken for notifications
 
@@ -714,8 +715,9 @@ def update_records(qso_id: int, callsign: str, sport_id: Optional[int] = None, m
             )
             # Don't notify for lowest power records as they're less exciting
 
-    # Send notifications after transaction commits
-    _notify_records_broken(callsign, records_to_notify)
+    # Send notifications after transaction commits (skip during recomputes)
+    if notify:
+        _notify_records_broken(callsign, records_to_notify)
 
 
 def _notify_records_broken(callsign: str, records: list):
@@ -1120,7 +1122,7 @@ def recompute_all_records():
             qso_matches = True
 
         if qso_matches:
-            update_records(qso_id, callsign, match_id=match_id)
+            update_records(qso_id, callsign, match_id=match_id, notify=False)
 
 
 def get_honorable_mentions() -> dict:
