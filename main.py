@@ -3990,50 +3990,6 @@ async def export_medals(request: Request, user: User = Depends(require_user)):
 # PDF EXPORT ENDPOINTS
 # ============================================================
 
-@app.get("/olympiad.pdf", tags=["public"])
-async def get_olympiad_pdf(request: Request, refresh: bool = False):
-    """
-    Download the cached olympiad standings PDF.
-
-    This PDF is automatically regenerated when medals or records change.
-    No authentication required - this is public standings data.
-
-    Query params:
-        refresh: If true, force regeneration of the PDF
-    """
-    from starlette.responses import Response
-    from pdf_export import get_cached_pdf, regenerate_active_olympiad_pdf
-
-    # Get active olympiad
-    with get_db() as conn:
-        cursor = conn.execute("SELECT id, name FROM olympiads WHERE is_active = 1")
-        olympiad = cursor.fetchone()
-
-    if not olympiad:
-        raise HTTPException(status_code=404, detail="No active olympiad found")
-
-    # Force regeneration if requested
-    if refresh:
-        regenerate_active_olympiad_pdf()
-
-    # Try to get cached PDF, regenerate if not exists
-    pdf_bytes = get_cached_pdf(olympiad["id"])
-    if not pdf_bytes:
-        # Generate it now
-        regenerate_active_olympiad_pdf()
-        pdf_bytes = get_cached_pdf(olympiad["id"])
-
-    if not pdf_bytes:
-        raise HTTPException(status_code=500, detail="Failed to generate PDF")
-
-    filename = f"{olympiad['name'].replace(' ', '_')}_Standings.pdf"
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
-
-
 @app.get("/export/pdf/olympiad")
 async def export_pdf_olympiad(
     request: Request,

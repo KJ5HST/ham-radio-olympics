@@ -231,11 +231,70 @@ def get_cached_pdf_info(olympiad_id: int) -> Optional[Dict[str, Any]]:
     return {"exists": False, "path": str(pdf_path), "generated_at": None, "size_bytes": 0}
 
 
+def _upsert_standings_resource(olympiad_id: int, pdf_bytes: bytes):
+    """Copy the standings PDF into the resources system, creating or overwriting."""
+    import shutil
+    import uuid as _uuid
+    from config import config
+
+    TITLE = "Current Standings (PDF)"
+
+    with get_db() as conn:
+        olympiad = conn.execute(
+            "SELECT name FROM olympiads WHERE id = ?", (olympiad_id,)
+        ).fetchone()
+        olympiad_name = olympiad["name"] if olympiad else f"Olympiad {olympiad_id}"
+        display_filename = f"{olympiad_name.replace(' ', '_')}_Standings.pdf"
+
+        row = conn.execute(
+            "SELECT id, stored_filename FROM resource_files WHERE title = ?",
+            (TITLE,)
+        ).fetchone()
+
+        if row is None:
+            # Create new resource
+            stored_filename = f"{_uuid.uuid4().hex}.pdf"
+            dest_path = os.path.join(config.UPLOAD_DIR, stored_filename)
+            os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+            with open(dest_path, "wb") as f:
+                f.write(pdf_bytes)
+
+            cursor = conn.execute(
+                """INSERT INTO resource_files
+                   (filename, stored_filename, title, description, file_size, mime_type, uploaded_by, uploaded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (display_filename, stored_filename, TITLE,
+                 f"Auto-generated standings for {olympiad_name}",
+                 len(pdf_bytes), "application/pdf", "system",
+                 datetime.utcnow().isoformat())
+            )
+            resource_id = cursor.lastrowid
+            conn.execute(
+                "INSERT INTO resource_access (resource_id, access_type, access_value) VALUES (?, 'all_competitors', NULL)",
+                (resource_id,)
+            )
+            logger.info("Created standings resource (id=%s, %s bytes)", resource_id, len(pdf_bytes))
+        else:
+            # Overwrite existing resource file on disk and update DB
+            dest_path = os.path.join(config.UPLOAD_DIR, row["stored_filename"])
+            os.makedirs(config.UPLOAD_DIR, exist_ok=True)
+            with open(dest_path, "wb") as f:
+                f.write(pdf_bytes)
+            conn.execute(
+                "UPDATE resource_files SET filename = ?, file_size = ?, description = ?, uploaded_at = ? WHERE id = ?",
+                (display_filename, len(pdf_bytes),
+                 f"Auto-generated standings for {olympiad_name}",
+                 datetime.utcnow().isoformat(), row["id"])
+            )
+            logger.info("Updated standings resource (id=%s, %s bytes)", row["id"], len(pdf_bytes))
+
+
 def regenerate_cached_pdf(olympiad_id: int) -> bool:
     """
     Regenerate the cached PDF for an olympiad.
 
     This should be called after medals or records are updated.
+    Also upserts the PDF into the resources system.
 
     Returns:
         True if PDF was generated successfully, False otherwise
@@ -245,6 +304,10 @@ def regenerate_cached_pdf(olympiad_id: int) -> bool:
         pdf_path = get_cached_pdf_path(olympiad_id)
         pdf_path.write_bytes(pdf_bytes)
         logger.info(f"Regenerated cached PDF for olympiad {olympiad_id}: {len(pdf_bytes)} bytes")
+        try:
+            _upsert_standings_resource(olympiad_id, pdf_bytes)
+        except Exception as e:
+            logger.error(f"Failed to upsert standings resource: {e}")
         return True
     except Exception as e:
         logger.error(f"Failed to regenerate cached PDF for olympiad {olympiad_id}: {e}")

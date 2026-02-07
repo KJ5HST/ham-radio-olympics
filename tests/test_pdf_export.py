@@ -14,21 +14,33 @@ _test_db_fd, _test_db_path = tempfile.mkstemp(suffix=".db")
 os.close(_test_db_fd)
 os.environ["DATABASE_PATH"] = _test_db_path
 
+# Create temp upload dir for tests
+_test_upload_dir = tempfile.mkdtemp()
+os.environ["UPLOAD_DIR"] = _test_upload_dir
+
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Reset database before each test."""
+    """Reset database before each test and ensure upload dir is correct."""
     from database import reset_db
     reset_db()
+    from config import config
+    import main as main_module
+    config.UPLOAD_DIR = _test_upload_dir
+    main_module.config.UPLOAD_DIR = _test_upload_dir
+    os.makedirs(_test_upload_dir, exist_ok=True)
     yield
 
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_db():
-    """Cleanup database file after all tests."""
+    """Cleanup database file and upload dir after all tests."""
     yield
     if os.path.exists(_test_db_path):
         os.remove(_test_db_path)
+    import shutil
+    if os.path.exists(_test_upload_dir):
+        shutil.rmtree(_test_upload_dir)
 
 
 @pytest.fixture
@@ -406,36 +418,6 @@ class TestPDFContentAccuracy:
 class TestCachedPDF:
     """Test cached PDF functionality."""
 
-    def test_public_olympiad_pdf_endpoint_exists(self, client, setup_olympiad_data):
-        """Test public olympiad.pdf endpoint exists."""
-        response = client.get("/olympiad.pdf")
-        assert response.status_code == 200
-
-    def test_public_olympiad_pdf_no_auth_required(self, client, setup_olympiad_data):
-        """Test public olympiad.pdf does not require authentication."""
-        # Fresh client with no session
-        from fastapi.testclient import TestClient
-        from main import app
-        fresh_client = TestClient(app)
-        response = fresh_client.get("/olympiad.pdf")
-        assert response.status_code == 200
-
-    def test_public_olympiad_pdf_returns_pdf(self, client, setup_olympiad_data):
-        """Test public olympiad.pdf returns PDF content type."""
-        response = client.get("/olympiad.pdf")
-        assert response.status_code == 200
-        assert "application/pdf" in response.headers.get("content-type", "")
-
-    def test_public_olympiad_pdf_valid_content(self, client, setup_olympiad_data):
-        """Test public olympiad.pdf returns valid PDF."""
-        response = client.get("/olympiad.pdf")
-        assert response.content.startswith(b"%PDF")
-
-    def test_public_olympiad_pdf_no_active_olympiad(self, client):
-        """Test public olympiad.pdf returns 404 when no active olympiad."""
-        response = client.get("/olympiad.pdf")
-        assert response.status_code == 404
-
     def test_cached_pdf_functions_exist(self):
         """Test cached PDF functions exist."""
         from pdf_export import (
@@ -543,9 +525,29 @@ class TestCachedPDF:
         if pdf_path.exists():
             os.remove(pdf_path)
 
-    def test_olympiad_page_has_pdf_link(self, logged_in_client, setup_olympiad_data):
-        """Test olympiad page has link to download PDF."""
-        response = logged_in_client.get("/")
-        assert response.status_code == 200
-        assert "/olympiad.pdf" in response.text
-        assert "Download</a>" in response.text
+    def test_regenerate_creates_standings_resource(self, setup_olympiad_data):
+        """Test regenerate_cached_pdf upserts standings into resources."""
+        from pdf_export import regenerate_cached_pdf, get_cached_pdf_path
+        from database import get_db
+
+        result = regenerate_cached_pdf(olympiad_id=1)
+        assert result is True
+
+        with get_db() as conn:
+            resource = conn.execute(
+                "SELECT * FROM resource_files WHERE title = 'Current Standings (PDF)'"
+            ).fetchone()
+            assert resource is not None
+            assert resource["uploaded_by"] == "system"
+            assert resource["file_size"] > 0
+            # Check access is all_competitors
+            access = conn.execute(
+                "SELECT access_type FROM resource_access WHERE resource_id = ?",
+                (resource["id"],)
+            ).fetchone()
+            assert access["access_type"] == "all_competitors"
+
+        # Cleanup
+        pdf_path = get_cached_pdf_path(1)
+        if pdf_path.exists():
+            os.remove(pdf_path)
