@@ -409,8 +409,7 @@ function filterMatches() {
             const activeParks = new Set(data.parks_with_spots || []);
             const spotDetails = data.spot_details || {};
 
-            let activeCount = 0;
-            const activeMatchParks = [];
+            // Update DOM indicators for matches visible on current page
             document.querySelectorAll('.live-indicator[data-park]').forEach(el => {
                 const park = el.getAttribute('data-park');
                 if (activeParks.has(park)) {
@@ -418,18 +417,24 @@ function filterMatches() {
                     const parkInfo = parkMatches[park];
                     const parkName = parkInfo ? parkInfo.display : park;
                     el.title = formatSpotTooltip(parkName, spotDetails[park]);
-                    activeCount++;
-                    if (parkInfo) {
-                        activeMatchParks.push({
-                            park: park,
-                            spots: spotDetails[park] || [],
-                            ...parkInfo
-                        });
-                    }
                 } else {
                     el.style.display = 'none';
                 }
             });
+
+            // Build summary from ALL active matches (not just current page)
+            let activeCount = 0;
+            const activeMatchParks = [];
+            for (const [park, parkInfo] of Object.entries(parkMatches)) {
+                if (activeParks.has(park)) {
+                    activeCount++;
+                    activeMatchParks.push({
+                        park: park,
+                        spots: spotDetails[park] || [],
+                        ...parkInfo
+                    });
+                }
+            }
 
             // Update summary message
             const summary = document.getElementById('spots-summary');
