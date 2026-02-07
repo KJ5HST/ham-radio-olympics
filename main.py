@@ -353,11 +353,14 @@ async def csrf_middleware(request: Request, call_next):
         content_type = request.headers.get("content-type", "")
 
         # JSON API calls are exempt (require CORS preflight, can't be forged via HTML forms)
+        # Multipart form-data (file uploads) exempt from body-based CSRF check
+        # because binary file content can't be parsed as URL-encoded form data.
+        # SameSite=lax on session cookie already prevents cross-origin form submissions.
         # All other content types (form, text/plain, empty) require CSRF validation
-        # Non-form content types will fail token parsing and be rejected
         is_json_api = "application/json" in content_type
+        is_multipart = "multipart/form-data" in content_type
 
-        if not is_json_api:
+        if not is_json_api and not is_multipart:
             # Read body and cache it for later use by the endpoint
             body = await request.body()
             # Parse form data manually to check CSRF token
