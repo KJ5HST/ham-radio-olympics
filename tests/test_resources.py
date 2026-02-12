@@ -864,3 +864,171 @@ class TestResourceEdit:
         assert updated["file_size"] == 800
         # New file exists on disk
         assert os.path.exists(os.path.join(_test_upload_dir, updated["stored_filename"]))
+
+
+class TestResourceUploadSettings:
+    """Test configurable upload restrictions via admin settings."""
+
+    def test_save_settings_endpoint(self, admin_client):
+        """POST /admin/resources/settings saves settings to DB."""
+        from database import get_setting
+        resp = admin_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "25",
+                "allowed_extensions": ".pdf, .png, .exe",
+                "allow_all_extensions": "0",
+            },
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert get_setting("resource_max_upload_size_mb") == "25"
+        assert ".exe" in get_setting("resource_allowed_extensions")
+        assert get_setting("resource_allow_all_extensions") == "0"
+
+    def test_save_settings_non_admin_rejected(self, regular_client):
+        """Non-admin cannot save upload settings."""
+        resp = regular_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "25",
+                "allowed_extensions": ".pdf",
+                "allow_all_extensions": "0",
+            },
+        )
+        assert resp.status_code in (403, 303)
+
+    def test_save_settings_min_size_validation(self, admin_client):
+        """Max upload size must be at least 1 MB."""
+        resp = admin_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "0",
+                "allowed_extensions": ".pdf",
+                "allow_all_extensions": "0",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_save_settings_max_size_validation(self, admin_client):
+        """Max upload size cannot exceed 500 MB."""
+        resp = admin_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "501",
+                "allowed_extensions": ".pdf",
+                "allow_all_extensions": "0",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_custom_max_size_enforced_on_upload(self, admin_client):
+        """Setting a smaller max size rejects files that exceed it."""
+        from database import set_setting
+        set_setting("resource_max_upload_size_mb", "1")  # 1 MB
+        big = b"x" * (2 * 1024 * 1024)  # 2 MB
+        resp = _upload_file(admin_client, content=big)
+        assert resp.status_code == 400
+        assert "maximum size" in resp.text.lower() or "exceeds" in resp.text.lower()
+
+    def test_custom_extensions_enforced_on_upload(self, admin_client):
+        """Setting custom extensions rejects files not in the list."""
+        from database import set_setting
+        set_setting("resource_allowed_extensions", ".txt,.csv")
+        set_setting("resource_allow_all_extensions", "0")
+        resp = _upload_file(admin_client, filename="test.pdf", content=_make_pdf_bytes())
+        assert resp.status_code == 400
+        assert "not allowed" in resp.text.lower()
+
+    def test_custom_extensions_allows_listed_type(self, admin_client):
+        """Files matching custom extensions are accepted."""
+        from database import set_setting
+        set_setting("resource_allowed_extensions", ".txt,.csv")
+        set_setting("resource_allow_all_extensions", "0")
+        resp = _upload_file(admin_client, filename="data.txt", content=b"hello world")
+        assert resp.status_code in (200, 303)
+
+    def test_allow_all_extensions_bypasses_check(self, admin_client):
+        """When allow_all_extensions is set, any file type is accepted."""
+        from database import set_setting
+        set_setting("resource_allow_all_extensions", "1")
+        set_setting("resource_allowed_extensions", ".txt")  # restrictive list, but overridden
+        resp = _upload_file(admin_client, filename="program.exe", content=b"MZ" + b"\x00" * 100)
+        assert resp.status_code in (200, 303)
+
+    def test_settings_affect_edit_file_replacement(self, admin_client):
+        """DB-backed settings also apply when replacing a file via PUT."""
+        from database import get_db, set_setting
+        # Upload initial file with defaults
+        _upload_file(admin_client, title="Edit Me")
+        with get_db() as conn:
+            rf = conn.execute("SELECT id FROM resource_files").fetchone()
+
+        # Now restrict to only .txt
+        set_setting("resource_allowed_extensions", ".txt")
+        set_setting("resource_allow_all_extensions", "0")
+
+        # Try to replace with a .pdf — should fail
+        resp = _update_resource(
+            admin_client, rf["id"],
+            title="Edit Me",
+            access_types="public",
+            file_tuple=("new.pdf", _make_pdf_bytes(), "application/pdf"),
+        )
+        assert resp.status_code == 400
+        assert "not allowed" in resp.text.lower()
+
+    def test_settings_shown_on_admin_page(self, admin_client):
+        """Admin resources page includes current upload settings."""
+        from database import set_setting
+        set_setting("resource_max_upload_size_mb", "42")
+        set_setting("resource_allowed_extensions", ".pdf,.zip")
+        set_setting("resource_allow_all_extensions", "0")
+        resp = admin_client.get("/admin/resources")
+        assert resp.status_code == 200
+        assert "42" in resp.text
+        assert "Upload Settings" in resp.text
+
+    def test_save_settings_normalizes_extensions(self, admin_client):
+        """Extensions are normalized to lowercase with leading dots."""
+        from database import get_setting
+        admin_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "10",
+                "allowed_extensions": "PDF, png, .Jpg",
+                "allow_all_extensions": "0",
+            },
+        )
+        exts = get_setting("resource_allowed_extensions")
+        assert ".pdf" in exts
+        assert ".png" in exts
+        assert ".jpg" in exts
+        # Should not have uppercase or missing dots
+        assert "PDF" not in exts
+
+    def test_save_settings_creates_audit_log(self, admin_client):
+        """Saving settings creates an audit log entry."""
+        from database import get_db
+        admin_client.post(
+            "/admin/resources/settings",
+            data={
+                "max_upload_size_mb": "10",
+                "allowed_extensions": ".pdf",
+                "allow_all_extensions": "0",
+            },
+        )
+        with get_db() as conn:
+            logs = conn.execute(
+                "SELECT * FROM audit_log WHERE action = 'resource_settings_update'"
+            ).fetchall()
+        assert len(logs) == 1
+
+    def test_defaults_used_when_no_settings(self, admin_client):
+        """When no settings in DB, config defaults are used."""
+        from main import get_resource_upload_limits
+        from config import config
+        limits = get_resource_upload_limits()
+        assert limits["max_size_mb"] == config.MAX_UPLOAD_SIZE // (1024 * 1024)
+        assert limits["allowed_extensions"] == config.ALLOWED_UPLOAD_EXTENSIONS
+        assert limits["allow_all_extensions"] is False

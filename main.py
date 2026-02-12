@@ -6217,12 +6217,19 @@ def get_user_team(conn, callsign: str):
 def recompute_all_team_standings():
     """Recompute team standings for all sports and matches."""
     with get_db() as conn:
+        # Skip if there are no matches at all
+        match_count = conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
+        if match_count == 0:
+            return
+
         sports = conn.execute("SELECT id FROM sports").fetchall()
         for sport in sports:
             sport_id = sport[0]
-            compute_team_standings(sport_id)
             # Also compute per-match standings
             matches = conn.execute("SELECT id FROM matches WHERE sport_id = ?", (sport_id,)).fetchall()
+            if not matches:
+                continue
+            compute_team_standings(sport_id)
             for match in matches:
                 compute_team_standings(sport_id, match[0])
 
@@ -6248,6 +6255,48 @@ def get_team_members(conn, team_id: int):
 
 
 # --- Resource File Distribution ---
+
+
+def get_resource_upload_limits():
+    """Get resource upload limits from DB settings, falling back to config defaults."""
+    from database import get_setting
+
+    allow_all = get_setting("resource_allow_all_extensions", "0") == "1"
+
+    default_extensions = ",".join(sorted(config.ALLOWED_UPLOAD_EXTENSIONS))
+    allowed_raw = get_setting("resource_allowed_extensions", default_extensions)
+    allowed_extensions = {e.strip().lower() for e in allowed_raw.split(",") if e.strip()}
+
+    default_max_mb = str(config.MAX_UPLOAD_SIZE // (1024 * 1024))
+    max_size_mb = int(get_setting("resource_max_upload_size_mb", default_max_mb))
+    max_size_bytes = max_size_mb * 1024 * 1024
+
+    return {
+        "allow_all_extensions": allow_all,
+        "allowed_extensions": allowed_extensions,
+        "max_size_bytes": max_size_bytes,
+        "max_size_mb": max_size_mb,
+    }
+
+
+def validate_resource_file(filename: str, content: bytes):
+    """Validate a resource file against DB-backed upload settings.
+
+    Raises HTTPException if validation fails.
+    """
+    limits = get_resource_upload_limits()
+    _, ext = os.path.splitext(filename)
+    ext = ext.lower()
+
+    if not limits["allow_all_extensions"] and ext not in limits["allowed_extensions"]:
+        raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
+
+    if len(content) > limits["max_size_bytes"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File exceeds maximum size of {limits['max_size_mb']} MB"
+        )
+
 
 def check_resource_access(resource_id: int, user: Optional[User]) -> bool:
     """Check if user can access a resource. Returns True if any access rule matches."""
@@ -6285,6 +6334,58 @@ def check_resource_access(resource_id: int, user: Optional[User]) -> bool:
             return True
 
     return False
+
+
+@app.post("/admin/resources/settings")
+async def admin_save_resource_settings(
+    request: Request,
+    _: bool = Depends(verify_admin),
+    max_upload_size_mb: int = Form(...),
+    allowed_extensions: str = Form(""),
+    allow_all_extensions: str = Form("0"),
+):
+    """Save resource upload settings."""
+    from database import set_setting
+    from audit import log_action
+
+    user = get_current_user(request)
+
+    if max_upload_size_mb < 1:
+        raise HTTPException(status_code=400, detail="Max upload size must be at least 1 MB")
+    if max_upload_size_mb > 500:
+        raise HTTPException(status_code=400, detail="Max upload size cannot exceed 500 MB")
+
+    set_setting("resource_max_upload_size_mb", str(max_upload_size_mb))
+    set_setting("resource_allow_all_extensions", "1" if allow_all_extensions == "1" else "0")
+
+    # Normalize extensions: strip whitespace, ensure leading dots, lowercase
+    if allowed_extensions.strip():
+        exts = []
+        for e in allowed_extensions.split(","):
+            e = e.strip().lower()
+            if e and not e.startswith("."):
+                e = "." + e
+            if e:
+                exts.append(e)
+        set_setting("resource_allowed_extensions", ",".join(sorted(set(exts))))
+    else:
+        # If empty and not allow-all, keep default
+        if allow_all_extensions != "1":
+            set_setting("resource_allowed_extensions", ",".join(sorted(config.ALLOWED_UPLOAD_EXTENSIONS)))
+
+    log_action(
+        actor_callsign=user.callsign if user else "unknown",
+        action="resource_settings_update",
+        target_type="settings",
+        target_id="resource_upload",
+        details=f"Updated upload settings: max_size={max_upload_size_mb}MB, allow_all={allow_all_extensions}",
+        ip_address=get_client_ip(request)
+    )
+
+    accept = request.headers.get("Accept", "")
+    if "application/json" in accept:
+        return {"message": "Upload settings saved"}
+    return RedirectResponse(url="/admin/resources", status_code=303)
 
 
 @app.get("/admin/resources", response_class=HTMLResponse)
@@ -6342,12 +6443,19 @@ async def admin_resources_page(request: Request, _: bool = Depends(verify_admin)
                 (active_olympiad["id"],)
             ).fetchall()
 
+    upload_limits = get_resource_upload_limits()
+
     return templates.TemplateResponse("admin/resources.html", {
         "request": request,
         "user": user,
         "resources": resource_list,
         "sports": sports,
         "csrf_token": request.state.csrf_token,
+        "upload_settings": {
+            "max_size_mb": upload_limits["max_size_mb"],
+            "allowed_extensions": ",".join(sorted(upload_limits["allowed_extensions"])),
+            "allow_all_extensions": upload_limits["allow_all_extensions"],
+        },
     })
 
 
@@ -6412,11 +6520,8 @@ async def admin_update_resource(
     if file and hasattr(file, 'filename') and file.filename:
         _, ext = os.path.splitext(file.filename)
         ext = ext.lower()
-        if ext not in config.ALLOWED_UPLOAD_EXTENSIONS:
-            raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
         content = await file.read()
-        if len(content) > config.MAX_UPLOAD_SIZE:
-            raise HTTPException(status_code=400, detail=f"File exceeds maximum size of {config.MAX_UPLOAD_SIZE // (1024*1024)} MB")
+        validate_resource_file(file.filename, content)
         stored_filename = f"{uuid.uuid4().hex}{ext}"
         mime_type = mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
         new_file_data = {
@@ -6523,16 +6628,11 @@ async def admin_upload_resource(
     if not file or not hasattr(file, 'filename') or not file.filename:
         raise HTTPException(status_code=400, detail="File is required")
 
-    # Validate extension
+    # Read file and validate against DB-backed settings
     _, ext = os.path.splitext(file.filename or "")
     ext = ext.lower()
-    if ext not in config.ALLOWED_UPLOAD_EXTENSIONS:
-        raise HTTPException(status_code=400, detail=f"File type '{ext}' is not allowed")
-
-    # Read file and check size
     content = await file.read()
-    if len(content) > config.MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail=f"File exceeds maximum size of {config.MAX_UPLOAD_SIZE // (1024*1024)} MB")
+    validate_resource_file(file.filename or "", content)
 
     # Save to disk
     stored_filename = f"{uuid.uuid4().hex}{ext}"

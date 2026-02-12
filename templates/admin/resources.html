@@ -6,6 +6,41 @@
 <p><a href="/admin">&larr; Back to Admin</a></p>
 <h2>Resource Files</h2>
 
+<div class="card" id="settings-card">
+    <h3 style="cursor: pointer; user-select: none;" onclick="document.getElementById('settings-body').style.display = document.getElementById('settings-body').style.display === 'none' ? 'block' : 'none'; this.querySelector('span').textContent = document.getElementById('settings-body').style.display === 'none' ? '\u25B6' : '\u25BC';">
+        <span>&#x25B6;</span> Upload Settings
+    </h3>
+    <div id="settings-body" style="display: none;">
+        <form id="settings-form" action="/admin/resources/settings" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-group">
+                <label for="max_upload_size_mb">Max Upload Size (MB)</label>
+                <input type="number" id="max_upload_size_mb" name="max_upload_size_mb"
+                       value="{{ upload_settings.max_size_mb }}" min="1" max="500" required
+                       style="max-width: 120px;">
+            </div>
+            <div class="form-group">
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer;">
+                    <input type="checkbox" id="allow_all_ext" style="width: auto;"
+                           {% if upload_settings.allow_all_extensions %}checked{% endif %}
+                           onchange="document.getElementById('allowed_extensions').disabled = this.checked;">
+                    Allow all file types
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="allowed_extensions">Allowed Extensions</label>
+                <input type="text" id="allowed_extensions" name="allowed_extensions"
+                       value="{{ upload_settings.allowed_extensions }}"
+                       placeholder=".pdf,.png,.jpg,.zip"
+                       {% if upload_settings.allow_all_extensions %}disabled{% endif %}>
+                <small>Comma-separated, e.g. <code>.pdf, .png, .jpg, .zip</code></small>
+            </div>
+            <input type="hidden" name="allow_all_extensions" id="allow_all_hidden" value="{{ '1' if upload_settings.allow_all_extensions else '0' }}">
+            <button type="submit" class="btn btn-success">Save Settings</button>
+        </form>
+    </div>
+</div>
+
 <div class="card" id="resource-form-card">
     <h3 id="form-heading">Upload New Resource</h3>
     <form id="resource-form" action="/admin/resources/upload" method="post" enctype="multipart/form-data">
@@ -21,7 +56,7 @@
         <div class="form-group" id="file-group">
             <label for="file" id="file-label">File <span id="file-required" style="color: red;">*</span></label>
             <input type="file" id="file" name="file" required>
-            <small id="file-help">Max 10 MB. Allowed: PDF, images, text, CSV, ADIF, Office docs, ZIP</small>
+            <small id="file-help">Max {{ upload_settings.max_size_mb }} MB. {% if upload_settings.allow_all_extensions %}All file types allowed.{% else %}Allowed: {{ upload_settings.allowed_extensions }}{% endif %}</small>
             <small id="file-current" style="display: none; color: var(--text-muted, #888);"></small>
         </div>
         <div class="form-group">
@@ -108,6 +143,15 @@
 {% endif %}
 
 <script>
+// Sync allow-all checkbox with hidden field and submit settings form
+document.getElementById('allow_all_ext').addEventListener('change', function() {
+    document.getElementById('allow_all_hidden').value = this.checked ? '1' : '0';
+});
+document.getElementById('settings-form').addEventListener('submit', function() {
+    document.getElementById('allow_all_hidden').value =
+        document.getElementById('allow_all_ext').checked ? '1' : '0';
+});
+
 document.getElementById('sport-check').addEventListener('change', function() {
     document.getElementById('sport-select-group').style.display = this.checked ? 'block' : 'none';
 });
@@ -179,7 +223,7 @@ async function editResource(id) {
         fileInput.removeAttribute('required');
         fileInput.value = '';
         document.getElementById('file-required').style.display = 'none';
-        document.getElementById('file-help').textContent = 'Leave empty to keep current file. Max 10 MB.';
+        document.getElementById('file-help').textContent = 'Leave empty to keep current file. Max {{ upload_settings.max_size_mb }} MB.';
         document.getElementById('file-current').style.display = 'block';
         document.getElementById('file-current').textContent = 'Current file: ' + data.filename;
 
@@ -240,7 +284,7 @@ function cancelEdit() {
     var fileInput = document.getElementById('file');
     fileInput.setAttribute('required', '');
     document.getElementById('file-required').style.display = '';
-    document.getElementById('file-help').textContent = 'Max 10 MB. Allowed: PDF, images, text, CSV, ADIF, Office docs, ZIP';
+    document.getElementById('file-help').textContent = 'Max {{ upload_settings.max_size_mb }} MB. {% if upload_settings.allow_all_extensions %}All file types allowed.{% else %}Allowed: {{ upload_settings.allowed_extensions }}{% endif %}';
     document.getElementById('file-current').style.display = 'none';
 
     // Reset conditional groups
