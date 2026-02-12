@@ -38,15 +38,33 @@ def precompute_records_cache():
     - distance_records: Mode-specific distance records
     - cool_factor_records: Mode-specific cool factor records
     """
-    from database import set_setting
+    from database import set_setting, get_setting
 
     logger.info("Pre-computing records cache...")
 
-    # Compute triathlon leaders
+    # Compute triathlon leaders and notify Discord if standings changed
     try:
+        # Load previous podium for comparison
+        old_triathlon_json = get_setting("cache_triathlon_leaders", "[]")
+        try:
+            old_triathlon = json.loads(old_triathlon_json)
+        except (json.JSONDecodeError, TypeError):
+            old_triathlon = []
+
         triathlon = compute_triathlon_leaders(limit=3)
         set_setting("cache_triathlon_leaders", json.dumps(triathlon))
         logger.info(f"Cached {len(triathlon)} triathlon leaders")
+
+        # Check if podium changed (different callsigns or scores)
+        old_podium = [(l.get("callsign"), f"{l.get('total_score', 0):.1f}") for l in old_triathlon]
+        new_podium = [(l.get("callsign"), f"{l.get('total_score', 0):.1f}") for l in triathlon]
+        if triathlon and new_podium != old_podium:
+            try:
+                from notifications import discord_notify_triathlon_standings
+                discord_notify_triathlon_standings(triathlon)
+                logger.info("Sent Discord triathlon standings update")
+            except Exception as e:
+                logger.error(f"Failed to send Discord triathlon notification: {e}")
     except Exception as e:
         logger.error(f"Error computing triathlon leaders: {e}")
         set_setting("cache_triathlon_leaders", json.dumps([]))

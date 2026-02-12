@@ -1285,6 +1285,74 @@ def discord_notify_pota_summary(
     return send_discord_notification(embed)
 
 
+def discord_notify_triathlon_standings(leaders: list) -> bool:
+    """
+    Send a single Discord notification announcing the current Triathlon Podium.
+
+    Fires when standings change (new leader, reshuffled podium, etc.).
+    Uses the "records" notification toggle since triathlon is a world record.
+
+    Args:
+        leaders: List of triathlon leader dicts from compute_triathlon_leaders()
+    """
+    if not is_discord_configured():
+        return False
+
+    if not is_discord_notification_enabled("records"):
+        return False
+
+    if not leaders:
+        return False
+
+    # Build a dedup reference from the ordered callsigns + scores
+    podium_key = "|".join(
+        f"{l['callsign']}:{l['total_score']:.1f}" for l in leaders
+    )
+    reference = f"discord-triathlon-podium-{podium_key}"
+    if was_notification_sent("_discord_", "record", reference):
+        return False
+
+    # Build podium lines
+    medals = ["🥇", "🥈", "🥉"]
+    lines = []
+    for i, leader in enumerate(leaders):
+        medal = medals[i] if i < len(medals) else f"#{i+1}"
+        # POTA context
+        if leader.get("my_sig_info") and leader.get("dx_sig_info"):
+            pota = f"🏕️↔🏕️ {leader['my_sig_info']} ↔ {leader['dx_sig_info']}"
+        elif leader.get("my_sig_info"):
+            pota = f"📡 {leader['my_sig_info']}"
+        elif leader.get("dx_sig_info"):
+            pota = f"🏕️ {leader['dx_sig_info']}"
+        else:
+            pota = ""
+
+        score_line = (
+            f"{medal} **{leader['callsign']}** — "
+            f"**{leader['total_score']:.1f}** / 300\n"
+            f"　　{leader['distance_km']:,.0f} km · "
+            f"{leader['cool_factor']:.1f} km/W · "
+            f"{leader['tx_power_w']}W · "
+            f"{leader.get('mode', '?')}"
+        )
+        if pota:
+            score_line += f" · {pota}"
+        lines.append(score_line)
+
+    embed = {
+        "title": "🏅 Triathlon Podium Update!",
+        "description": "\n\n".join(lines),
+        "color": 0xFFD700,  # Gold
+        "footer": {"text": "Distance + Cool Factor + POTA"},
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    result = send_discord_notification(embed)
+    if result:
+        mark_notification_sent("_discord_", "record", reference)
+    return result
+
+
 def test_discord_webhook() -> Dict[str, Any]:
     """
     Send a test message to the configured Discord webhook.
