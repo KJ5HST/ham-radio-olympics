@@ -434,12 +434,14 @@ async def populate_competitor_name(callsign: str) -> bool:
     return False
 
 
-async def sync_competitor(callsign: str) -> dict:
+async def sync_competitor(callsign: str, recompute: bool = True) -> dict:
     """
     Sync a single competitor's QSOs from QRZ using stored API key.
 
     Args:
         callsign: Competitor callsign
+        recompute: If True, recompute medals and send notifications after sync.
+                   Set to False during bulk sync to defer recomputation.
 
     Returns:
         dict with sync results
@@ -467,10 +469,10 @@ async def sync_competitor(callsign: str) -> dict:
             return {"error": "Failed to decrypt API key. Please re-enter your QRZ API key in Settings."}
 
     # Use the shared sync function with the decrypted key
-    return await sync_competitor_with_key(callsign, api_key)
+    return await sync_competitor_with_key(callsign, api_key, recompute=recompute)
 
 
-async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
+async def sync_competitor_with_key(callsign: str, api_key: str, recompute: bool = True) -> dict:
     """
     Sync a single competitor's QSOs from QRZ using provided API key.
 
@@ -481,6 +483,8 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
     Args:
         callsign: Competitor callsign
         api_key: QRZ API key (not encrypted)
+        recompute: If True, recompute medals and send notifications after sync.
+                   Set to False during bulk sync to defer recomputation.
 
     Returns:
         dict with sync results
@@ -576,21 +580,22 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         )
         conn.commit()
 
-    # Get medal state BEFORE recomputation for comparison
-    old_medals = _get_competitor_medal_state(callsign.upper())
+    if recompute:
+        # Get medal state BEFORE recomputation for comparison
+        old_medals = _get_competitor_medal_state(callsign.upper())
 
-    # Recompute medals for all active matches after sync
-    recompute_all_active_matches()
+        # Recompute medals for all active matches after sync
+        recompute_all_active_matches()
 
-    # Get medal state AFTER recomputation
-    new_medals = _get_competitor_medal_state(callsign.upper())
+        # Get medal state AFTER recomputation
+        new_medals = _get_competitor_medal_state(callsign.upper())
 
-    # Send notifications for new confirmations
-    if newly_confirmed_calls:
-        _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
+        # Send notifications for new confirmations
+        if newly_confirmed_calls:
+            _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
 
-    # Send notifications for medal changes
-    _notify_medal_changes(callsign.upper(), old_medals, new_medals)
+        # Send notifications for medal changes
+        _notify_medal_changes(callsign.upper(), old_medals, new_medals)
 
     return {
         "callsign": callsign.upper(),
@@ -598,6 +603,7 @@ async def sync_competitor_with_key(callsign: str, api_key: str) -> dict:
         "updated_qsos": updated_count,
         "total_fetched": len(qsos),
         "new_confirmations": len(newly_confirmed_calls),
+        "newly_confirmed_calls": newly_confirmed_calls,
     }
 
 
@@ -1084,6 +1090,9 @@ async def sync_all_competitors() -> dict:
     """
     Sync all competitors and recompute medals.
 
+    Uses batch mode: syncs all competitors without per-competitor recomputation,
+    then does ONE recomputation and ONE batch of notifications at the end.
+
     Returns:
         dict with sync summary
     """
@@ -1092,9 +1101,15 @@ async def sync_all_competitors() -> dict:
         cursor = conn.execute("SELECT callsign FROM competitors")
         callsigns = [row["callsign"] for row in cursor.fetchall()]
 
+    # Capture medal state BEFORE sync for ALL competitors
+    old_medal_states = {}
+    for callsign in callsigns:
+        old_medal_states[callsign] = _get_competitor_medal_state(callsign)
+
+    # Sync all competitors WITHOUT per-competitor recomputation/notifications
     results = []
     for callsign in callsigns:
-        result = await sync_competitor(callsign)
+        result = await sync_competitor(callsign, recompute=False)
         results.append(result)
 
     # Populate missing dx_dxcc values from callsign lookups
@@ -1104,9 +1119,26 @@ async def sync_all_competitors() -> dict:
     except Exception as e:
         logger.warning(f"Failed to populate missing dx_dxcc: {e}")
 
-    # Recompute medals for all active matches (run in thread pool to avoid blocking event loop)
+    # ONE recomputation for all active matches (run in thread pool to avoid blocking event loop)
     import asyncio
     await asyncio.to_thread(recompute_all_active_matches)
+
+    # Capture medal state AFTER recomputation and send ONE batch of notifications
+    for i, callsign in enumerate(callsigns):
+        result = results[i]
+        if "error" in result:
+            continue
+
+        new_medals = _get_competitor_medal_state(callsign)
+        old_medals = old_medal_states[callsign]
+
+        # Send notifications for new confirmations
+        newly_confirmed_calls = result.get("newly_confirmed_calls", [])
+        if newly_confirmed_calls:
+            _notify_new_confirmations(callsign, newly_confirmed_calls)
+
+        # Send notifications for medal changes
+        _notify_medal_changes(callsign, old_medals, new_medals)
 
     total_new = sum(r.get("new_qsos", 0) for r in results)
     total_updated = sum(r.get("updated_qsos", 0) for r in results)
