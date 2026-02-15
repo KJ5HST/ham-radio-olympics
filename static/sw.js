@@ -9,7 +9,7 @@
  * - User guide: Stale-while-revalidate
  */
 
-const SW_VERSION = '2.1.2';
+const SW_VERSION = '2.3.0';
 const CACHE_PREFIX = 'hro-';
 const STATIC_CACHE = `${CACHE_PREFIX}static-v${SW_VERSION}`;
 const PAGES_CACHE = `${CACHE_PREFIX}pages-v${SW_VERSION}`;
@@ -20,6 +20,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/static/manifest.json',
   '/static/offline.html',
+  '/static/startup.html',
   '/static/favicon.ico',
   '/static/favicon.svg',
   '/static/favicon-16x16.png',
@@ -60,8 +61,8 @@ const NEVER_CACHE = [
 const MAX_RUNTIME_CACHE_ITEMS = 50;
 
 // Network timeout before falling back to cache (ms)
-// 8 seconds to allow for Fly.io cold starts (~1-2s) plus network latency
-const NETWORK_TIMEOUT = 8000;
+// 3 seconds — show startup/offline page quickly instead of a blank tab
+const NETWORK_TIMEOUT = 3000;
 
 /**
  * Install Event - Precache static assets
@@ -207,6 +208,8 @@ async function cacheFirst(request, cacheName) {
 /**
  * Network-First with Offline Fallback
  * Best for: HTML pages
+ * Always shows the offline page when the server is unreachable,
+ * rather than serving stale cached pages that look like the real site.
  */
 async function networkFirstWithOffline(request) {
   const cache = await caches.open(PAGES_CACHE);
@@ -221,24 +224,20 @@ async function networkFirstWithOffline(request) {
     }
     return response;
   } catch (error) {
-    console.log(`[SW] Network failed for ${request.url}, checking cache`);
-
-    // Try cache
-    const cached = await cache.match(request);
-    if (cached) {
-      return cached;
+    // If browser reports online, server is likely cold-starting — show startup page
+    if (self.navigator?.onLine !== false) {
+      console.log(`[SW] Network failed for ${request.url}, showing startup page (server waking up)`);
+      const startupPage = await caches.match('/static/startup.html');
+      if (startupPage) {
+        return startupPage;
+      }
     }
 
-    // Fallback to offline page for navigation requests
+    // Truly offline — show offline page
+    console.log(`[SW] Network failed for ${request.url}, showing offline page`);
     const offlinePage = await caches.match('/static/offline.html');
     if (offlinePage) {
       return offlinePage;
-    }
-
-    // Last resort: return cached home page
-    const homePage = await caches.match('/');
-    if (homePage) {
-      return homePage;
     }
 
     throw error;

@@ -1027,16 +1027,19 @@ def recompute_all_team_standings():
     Recompute team standings for all sports and matches.
 
     Call this after medal recomputation to update team rankings.
+    Skips recomputation entirely if there are no matches.
     """
     with get_db() as conn:
+        # Skip if there are no matches at all
+        match_count = conn.execute("SELECT COUNT(*) FROM matches").fetchone()[0]
+        if match_count == 0:
+            return
+
         # Get all sports
         cursor = conn.execute("SELECT id FROM sports")
         sport_ids = [row["id"] for row in cursor.fetchall()]
 
     for sport_id in sport_ids:
-        # Compute sport-level standings
-        compute_team_standings(sport_id)
-
         # Compute match-level standings
         with get_db() as conn:
             cursor = conn.execute(
@@ -1044,6 +1047,12 @@ def recompute_all_team_standings():
                 (sport_id,)
             )
             match_ids = [row["id"] for row in cursor.fetchall()]
+
+        if not match_ids:
+            continue
+
+        # Compute sport-level standings
+        compute_team_standings(sport_id)
 
         for match_id in match_ids:
             compute_team_standings(sport_id, match_id)
