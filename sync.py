@@ -594,8 +594,14 @@ async def sync_competitor_with_key(callsign: str, api_key: str, recompute: bool 
         if newly_confirmed_calls:
             _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
 
+        # Look up first name for Discord display
+        with get_db() as conn:
+            row = conn.execute("SELECT first_name FROM competitors WHERE callsign = ?",
+                               (callsign.upper(),)).fetchone()
+            first_name = row["first_name"] if row else None
+
         # Send notifications for medal changes
-        _notify_medal_changes(callsign.upper(), old_medals, new_medals)
+        _notify_medal_changes(callsign.upper(), old_medals, new_medals, first_name=first_name)
 
     return {
         "callsign": callsign.upper(),
@@ -763,8 +769,14 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
     if newly_confirmed_calls:
         _notify_new_confirmations(callsign.upper(), newly_confirmed_calls)
 
+    # Look up first name for Discord display
+    with get_db() as conn:
+        row = conn.execute("SELECT first_name FROM competitors WHERE callsign = ?",
+                           (callsign.upper(),)).fetchone()
+        first_name = row["first_name"] if row else None
+
     # Send notifications for medal changes
-    _notify_medal_changes(callsign.upper(), old_medals, new_medals)
+    _notify_medal_changes(callsign.upper(), old_medals, new_medals, first_name=first_name)
 
     return {
         "callsign": callsign.upper(),
@@ -1097,9 +1109,10 @@ async def sync_all_competitors() -> dict:
         dict with sync summary
     """
     with get_db() as conn:
-        # Get all competitors
-        cursor = conn.execute("SELECT callsign FROM competitors")
-        callsigns = [row["callsign"] for row in cursor.fetchall()]
+        # Get all competitors with first names for display
+        cursor = conn.execute("SELECT callsign, first_name FROM competitors")
+        competitors = {row["callsign"]: row["first_name"] for row in cursor.fetchall()}
+    callsigns = list(competitors.keys())
 
     # Capture medal state BEFORE sync for ALL competitors
     old_medal_states = {}
@@ -1124,6 +1137,7 @@ async def sync_all_competitors() -> dict:
     await asyncio.to_thread(recompute_all_active_matches)
 
     # Capture medal state AFTER recomputation and send ONE batch of notifications
+    all_medal_changes = []
     for i, callsign in enumerate(callsigns):
         result = results[i]
         if "error" in result:
@@ -1137,8 +1151,18 @@ async def sync_all_competitors() -> dict:
         if newly_confirmed_calls:
             _notify_new_confirmations(callsign, newly_confirmed_calls)
 
-        # Send notifications for medal changes
-        _notify_medal_changes(callsign, old_medals, new_medals)
+        # Collect medal changes (push notifications sent, Discord deferred)
+        changes = _notify_medal_changes(callsign, old_medals, new_medals,
+                                        discord=False, first_name=competitors.get(callsign))
+        all_medal_changes.extend(changes)
+
+    # Send ONE consolidated Discord message for all medal changes
+    if all_medal_changes:
+        try:
+            from notifications import discord_notify_sync_summary
+            discord_notify_sync_summary(all_medal_changes, [])
+        except Exception as e:
+            logger.error(f"Failed to send Discord sync summary: {e}")
 
     total_new = sum(r.get("new_qsos", 0) for r in results)
     total_updated = sum(r.get("updated_qsos", 0) for r in results)
@@ -1313,8 +1337,22 @@ def _notify_new_confirmations(callsign: str, dx_callsigns: list):
         logger.error(f"Failed to send confirmation notification for {callsign}: {e}")
 
 
-def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
-    """Send push notifications for medal changes."""
+def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict,
+                          discord: bool = True, first_name: str = None) -> list:
+    """Send push notifications for medal changes.
+
+    Args:
+        callsign: The competitor's callsign
+        old_medals: Medal state before sync
+        new_medals: Medal state after sync
+        discord: If True, send individual Discord notifications. If False, skip
+                 Discord (for batch mode where a summary is sent instead).
+        first_name: Optional first name for Discord display
+
+    Returns:
+        List of medal change dicts for batch summary use.
+    """
+    changes = []
     try:
         from notifications import notify_medal_change, discord_notify_medal
 
@@ -1346,10 +1384,31 @@ def _notify_medal_changes(callsign: str, old_medals: dict, new_medals: dict):
                     total_points=points
                 )
 
-                # Send Discord notifications for newly won medals
+                # Collect newly won medals
                 if new_qso and not old_qso:
-                    discord_notify_medal(callsign, sport_name, target, new_qso, "QSO Race")
+                    changes.append({
+                        "callsign": callsign,
+                        "first_name": first_name,
+                        "sport_name": sport_name,
+                        "match_target": target,
+                        "medal_type": new_qso,
+                        "competition": "QSO Race",
+                    })
+                    if discord:
+                        discord_notify_medal(callsign, sport_name, target, new_qso, "QSO Race",
+                                             first_name=first_name)
                 if new_cf and not old_cf:
-                    discord_notify_medal(callsign, sport_name, target, new_cf, "Cool Factor")
+                    changes.append({
+                        "callsign": callsign,
+                        "first_name": first_name,
+                        "sport_name": sport_name,
+                        "match_target": target,
+                        "medal_type": new_cf,
+                        "competition": "Cool Factor",
+                    })
+                    if discord:
+                        discord_notify_medal(callsign, sport_name, target, new_cf, "Cool Factor",
+                                             first_name=first_name)
     except Exception as e:
         logger.error(f"Failed to send medal notification for {callsign}: {e}")
+    return changes

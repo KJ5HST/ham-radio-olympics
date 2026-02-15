@@ -329,7 +329,7 @@ Olympic-style amateur radio competition platform.
 - Most API endpoints: 60 requests/minute
 - Auth endpoints: 3-5 requests/minute
     """,
-    version="1.0.0",
+    version="1.0.1",
     lifespan=lifespan,
     openapi_tags=[
         {"name": "public", "description": "Public endpoints (no auth required)"},

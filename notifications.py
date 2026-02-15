@@ -1039,7 +1039,8 @@ def discord_notify_record(
     value: float,
     is_world_record: bool,
     sport_name: Optional[str] = None,
-    dx_callsign: Optional[str] = None
+    dx_callsign: Optional[str] = None,
+    first_name: Optional[str] = None
 ) -> bool:
     """
     Send Discord notification for a new record.
@@ -1051,6 +1052,7 @@ def discord_notify_record(
         is_world_record: Whether this is a world record (vs personal best)
         sport_name: Name of the sport (optional)
         dx_callsign: DX station worked (optional)
+        first_name: Optional first name for display
     """
     if not is_discord_configured():
         return False
@@ -1087,8 +1089,11 @@ def discord_notify_record(
         type_name = record_type.replace("_", " ").title()
         emoji = "🏆"
 
+    from callsign_lookup import get_display_name
+    display_name = get_display_name(callsign, first_name)
+
     title = f"🥇 New World Record! {emoji}"
-    description = f"**{callsign}** set a new {type_name.lower()} record!"
+    description = f"**{display_name}** set a new {type_name.lower()} record!"
 
     fields = [
         {"name": type_name, "value": value_str, "inline": True}
@@ -1117,7 +1122,8 @@ def discord_notify_medal(
     sport_name: str,
     match_target: str,
     medal_type: str,
-    competition: str
+    competition: str,
+    first_name: Optional[str] = None
 ) -> bool:
     """
     Send Discord notification for a medal award.
@@ -1128,6 +1134,7 @@ def discord_notify_medal(
         match_target: Target value (e.g., "EU", "K-0001")
         medal_type: "gold", "silver", or "bronze"
         competition: "QSO Race" or "Cool Factor"
+        first_name: Optional first name for display
     """
     if not is_discord_configured():
         return False
@@ -1154,8 +1161,11 @@ def discord_notify_medal(
     emoji = medal_emojis.get(medal_type, "🏅")
     color = medal_colors.get(medal_type, 0x808080)
 
+    from callsign_lookup import get_display_name
+    display_name = get_display_name(callsign, first_name)
+
     title = f"{emoji} {medal_type.title()} Medal Awarded!"
-    description = f"**{callsign}** earned {medal_type} in {competition}"
+    description = f"**{display_name}** earned {medal_type} in {competition}"
 
     embed = {
         "title": title,
@@ -1172,6 +1182,106 @@ def discord_notify_medal(
     result = send_discord_notification(embed)
     if result:
         mark_notification_sent("_discord_", "medal", reference)
+    return result
+
+
+def discord_notify_sync_summary(
+    medal_changes: List[Dict[str, Any]],
+    record_changes: List[Dict[str, Any]]
+) -> bool:
+    """
+    Send ONE consolidated Discord notification summarizing all medal and record
+    changes from a bulk sync. Uses deduplication to skip already-sent items.
+
+    Args:
+        medal_changes: List of dicts with keys: callsign, first_name, sport_name,
+                       match_target, medal_type, competition
+        record_changes: List of dicts with keys: callsign, first_name, record_type,
+                        value, sport_name, dx_callsign
+    """
+    if not is_discord_configured():
+        return False
+
+    if not medal_changes and not record_changes:
+        return False
+
+    medal_emojis = {"gold": "🥇", "silver": "🥈", "bronze": "🥉"}
+    from callsign_lookup import get_display_name
+
+    lines = []
+
+    # Process medal changes (check dedup, skip already-sent)
+    if is_discord_notification_enabled("medals"):
+        unsent_medals = []
+        for m in medal_changes:
+            reference = f"discord-medal-{m['callsign']}-{m['sport_name']}-{m['match_target']}-{m['medal_type']}-{m['competition']}"
+            if not was_notification_sent("_discord_", "medal", reference):
+                unsent_medals.append((m, reference))
+
+        for m, reference in unsent_medals:
+            emoji = medal_emojis.get(m["medal_type"], "🏅")
+            display = get_display_name(m["callsign"], m.get("first_name"))
+            lines.append(
+                f"{emoji} **{display}** — {m['medal_type'].title()} in {m['competition']} "
+                f"({m['sport_name']}: {m['match_target']})"
+            )
+
+    # Process record changes (check dedup, skip already-sent)
+    if is_discord_notification_enabled("records"):
+        unsent_records = []
+        for r in record_changes:
+            sport_key = r.get("sport_name") or "global"
+            reference = f"discord-record-{r['record_type']}-{sport_key}-{r['value']}"
+            if not was_notification_sent("_discord_", "record", reference):
+                unsent_records.append((r, reference))
+
+        for r, reference in unsent_records:
+            if r["record_type"] == "distance":
+                value_str = f"{r['value']:,.0f} km"
+                emoji = "📏"
+            elif r["record_type"] == "cool_factor":
+                value_str = f"{r['value']:.1f} km/W"
+                emoji = "❄️"
+            else:
+                value_str = f"{r['value']:.1f}"
+                emoji = "🏆"
+            display = get_display_name(r["callsign"], r.get("first_name"))
+            sport_label = f" ({r['sport_name']})" if r.get("sport_name") else ""
+            lines.append(f"{emoji} **{display}** — {r['record_type'].replace('_', ' ').title()}: {value_str}{sport_label}")
+
+    if not lines:
+        return False
+
+    # Truncate to fit Discord's 4096-char embed description limit
+    description_lines = []
+    current_length = 0
+    for line in lines:
+        # +1 for the newline character
+        if current_length + len(line) + 1 > 4000:
+            remaining = len(lines) - len(description_lines)
+            description_lines.append(f"*...and {remaining} more change(s)*")
+            break
+        description_lines.append(line)
+        current_length += len(line) + 1
+
+    description = "\n".join(description_lines)
+
+    embed = {
+        "title": f"🔄 Sync Update — {len(lines)} Change(s)",
+        "description": description,
+        "color": 0x3498DB,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+    result = send_discord_notification(embed)
+    if result:
+        # Mark all included items as sent
+        if is_discord_notification_enabled("medals"):
+            for m, reference in unsent_medals:
+                mark_notification_sent("_discord_", "medal", reference)
+        if is_discord_notification_enabled("records"):
+            for r, reference in unsent_records:
+                mark_notification_sent("_discord_", "record", reference)
     return result
 
 

@@ -727,6 +727,13 @@ def _notify_records_broken(callsign: str, records: list):
 
     try:
         from notifications import notify_record_broken, discord_notify_record
+        from database import get_db
+
+        # Look up first name for Discord display
+        with get_db() as conn:
+            row = conn.execute("SELECT first_name FROM competitors WHERE callsign = ?",
+                               (callsign,)).fetchone()
+            first_name = row["first_name"] if row else None
 
         for record in records:
             # Send push notification to the user
@@ -746,6 +753,7 @@ def _notify_records_broken(callsign: str, records: list):
                 is_world_record=record["is_world_record"],
                 sport_name=record.get("sport_name"),
                 dx_callsign=record.get("dx_callsign"),
+                first_name=first_name,
             )
     except Exception as e:
         import logging
