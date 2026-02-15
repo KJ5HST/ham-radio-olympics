@@ -55,9 +55,9 @@ def precompute_records_cache():
         set_setting("cache_triathlon_leaders", json.dumps(triathlon))
         logger.info(f"Cached {len(triathlon)} triathlon leaders")
 
-        # Check if podium changed (different callsigns or scores)
-        old_podium = [(l.get("callsign"), f"{l.get('total_score', 0):.1f}") for l in old_triathlon]
-        new_podium = [(l.get("callsign"), f"{l.get('total_score', 0):.1f}") for l in triathlon]
+        # Check if podium changed (different callsigns or positions — ignore score fluctuations)
+        old_podium = [l.get("callsign") for l in old_triathlon]
+        new_podium = [l.get("callsign") for l in triathlon]
         if triathlon and new_podium != old_podium:
             try:
                 from notifications import discord_notify_triathlon_standings

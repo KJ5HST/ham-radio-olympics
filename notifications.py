@@ -1414,10 +1414,8 @@ def discord_notify_triathlon_standings(leaders: list) -> bool:
     if not leaders:
         return False
 
-    # Build a dedup reference from the ordered callsigns + scores
-    podium_key = "|".join(
-        f"{l['callsign']}:{l['total_score']:.1f}" for l in leaders
-    )
+    # Build a dedup reference from the ordered callsigns (ignore score fluctuations)
+    podium_key = "|".join(l["callsign"] for l in leaders)
     reference = f"discord-triathlon-podium-{podium_key}"
     if was_notification_sent("_discord_", "record", reference):
         return False
