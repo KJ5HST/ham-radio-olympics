@@ -4326,6 +4326,10 @@ async def bulk_delete_competitors(
         conn.execute(f"DELETE FROM sessions WHERE callsign IN ({placeholders})", callsigns)
         conn.execute(f"DELETE FROM competitors WHERE callsign IN ({placeholders})", callsigns)
 
+    # Recompute records from scratch to remove orphaned qso_id references
+    from scoring import recompute_all_records
+    recompute_all_records()
+
     # Log the action
     log_action(
         actor_callsign=user.callsign if user else "unknown",

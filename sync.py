@@ -130,6 +130,10 @@ def delete_competitor_qsos(callsign: str) -> int:
         )
         conn.commit()
 
+    # Recompute records from scratch to remove orphaned qso_id references
+    from scoring import recompute_all_records
+    recompute_all_records()
+
     return count
 
 
@@ -1130,6 +1134,11 @@ def merge_duplicate_qsos() -> dict:
                 deleted_count += 1
 
             merged_count += 1
+
+    # Recompute records from scratch to fix any orphaned qso_id references
+    if deleted_count > 0:
+        from scoring import recompute_all_records
+        recompute_all_records()
 
     return {
         "duplicate_groups": merged_count,
