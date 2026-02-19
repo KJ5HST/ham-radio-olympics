@@ -395,6 +395,25 @@
             var resp = await fetch('/push/preferences');
             if (resp.ok) {
                 var data = await resp.json();
+
+                // Server lost our subscription (e.g., removed after push error).
+                // Re-register the browser's existing subscription with the server.
+                if (data.subscription_count === 0 && currentSubscription) {
+                    console.log('Server has no subscription record — re-registering');
+                    try {
+                        var resubResp = await fetch('/push/subscribe', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(currentSubscription.toJSON())
+                        });
+                        if (resubResp.ok) {
+                            console.log('Re-registered subscription with server');
+                        }
+                    } catch (resubErr) {
+                        console.error('Failed to re-register subscription:', resubErr);
+                    }
+                }
+
                 document.getElementById('pref-medal-changes').checked = data.preferences.medal_changes;
                 document.getElementById('pref-new-confirmations').checked = data.preferences.new_confirmations;
                 document.getElementById('pref-record-broken').checked = data.preferences.record_broken;

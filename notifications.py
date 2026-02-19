@@ -1267,7 +1267,7 @@ def discord_notify_sync_summary(
     description = "\n".join(description_lines)
 
     embed = {
-        "title": f"🔄 Sync Update — {len(lines)} Change(s)",
+        "title": f"🏅 Medals Update — {len(lines)} Change(s)",
         "description": description,
         "color": 0x3498DB,
         "timestamp": datetime.utcnow().isoformat() + "Z"

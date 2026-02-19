@@ -600,8 +600,24 @@ async def sync_competitor_with_key(callsign: str, api_key: str, recompute: bool 
                                (callsign.upper(),)).fetchone()
             first_name = row["first_name"] if row else None
 
-        # Send notifications for medal changes
-        _notify_medal_changes(callsign.upper(), old_medals, new_medals, first_name=first_name)
+        # Send push notifications for medal changes (Discord deferred for batching)
+        medal_changes = _notify_medal_changes(callsign.upper(), old_medals, new_medals,
+                                              discord=False, first_name=first_name)
+
+        # Send ONE batched Discord message for all medal changes
+        if medal_changes:
+            try:
+                from notifications import discord_notify_sync_summary
+                discord_notify_sync_summary(medal_changes, [])
+            except Exception as e:
+                logger.error(f"Failed to send Discord medal summary: {e}")
+
+        # Send email notifications for any new medals
+        try:
+            from email_service import notify_new_medals
+            await notify_new_medals()
+        except Exception as e:
+            logger.error(f"Failed to send medal notification emails: {e}")
 
     return {
         "callsign": callsign.upper(),
@@ -775,8 +791,24 @@ async def sync_competitor_lotw(callsign: str, lotw_username: str, lotw_password:
                            (callsign.upper(),)).fetchone()
         first_name = row["first_name"] if row else None
 
-    # Send notifications for medal changes
-    _notify_medal_changes(callsign.upper(), old_medals, new_medals, first_name=first_name)
+    # Send push notifications for medal changes (Discord deferred for batching)
+    medal_changes = _notify_medal_changes(callsign.upper(), old_medals, new_medals,
+                                          discord=False, first_name=first_name)
+
+    # Send ONE batched Discord message for all medal changes
+    if medal_changes:
+        try:
+            from notifications import discord_notify_sync_summary
+            discord_notify_sync_summary(medal_changes, [])
+        except Exception as e:
+            logger.error(f"Failed to send Discord medal summary: {e}")
+
+    # Send email notifications for any new medals
+    try:
+        from email_service import notify_new_medals
+        await notify_new_medals()
+    except Exception as e:
+        logger.error(f"Failed to send medal notification emails: {e}")
 
     return {
         "callsign": callsign.upper(),
@@ -1170,6 +1202,15 @@ async def sync_all_competitors() -> dict:
             discord_notify_sync_summary(all_medal_changes, [])
         except Exception as e:
             logger.error(f"Failed to send Discord sync summary: {e}")
+
+    # Send email notifications for any new medals
+    try:
+        from email_service import notify_new_medals
+        email_result = await notify_new_medals()
+        if email_result["sent"] > 0:
+            logger.info(f"Sent {email_result['sent']} medal notification emails ({email_result['medals_notified']} medals)")
+    except Exception as e:
+        logger.error(f"Failed to send medal notification emails: {e}")
 
     total_new = sum(r.get("new_qsos", 0) for r in results)
     total_updated = sum(r.get("updated_qsos", 0) for r in results)
