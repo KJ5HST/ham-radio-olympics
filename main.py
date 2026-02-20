@@ -462,7 +462,25 @@ async def csrf_middleware(request: Request, call_next):
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     """Add security headers to all responses."""
+    # CORS for public API endpoints
+    is_api = request.url.path.startswith("/api/")
+    origin = request.headers.get("origin", "")
+
+    # Handle CORS preflight
+    if is_api and request.method == "OPTIONS":
+        response = JSONResponse(content={}, status_code=204)
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response
+
     response = await call_next(request)
+
+    # Add CORS headers to API responses
+    if is_api:
+        response.headers["Access-Control-Allow-Origin"] = origin or "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
 
     # Prevent clickjacking
     response.headers["X-Frame-Options"] = "DENY"
