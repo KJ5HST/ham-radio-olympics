@@ -1315,6 +1315,7 @@ def compute_triathlon_leaders(limit: int = 3) -> List[dict]:
         # - distance_km > 0
         # - tx_power_w > 0
         # - POTA involvement (my_sig_info OR dx_sig_info present)
+        # - competitor is enrolled in at least one sport (withdrawn competitors excluded)
         cursor = conn.execute("""
             SELECT q.id, q.competitor_callsign, q.dx_callsign, q.qso_datetime_utc,
                    q.distance_km, q.tx_power_w, q.cool_factor,
@@ -1329,8 +1330,14 @@ def compute_triathlon_leaders(limit: int = 3) -> List[dict]:
               AND q.tx_power_w > 0
               AND (q.my_sig_info IS NOT NULL AND q.my_sig_info != ''
                    OR q.dx_sig_info IS NOT NULL AND q.dx_sig_info != '')
+              AND EXISTS (
+                  SELECT 1 FROM sport_entries se
+                  JOIN sports s ON se.sport_id = s.id
+                  WHERE se.callsign = q.competitor_callsign
+                    AND s.olympiad_id = ?
+              )
             ORDER BY q.distance_km DESC
-        """, (olympiad["start_date"], olympiad["end_date"]))
+        """, (olympiad["start_date"], olympiad["end_date"], olympiad["id"]))
 
         qualifying_qsos = [dict(row) for row in cursor.fetchall()]
 

@@ -848,20 +848,27 @@ class TestTriathlon:
     """Test Triathlon Podium computation."""
 
     def _setup_olympiad(self):
-        """Helper to create an active olympiad."""
+        """Helper to create an active olympiad with a sport for enrollment."""
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
                 VALUES ('Test Olympiad', '2026-01-01', '2026-12-31', 0, 1)
             """)
+            conn.execute("""
+                INSERT INTO sports (olympiad_id, name, target_type, work_enabled, activate_enabled)
+                VALUES (1, 'Test Sport', 'any', 1, 0)
+            """)
 
     def _create_competitor(self, callsign: str, first_name: str = "Test"):
-        """Helper to create a competitor."""
+        """Helper to create a competitor enrolled in the test sport."""
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO competitors (callsign, password_hash, registered_at, first_name)
                 VALUES (?, 'hash', '2026-01-01', ?)
             """, (callsign, first_name))
+            conn.execute("""
+                INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES (?, 1, '2026-01-01')
+            """, (callsign,))
 
     def _create_qso(self, callsign: str, dx_callsign: str, distance_km: float,
                     tx_power_w: float, my_sig_info: str = None, dx_sig_info: str = None,
