@@ -276,7 +276,8 @@
 <li><a href="#101-environment-variables">Environment Variables</a></li>
 <li><a href="#102-local-development">Local Development</a></li>
 <li><a href="#103-flyio-deployment">Fly.io Deployment</a></li>
-<li><a href="#104-running-tests">Running Tests</a></li>
+<li><a href="#104-auto-deploy-from-github">Auto-Deploy from GitHub</a></li>
+<li><a href="#105-running-tests">Running Tests</a></li>
 </ul>
 </li>
 </ol>
@@ -1493,7 +1494,7 @@ All Discord notifications are deduplicated to prevent spam:
 <ul>
 <li><strong>Name:</strong> Give it a name like "Ham Radio Olympics" (this appears as the sender)</li>
 <li><strong>Channel:</strong> Select which channel should receive notifications</li>
-<li><strong>Avatar (optional):</strong> Use the Ham Radio Olympics icon: <code>https://kd5dx.fly.dev/static/icon-512.png</code></li>
+<li><strong>Avatar (optional):</strong> Use the Ham Radio Olympics icon: <code>https://your-app.fly.dev/static/icon-512.png</code></li>
 </ul>
 </li>
 <li>Click <strong>Copy Webhook URL</strong>
@@ -1660,13 +1661,50 @@ Ham Radio Olympics includes a Dockerfile and <code>fly.toml</code> for easy depl
 <ol>
 <li>Install flyctl: <code>curl -L https://fly.io/install.sh | sh</code>
 <li>Login: <code>fly auth login</code>
-<li>Create app: <code>fly launch --name ham-radio-olympics</code>
-<li>Create persistent volume: <code>fly volumes create ham_olympics_data --size 1 --region iad</code>
+<li>Copy <code>fly.toml.example</code> to <code>fly.toml</code> and update the <code>app</code> name and volume <code>source</code> to match your setup
+<li>Create app: <code>fly launch --name your-app-name</code>
+<li>Create persistent volume: <code>fly volumes create your_volume_name --size 1 --region iad</code>
 <li>Set secrets: <code>fly secrets set ENCRYPTION_KEY="..." ADMIN_KEY="..."</code>
 <li>Deploy: <code>fly deploy</code>
 </li>
 </ol>
-<h3 id="104-running-tests">10.4 Running Tests</h3>
+<h3 id="104-auto-deploy-from-github">10.4 Auto-Deploy from GitHub</h3>
+
+<p>
+The repository includes a GitHub Actions workflow that automatically deploys to Fly.io whenever you push to the <code>main</code> branch. This means you can make changes, push, and your site updates automatically — no manual <code>fly deploy</code> needed.
+</p>
+
+<p>
+<strong>Setup:</strong>
+</p>
+
+<ol>
+<li>Make sure <code>fly.toml</code> is committed to your repository with your app name and volume configured (see Section 10.3)
+<li>Create a scoped Fly.io deploy token:
+</li>
+</ol>   <pre><code class="language-bash">fly tokens create deploy -x 999999h</code></pre>
+<ol>
+<li>Add the token as a GitHub Actions secret:
+<ul>
+<li>Go to your repository on GitHub → <strong>Settings</strong> → <strong>Secrets and variables</strong> → <strong>Actions</strong></li>
+<li>Click <strong>New repository secret</strong></li>
+<li>Name: <code>FLY_API_TOKEN</code></li>
+<li>Value: paste the deploy token from step 2</li>
+</ul>
+</li>
+<li>Push to <code>main</code> — the workflow at <code>.github/workflows/deploy.yml</code> will handle the rest
+</li>
+</ol>
+<p>
+<strong>Notes:</strong>
+</p>
+<ul>
+<li>The deploy token is scoped to deployments only — it cannot access secrets, billing, or other Fly.io resources</li>
+<li>GitHub Actions secrets are encrypted and never exposed in logs, even on public repositories</li>
+<li>You can monitor deploy progress at <code>https://github.com/<your-org>/<your-repo>/actions</code></li>
+<li>If you need to skip auto-deploy for a commit, add <code>[skip ci]</code> to your commit message</li>
+</ul>
+<h3 id="105-running-tests">10.5 Running Tests</h3>
 
 <p>
 The project includes a comprehensive test suite. Run tests with:

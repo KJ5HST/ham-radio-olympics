@@ -174,6 +174,8 @@ curl -X POST http://localhost:8000/admin/sport/1/match \
 
 ## Deployment to Fly.io
 
+### Manual Deploy
+
 ```bash
 # Install flyctl
 curl -L https://fly.io/install.sh | sh
@@ -194,6 +196,37 @@ fly secrets set ADMIN_KEY="your-admin-key"
 # Deploy
 fly deploy
 ```
+
+### Auto-Deploy from GitHub
+
+The repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically deploys to Fly.io on every push to `main`.
+
+**Setup:**
+
+1. Copy `fly.toml.example` to `fly.toml` and update with your app name and volume:
+   ```toml
+   app = "your-app-name"
+   primary_region = "iad"  # or your preferred region
+
+   [mounts]
+     source = "your_volume_name"
+     destination = "/data"
+   ```
+
+2. Create a Fly.io deploy token:
+   ```bash
+   fly tokens create deploy -x 999999h
+   ```
+
+3. Add the token as a GitHub Actions secret:
+   - Go to your repo → Settings → Secrets and variables → Actions
+   - Click "New repository secret"
+   - Name: `FLY_API_TOKEN`
+   - Value: paste the token from step 2
+
+4. Commit `fly.toml` to your repo (it's removed from `.gitignore` by default since it contains no secrets)
+
+Once configured, every push to `main` will trigger an automatic deployment.
 
 ## Environment Variables
 

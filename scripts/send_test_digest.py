@@ -7,8 +7,8 @@ sys.path.insert(0, "/app")
 from email_service import send_email, _render_weekly_digest_template, _get_email_footer_text
 
 async def send_test_digest():
-    callsign = "KJ5HST"
-    email = "kj5hst@deppe.com"
+    callsign = "W1AW"
+    email = "test@example.com"
 
     # Sample matches for testing
     matches = [

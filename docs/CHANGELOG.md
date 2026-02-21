@@ -2,6 +2,19 @@
 
 All notable changes to Ham Radio Olympics are documented in this file.
 
+## [1.2.1] - 2026-02-20
+
+### Added
+- **Auto-Deploy from GitHub**: GitHub Actions workflow (`.github/workflows/deploy.yml`) automatically deploys to Fly.io on push to `main`
+- **fly.toml committed to repo**: Removed from `.gitignore` so GitHub Actions can deploy (contains no secrets)
+
+### Fixed
+- **Push Notification Recovery**: Settings page now auto-re-registers push subscriptions when the server has lost the record but the browser still has one
+- **Email Notifications After Sync**: Medal notification emails now sent automatically after every sync (previously only triggered manually from admin)
+- **Batched Discord Notifications**: Medal award announcements are now consolidated into a single Discord message per sync instead of individual messages
+- **Orphaned Records**: Records are now recomputed after QSO deletions to prevent stale `qso_id` references
+- **Triathlon Standings**: Competitors who withdraw from all sports are now correctly excluded from triathlon standings
+
 ## [1.2.0] - 2026-01-11
 
 ### Added

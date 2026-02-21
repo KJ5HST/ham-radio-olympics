@@ -309,7 +309,7 @@ class TestCallsignValidation:
         from main import is_valid_callsign_format
 
         valid_callsigns = [
-            "W1AW", "K2ABC", "N3XYZ", "KD5DX", "WA1ABC",
+            "W1AW", "K2ABC", "N3XYZ", "WB4SON", "WA1ABC",
             "WB4SON", "KC2ABC", "KG7ABC", "W1A", "K2AB",
             "N3A", "AA1A", "AB2CD", "KK6ABC"
         ]

@@ -1,5 +1,8 @@
 # fly.toml - Fly.io configuration for Ham Radio Olympics
 # Copy this file to fly.toml and customize for your deployment
+#
+# Auto-deploy: This file must be committed to git for GitHub Actions
+# auto-deploy to work. See docs/README.md for setup instructions.
 
 app = "your-app-name"
 primary_region = "iad"  # Change to your preferred region

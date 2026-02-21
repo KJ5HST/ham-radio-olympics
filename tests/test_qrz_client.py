@@ -575,7 +575,7 @@ class TestVerifyApiKey:
     @respx.mock
     async def test_verify_key_with_mismatched_callsign(self):
         """Test verification fails when callsign doesn't match API key owner."""
-        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=KJ5HST"))
+        respx.post(QRZ_API_URL).mock(return_value=httpx.Response(200, text="RESULT=OK&CALLSIGN=W1AW"))
 
         result = await verify_api_key("valid-api-key", expected_callsign="W1XYZ")
         assert result is False

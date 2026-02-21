@@ -1354,7 +1354,7 @@ def discord_notify_match_reminder(
 
 def discord_notify_pota_summary(
     sport_spot_counts: Dict[str, Dict[str, Any]],
-    app_url: str = "https://kd5dx.fly.dev"
+    app_url: str = "https://ham-radio-olympics.fly.dev"
 ) -> bool:
     """
     Send a batched Discord notification summarizing POTA activity across sports.

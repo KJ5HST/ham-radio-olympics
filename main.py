@@ -805,7 +805,7 @@ def is_valid_callsign_format(callsign: str) -> bool:
     Validate callsign format using regex patterns for international amateur callsigns.
 
     Patterns cover:
-    - US: W1AW, K2ABC, N3XYZ, KD5DX, WA1ABC, etc.
+    - US: W1AW, K2ABC, N3XYZ, WB4SON, WA1ABC, etc.
     - International: VE3ABC, G4XYZ, DL1ABC, JA1ABC, VK2ABC, etc.
 
     General format: [prefix][digit][suffix]
@@ -816,7 +816,7 @@ def is_valid_callsign_format(callsign: str) -> bool:
     callsign = callsign.upper().strip()
 
     # Pattern: 1-3 char prefix, 1 digit, 1-4 letter suffix
-    # Examples: W1A, K2AB, N3ABC, KD5DX, WA1ABCD, VE3XYZ, G4ABC, DL1ABC
+    # Examples: W1A, K2AB, N3ABC, WB4SON, WA1ABCD, VE3XYZ, G4ABC, DL1ABC
     pattern = r'^[A-Z]{1,2}[0-9][A-Z]{1,4}$|^[A-Z][0-9][A-Z]{1,4}$|^[0-9][A-Z][0-9][A-Z]{1,4}$|^[A-Z]{1,2}[0-9]{1,2}[A-Z]{1,4}$'
 
     return bool(re.match(pattern, callsign))

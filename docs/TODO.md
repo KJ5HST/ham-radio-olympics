@@ -30,7 +30,7 @@
 ## See Also
 
 - [ROADMAP.md](ROADMAP.md) - Full list of potential features
-- [GitHub Issues](https://github.com/KJ5HST/ham-radio-olympics/issues) - Bug reports and feature requests
+- [GitHub Issues](https://github.com/your-org/ham-radio-olympics/issues) - Bug reports and feature requests
 
 ---
 
