@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pywebpush import webpush, WebPushException
 
 from database import get_db
+from park_utils import format_park_display
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +464,7 @@ def notify_medal_change(
     if not changes:
         return False
 
-    title = f"Medal Update - {match_target}"
+    title = f"Medal Update - {format_park_display(match_target)}"
     body = f"{sport_name}: {'; '.join(changes)}. Total: {total_points} pts"
 
     payload = NotificationPayload(
@@ -628,7 +629,7 @@ def notify_match_reminder(
         title = f"Match in {days_until} Days"
         time_text = f"starts in {days_until} days"
 
-    body = f"{sport_name}: {match_target} {time_text}"
+    body = f"{sport_name}: {format_park_display(match_target)} {time_text}"
 
     # Use sport page if sport_id is provided, otherwise dashboard
     url = f"/olympiad/sport/{sport_id}" if sport_id else "/dashboard"
@@ -740,7 +741,7 @@ def notify_pota_spot(
     if was_notification_sent(callsign, "pota_spot", reference):
         return False
 
-    title = f"POTA Spot: {park_reference}"
+    title = f"POTA Spot: {format_park_display(park_reference)}"
     body = f"{activator_callsign} on {frequency} {mode} - {sport_name}"
 
     # Use sport page if sport_id is provided, otherwise dashboard
@@ -1173,7 +1174,7 @@ def discord_notify_medal(
         "color": color,
         "fields": [
             {"name": "Sport", "value": sport_name, "inline": True},
-            {"name": "Target", "value": match_target, "inline": True},
+            {"name": "Target", "value": format_park_display(match_target), "inline": True},
             {"name": "Competition", "value": competition, "inline": True}
         ],
         "timestamp": datetime.utcnow().isoformat() + "Z"
@@ -1223,7 +1224,7 @@ def discord_notify_sync_summary(
             display = get_display_name(m["callsign"], m.get("first_name"))
             lines.append(
                 f"{emoji} **{display}** — {m['medal_type'].title()} in {m['competition']} "
-                f"({m['sport_name']}: {m['match_target']})"
+                f"({m['sport_name']}: {format_park_display(m['match_target'])})"
             )
 
     # Process record changes (check dedup, skip already-sent)
@@ -1341,7 +1342,7 @@ def discord_notify_match_reminder(
 
     embed = {
         "title": title,
-        "description": f"**{sport_name}** targeting **{match_target}** {time_text}",
+        "description": f"**{sport_name}** targeting **{format_park_display(match_target)}** {time_text}",
         "color": color,
         "fields": [
             {"name": "Start Date", "value": start_date, "inline": True}

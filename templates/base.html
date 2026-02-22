@@ -276,19 +276,15 @@
             font-size: 0.8em;
         }
         .pota-tooltip {
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
+            position: fixed;
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 6px;
             padding: 8px 12px;
             font-size: 0.85rem;
             white-space: nowrap;
-            z-index: 1000;
+            z-index: 10000;
             box-shadow: 0 2px 8px var(--shadow-color);
-            margin-bottom: 5px;
             pointer-events: none;
         }
         .pota-tooltip::after {
@@ -1258,8 +1254,27 @@
             var tooltip = document.createElement('div');
             tooltip.className = 'pota-tooltip';
             tooltip.innerHTML = content;
-            element.appendChild(tooltip);
+            document.body.appendChild(tooltip);
             activeTooltip = tooltip;
+            positionTooltip(element, tooltip);
+        }
+
+        function positionTooltip(element, tooltip) {
+            var rect = element.getBoundingClientRect();
+            var tooltipRect = tooltip.getBoundingClientRect();
+            var left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
+            var top = rect.top - tooltipRect.height - 8;
+            // Keep within viewport horizontally
+            if (left < 4) left = 4;
+            if (left + tooltipRect.width > window.innerWidth - 4) {
+                left = window.innerWidth - tooltipRect.width - 4;
+            }
+            // If clipped above, show below
+            if (top < 4) {
+                top = rect.bottom + 8;
+            }
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
         }
 
         function removeTooltip() {
@@ -1315,8 +1330,9 @@
 
             createTooltip(target, '<span class="park-loading">Loading...</span>');
             var data = await fetchParkInfo(reference);
-            if (target.querySelector('.pota-tooltip')) {
-                target.querySelector('.pota-tooltip').innerHTML = formatParkTooltip(data);
+            if (activeTooltip) {
+                activeTooltip.innerHTML = formatParkTooltip(data);
+                positionTooltip(target, activeTooltip);
             }
             // Mark normalized references with warning indicator
             if (data && data.original) {

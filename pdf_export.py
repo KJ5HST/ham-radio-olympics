@@ -897,44 +897,9 @@ def get_records_data(sport_id: Optional[int] = None, callsign: Optional[str] = N
 
 
 def get_park_name(reference: str) -> Optional[str]:
-    """Look up park name from pota_parks table, fetching from API if needed."""
-    import httpx
-
-    reference = reference.upper().strip()
-
-    # Check cache first
-    with get_db() as conn:
-        cursor = conn.execute(
-            "SELECT name FROM pota_parks WHERE reference = ?",
-            (reference,)
-        )
-        row = cursor.fetchone()
-        if row:
-            return row["name"]
-
-    # Fetch from POTA API if not cached
-    try:
-        with httpx.Client(timeout=5.0) as client:
-            response = client.get(f"https://api.pota.app/park/{reference}")
-            if response.status_code == 200:
-                data = response.json()
-                if data and isinstance(data, dict) and data.get("name"):
-                    name = data["name"]
-                    location = data.get("locationDesc", "")
-                    grid = data.get("grid", "")
-
-                    # Cache for future use
-                    with get_db() as conn:
-                        conn.execute("""
-                            INSERT OR REPLACE INTO pota_parks (reference, name, location, grid, cached_at)
-                            VALUES (?, ?, ?, ?, ?)
-                        """, (reference, name, location, grid, datetime.utcnow().isoformat()))
-
-                    return name
-    except Exception as e:
-        logger.warning(f"Failed to fetch park {reference} from POTA API: {e}")
-
-    return None
+    """Look up park name from pota_parks cache."""
+    from park_utils import get_park_name_cached
+    return get_park_name_cached(reference)
 
 
 def format_target(target_type: str, target_value: str) -> str:

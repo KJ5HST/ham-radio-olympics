@@ -160,7 +160,7 @@ async function leaveSport() {
                                                         {% endif %}
                                                     </td>
                                                     <td style="padding: 3px 6px;"><strong>{{ qso.dx_callsign }}</strong></td>
-                                                    <td style="padding: 3px 6px;" class="hide-mobile">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                                    <td style="padding: 3px 6px;" class="hide-mobile">{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} 📡 {{ qso.my_park | pota_tooltip }}{% endif %}</td>
                                                     <td style="padding: 3px 6px;" class="hide-mobile">{{ qso.mode or '-' }}</td>
                                                     <td style="padding: 3px 6px;" class="hide-mobile">{% if qso.power %}{{ qso.power }}W{% else %}-{% endif %}</td>
                                                     <td style="padding: 3px 6px;">{% if qso.distance %}{{ qso.distance | format_distance(display_prefs.distance_unit or 'km') }}{% else %}-{% endif %}</td>

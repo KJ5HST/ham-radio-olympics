@@ -3051,10 +3051,22 @@ class TestFormatTargetDisplay:
         result = format_target_display("invalid", "country")
         assert result == "invalid"
 
-    def test_park_target(self):
-        """Test park target just returns the value."""
+    def test_park_target_no_cache(self):
+        """Test park target returns raw value when not cached."""
+        result = format_target_display("K-9999", "park")
+        assert result == "K-9999"
+
+    def test_park_target_with_cache(self):
+        """Test park target returns name when cached."""
+        from database import get_db
+        with get_db() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO pota_parks (reference, name, location, grid, cached_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("K-0001", "Acadia National Park", "US-ME", "FN44", "2025-01-01T00:00:00")
+            )
         result = format_target_display("K-0001", "park")
-        assert result == "K-0001"
+        assert result == "Acadia National Park (K-0001)"
 
     def test_grid_target(self):
         """Test grid target just returns the value."""

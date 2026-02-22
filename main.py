@@ -1065,6 +1065,11 @@ def format_target_display(target_value: str, target_type: str) -> str:
                 return f"{name} ({target_value})"
         except (ValueError, TypeError):
             pass
+    elif target_type in ("park", "pota"):
+        from park_utils import get_park_name_cached
+        name = get_park_name_cached(target_value)
+        if name:
+            return f"{name} ({target_value})"
     return target_value
 
 

@@ -49,7 +49,7 @@
                     <tbody>
                         {% for match in sport.matches %}
                         <tr>
-                            <td>{{ match.target_display }}</td>
+                            <td>{{ match.target_display | pota_tooltip }}</td>
                             <td>{{ match.start_date | format_date }}</td>
                             <td>{{ match.end_date | format_date }}</td>
                             <td><a href="/olympiad/sport/{{ sport.id }}/match/{{ match.id }}" class="btn btn-sm"><span class="icon">👁️</span></a></td>

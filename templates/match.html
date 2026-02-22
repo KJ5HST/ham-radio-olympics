@@ -25,7 +25,7 @@
 {% endif %}
 
 {% if target_type == 'park' %}
-<h3>Live Spots at {{ target_value }}</h3>
+<h3>Live Spots at {{ target_value | pota_tooltip }}</h3>
 <div id="spots-container" class="card">
     <p class="loading-text"><span class="loading-spinner"></span> Loading spots...</p>
 </div>
@@ -161,9 +161,9 @@
                             {% for qso in qso_details[medal.callsign] %}
                             <tr{% if qso.dq_status == 'disqualified' %} style="opacity: 0.5; text-decoration: line-through;"{% endif %}>
                                 <td><span class="medal-label">{{ qso.medal_type }}</span></td>
-                                <td>{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} <span title="Activated from {{ qso.my_park }}">📡</span>{% endif %}</td>
+                                <td>{{ qso.time | format_datetime(qso.my_grid or display_prefs.home_grid, display_prefs.time_display) }}{% if qso.my_park %} 📡 {{ qso.my_park | pota_tooltip }}{% endif %}</td>
                                 <td>
-                                    <strong>{{ qso.dx_callsign }}</strong>{% if qso.park %} <span style="color: var(--text-secondary);">({{ qso.park }})</span>{% endif %}
+                                    <strong>{{ qso.dx_callsign }}</strong>{% if qso.park %} <span style="color: var(--text-secondary);">({{ qso.park | pota_tooltip }})</span>{% endif %}
                                     {% if qso.dq_status == 'disqualified' %}
                                     <span class="badge badge-dq" title="Disqualified - click for details" style="cursor: pointer;" onclick="viewDqHistory({{ qso.id }})">DQ</span>
                                     {% elif qso.dq_status == 'refuted' %}
