@@ -741,8 +741,8 @@ def notify_pota_spot(
     if was_notification_sent(callsign, "pota_spot", reference):
         return False
 
-    title = f"POTA Spot: {format_park_display(park_reference)}"
-    body = f"{activator_callsign} on {frequency} {mode} - {sport_name}"
+    title = f"{format_park_display(park_reference)}"
+    body = f"POTA Spot: {activator_callsign} on {frequency} {mode} - Ham Radio Olympics"
 
     # Use sport page if sport_id is provided, otherwise dashboard
     url = f"/olympiad/sport/{sport_id}" if sport_id else "/dashboard"
