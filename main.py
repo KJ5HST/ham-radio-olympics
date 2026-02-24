@@ -4380,15 +4380,27 @@ async def admin_olympiads(request: Request, _: bool = Depends(verify_admin)):
 
 
 @app.post("/admin/olympiad")
-async def create_olympiad(olympiad: OlympiadCreate, _: bool = Depends(verify_admin)):
+async def create_olympiad(request: Request, olympiad: OlympiadCreate, _: bool = Depends(verify_admin)):
     """Create a new Olympiad."""
     with get_db() as conn:
         cursor = conn.execute("""
             INSERT INTO olympiads (name, start_date, end_date, qualifying_qsos, is_active)
             VALUES (?, ?, ?, ?, 0)
         """, (olympiad.name, olympiad.start_date, olympiad.end_date, olympiad.qualifying_qsos))
+        new_id = cursor.lastrowid
 
-        return {"id": cursor.lastrowid, "message": "Olympiad created"}
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="create_olympiad",
+        target_type="olympiad",
+        target_id=str(new_id),
+        details=f"Created olympiad: {olympiad.name}",
+        ip_address=get_client_ip(request)
+    )
+
+    return {"id": new_id, "message": "Olympiad created"}
 
 
 @app.post("/admin/check-park-anomalies")
@@ -4397,6 +4409,17 @@ async def admin_check_park_anomalies(request: Request, _: bool = Depends(verify_
     from sync import check_and_disqualify_park_anomalies
     from starlette.responses import RedirectResponse
     stats = check_and_disqualify_park_anomalies()
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="check_park_anomalies",
+        target_type="system",
+        details=f"Found {stats['anomalies_found']} anomalies, disqualified {stats['qsos_disqualified']} QSOs",
+        ip_address=get_client_ip(request)
+    )
+
     # Store results in a flash message or just redirect
     return RedirectResponse(
         url=f"/admin/park-anomalies?checked=1&found={stats['anomalies_found']}&dq={stats['qsos_disqualified']}",
@@ -4576,7 +4599,7 @@ async def get_olympiad_admin(olympiad_id: int, _: bool = Depends(verify_admin)):
 
 
 @app.put("/admin/olympiad/{olympiad_id}")
-async def update_olympiad(olympiad_id: int, olympiad: OlympiadCreate, _: bool = Depends(verify_admin)):
+async def update_olympiad(request: Request, olympiad_id: int, olympiad: OlympiadCreate, _: bool = Depends(verify_admin)):
     """Update an Olympiad."""
     with get_db() as conn:
         conn.execute("""
@@ -4585,33 +4608,74 @@ async def update_olympiad(olympiad_id: int, olympiad: OlympiadCreate, _: bool = 
             WHERE id = ?
         """, (olympiad.name, olympiad.start_date, olympiad.end_date, olympiad.qualifying_qsos, olympiad_id))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_olympiad",
+        target_type="olympiad",
+        target_id=str(olympiad_id),
+        details=f"Updated olympiad: {olympiad.name}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Olympiad updated"}
 
 
 @app.delete("/admin/olympiad/{olympiad_id}")
-async def delete_olympiad(olympiad_id: int, _: bool = Depends(verify_admin)):
+async def delete_olympiad(request: Request, olympiad_id: int, _: bool = Depends(verify_admin)):
     """Delete an Olympiad."""
     with get_db() as conn:
         conn.execute("DELETE FROM olympiads WHERE id = ?", (olympiad_id,))
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="delete_olympiad",
+        target_type="olympiad",
+        target_id=str(olympiad_id),
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": "Olympiad deleted"}
 
 
 @app.post("/admin/olympiad/{olympiad_id}/activate")
-async def activate_olympiad(olympiad_id: int, _: bool = Depends(verify_admin)):
+async def activate_olympiad(request: Request, olympiad_id: int, _: bool = Depends(verify_admin)):
     """Set an Olympiad as active (deactivates others)."""
     with get_db() as conn:
         conn.execute("UPDATE olympiads SET is_active = 0")
         conn.execute("UPDATE olympiads SET is_active = 1 WHERE id = ?", (olympiad_id,))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="activate_olympiad",
+        target_type="olympiad",
+        target_id=str(olympiad_id),
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Olympiad activated"}
 
 
 @app.post("/admin/olympiad/{olympiad_id}/deactivate")
-async def deactivate_olympiad(olympiad_id: int, _: bool = Depends(verify_admin)):
+async def deactivate_olympiad(request: Request, olympiad_id: int, _: bool = Depends(verify_admin)):
     """Deactivate an Olympiad (pause it)."""
     with get_db() as conn:
         conn.execute("UPDATE olympiads SET is_active = 0 WHERE id = ?", (olympiad_id,))
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="deactivate_olympiad",
+        target_type="olympiad",
+        target_id=str(olympiad_id),
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": "Olympiad deactivated"}
 
@@ -4640,7 +4704,7 @@ async def admin_olympiad_sports(request: Request, olympiad_id: int, _: bool = De
 
 
 @app.post("/admin/olympiad/{olympiad_id}/sport")
-async def create_sport(olympiad_id: int, sport: SportCreate, _: bool = Depends(verify_admin)):
+async def create_sport(request: Request, olympiad_id: int, sport: SportCreate, _: bool = Depends(verify_admin)):
     """Create a new Sport."""
     with get_db() as conn:
         cursor = conn.execute("""
@@ -4654,8 +4718,20 @@ async def create_sport(olympiad_id: int, sport: SportCreate, _: bool = Depends(v
             1 if sport.separate_pools else 0,
             sport.allowed_modes,
         ))
+        new_id = cursor.lastrowid
 
-        return {"id": cursor.lastrowid, "message": "Sport created"}
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="create_sport",
+        target_type="sport",
+        target_id=str(new_id),
+        details=f"Created sport: {sport.name} (olympiad {olympiad_id})",
+        ip_address=get_client_ip(request)
+    )
+
+    return {"id": new_id, "message": "Sport created"}
 
 
 @app.get("/admin/sport/{sport_id}")
@@ -4690,6 +4766,17 @@ async def update_sport(request: Request, sport_id: int, sport: SportCreate):
             sport_id,
         ))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_sport",
+        target_type="sport",
+        target_id=str(sport_id),
+        details=f"Updated sport: {sport.name}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Sport updated"}
 
 
@@ -4700,11 +4787,21 @@ async def delete_sport(request: Request, sport_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM sports WHERE id = ?", (sport_id,))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="delete_sport",
+        target_type="sport",
+        target_id=str(sport_id),
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Sport deleted"}
 
 
 @app.post("/admin/sport/{sport_id}/duplicate")
-async def duplicate_sport(sport_id: int, _: bool = Depends(verify_admin)):
+async def duplicate_sport(request: Request, sport_id: int, _: bool = Depends(verify_admin)):
     """Duplicate a Sport and all its Matches."""
     with get_db() as conn:
         # Get original sport
@@ -4746,6 +4843,17 @@ async def duplicate_sport(sport_id: int, _: bool = Depends(verify_admin)):
                 match["target_value"],
                 match["target_type"],
             ))
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="duplicate_sport",
+        target_type="sport",
+        target_id=str(sport_id),
+        details=f"Duplicated sport to new id {new_sport_id} with {len(matches)} matches",
+        ip_address=get_client_ip(request)
+    )
 
     return {
         "message": f"Sport duplicated with {len(matches)} matches",
@@ -4862,6 +4970,17 @@ async def disqualify_from_sport(request: Request, sport_id: int, callsign: str):
     # Recompute medals for affected matches
     recompute_sport_matches(sport_id)
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="disqualify_from_sport",
+        target_type="competitor",
+        target_id=callsign,
+        details=f"Disqualified from sport {sport_id}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} disqualified from sport"}
 
 
@@ -4903,8 +5022,20 @@ async def create_match(request: Request, sport_id: int, match: MatchCreate):
             INSERT INTO matches (sport_id, start_date, end_date, target_value, allowed_modes, max_power_w, target_type, confirmation_deadline, show_live_results)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (sport_id, match.start_date, match.end_date, match.target_value, match.allowed_modes, match.max_power_w, match.target_type, match.confirmation_deadline, 1 if match.show_live_results else 0))
+        new_id = cursor.lastrowid
 
-        return {"id": cursor.lastrowid, "message": "Match created"}
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="create_match",
+        target_type="match",
+        target_id=str(new_id),
+        details=f"Created match in sport {sport_id}: target={match.target_value}, {match.start_date} to {match.end_date}",
+        ip_address=get_client_ip(request)
+    )
+
+    return {"id": new_id, "message": "Match created"}
 
 
 @app.get("/admin/match/{match_id}")
@@ -4966,6 +5097,17 @@ async def update_match(request: Request, match_id: int, match: MatchCreate):
     # Recompute medals for this match (run in thread pool to avoid blocking/locks)
     await asyncio.to_thread(recompute_match_medals, match_id)
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_match",
+        target_type="match",
+        target_id=str(match_id),
+        details=f"Updated match: target={match.target_value}, {match.start_date} to {match.end_date}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Match updated"}
 
 
@@ -4982,6 +5124,16 @@ async def delete_match(request: Request, match_id: int):
         verify_admin_or_sport_referee(request, existing["sport_id"])
 
         conn.execute("DELETE FROM matches WHERE id = ?", (match_id,))
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="delete_match",
+        target_type="match",
+        target_id=str(match_id),
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": "Match deleted"}
 
@@ -5316,7 +5468,7 @@ async def remove_referee_role(request: Request, callsign: str, _: bool = Depends
 
 
 @app.post("/admin/competitor/{callsign}/assign-sport/{sport_id}")
-async def assign_referee_to_sport(callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
+async def assign_referee_to_sport(request: Request, callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
     """Assign a referee to a sport."""
     callsign = callsign.upper()
     now = datetime.utcnow().isoformat()
@@ -5347,11 +5499,22 @@ async def assign_referee_to_sport(callsign: str, sport_id: int, _: bool = Depend
             (callsign, sport_id, now)
         )
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="assign_referee_sport",
+        target_type="competitor",
+        target_id=callsign,
+        details=f"Assigned referee to sport {sport_id}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Referee {callsign} assigned to sport {sport_id}"}
 
 
 @app.delete("/admin/competitor/{callsign}/assign-sport/{sport_id}")
-async def remove_referee_from_sport(callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
+async def remove_referee_from_sport(request: Request, callsign: str, sport_id: int, _: bool = Depends(verify_admin)):
     """Remove a referee from a sport."""
     callsign = callsign.upper()
     with get_db() as conn:
@@ -5362,11 +5525,22 @@ async def remove_referee_from_sport(callsign: str, sport_id: int, _: bool = Depe
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Assignment not found")
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="remove_referee_sport",
+        target_type="competitor",
+        target_id=callsign,
+        details=f"Removed referee from sport {sport_id}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Referee {callsign} removed from sport {sport_id}"}
 
 
 @app.post("/admin/competitor/{callsign}/disqualify")
-async def disqualify_competitor(callsign: str, _: bool = Depends(verify_admin_or_referee)):
+async def disqualify_competitor(request: Request, callsign: str, _: bool = Depends(verify_admin_or_referee)):
     """Disqualify a competitor from the active competition. Admins or referees can disqualify."""
     callsign = callsign.upper()
     with get_db() as conn:
@@ -5404,11 +5578,22 @@ async def disqualify_competitor(callsign: str, _: bool = Depends(verify_admin_or
     from sync import recompute_all_active_matches
     await asyncio.to_thread(recompute_all_active_matches)
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="disqualify_competitor",
+        target_type="competitor",
+        target_id=callsign,
+        details=f"Disqualified from {removed_count} sport(s)",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Competitor {callsign} disqualified from {removed_count} sport(s)"}
 
 
 @app.post("/admin/competitor/{callsign}/reset-password")
-async def reset_competitor_password(callsign: str, _: bool = Depends(verify_admin)):
+async def reset_competitor_password(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Reset a competitor's password to a random value."""
     callsign = callsign.upper()
 
@@ -5429,16 +5614,37 @@ async def reset_competitor_password(callsign: str, _: bool = Depends(verify_admi
         # Invalidate all sessions
         conn.execute("DELETE FROM sessions WHERE callsign = ?", (callsign,))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="reset_password",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Password reset for {callsign}", "new_password": new_password}
 
 
 @app.delete("/admin/competitor/{callsign}")
-async def delete_competitor(callsign: str, _: bool = Depends(verify_admin)):
+async def delete_competitor(request: Request, callsign: str, _: bool = Depends(verify_admin)):
     """Delete a competitor."""
+    callsign = callsign.upper()
     with get_db() as conn:
-        conn.execute("DELETE FROM competitors WHERE callsign = ?", (callsign.upper(),))
+        conn.execute("DELETE FROM competitors WHERE callsign = ?", (callsign,))
 
-    return {"message": f"Competitor {callsign.upper()} deleted"}
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="delete_competitor",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
+    return {"message": f"Competitor {callsign} deleted"}
 
 
 @app.post("/admin/competitor/{callsign}/reset-qsos")
@@ -5548,6 +5754,16 @@ async def admin_sync_competitor(
         lotw_result = await sync_competitor_lotw_stored(callsign)
         results["lotw_sync"] = lotw_result
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_sync_competitor",
+        target_type="competitor",
+        target_id=callsign,
+        ip_address=get_client_ip(request)
+    )
+
     return results
 
 
@@ -5640,6 +5856,16 @@ async def update_qrz_settings(
     callsign_lookup._qrz_session_key = None
     callsign_lookup._qrz_session_expires = None
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_qrz_settings",
+        target_type="settings",
+        details=f"Updated QRZ credentials (username: {username})",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "QRZ credentials saved successfully"}
 
 
@@ -5667,7 +5893,7 @@ async def test_qrz_connection(_: bool = Depends(verify_admin)):
 
 
 @app.delete("/admin/settings/qrz")
-async def clear_qrz_settings(_: bool = Depends(verify_admin)):
+async def clear_qrz_settings(request: Request, _: bool = Depends(verify_admin)):
     """Clear QRZ API credentials."""
     from database import set_setting
     import callsign_lookup
@@ -5678,6 +5904,15 @@ async def clear_qrz_settings(_: bool = Depends(verify_admin)):
     # Clear cached session
     callsign_lookup._qrz_session_key = None
     callsign_lookup._qrz_session_expires = None
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="clear_qrz_settings",
+        target_type="settings",
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": "QRZ credentials cleared"}
 
@@ -5707,6 +5942,16 @@ async def update_theme_settings(
     if tagline:
         set_setting("site_tagline", tagline)
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_theme",
+        target_type="settings",
+        details=f"Theme: {theme}, name: {name or '(unchanged)'}, tagline: {tagline or '(unchanged)'}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Theme settings saved successfully"}
 
 
@@ -5722,6 +5967,16 @@ async def update_public_results(
     enabled = data.get("enabled", False)
 
     set_setting("public_results", "1" if enabled else "0")
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_public_results",
+        target_type="settings",
+        details=f"Public results {'enabled' if enabled else 'disabled'}",
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": f"Public results {'enabled' if enabled else 'disabled'}"}
 
@@ -5739,7 +5994,17 @@ async def update_email_settings(
 
     set_setting("admin_bcc_emails", "1" if admin_bcc else "0")
 
+    from audit import log_action
+    user = get_current_user(request)
     status = "enabled" if admin_bcc else "disabled"
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_email_settings",
+        target_type="settings",
+        details=f"Admin BCC on emails {status}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": f"Admin BCC on emails {status}"}
 
 
@@ -5757,11 +6022,26 @@ async def update_discord_settings(
     if webhook_url and not webhook_url.startswith("https://discord.com/api/webhooks/"):
         raise HTTPException(status_code=400, detail="Invalid Discord webhook URL format")
 
+    from audit import log_action
+    user = get_current_user(request)
     if webhook_url:
         set_setting("discord_webhook_url", webhook_url)
+        log_action(
+            actor_callsign=user.callsign if user else "ADMIN",
+            action="update_discord_webhook",
+            target_type="settings",
+            details="Discord webhook URL saved",
+            ip_address=get_client_ip(request)
+        )
         return {"message": "Discord webhook URL saved successfully"}
     else:
         set_setting("discord_webhook_url", None)
+        log_action(
+            actor_callsign=user.callsign if user else "ADMIN",
+            action="clear_discord_webhook",
+            target_type="settings",
+            ip_address=get_client_ip(request)
+        )
         return {"message": "Discord webhook URL cleared"}
 
 
@@ -5778,11 +6058,21 @@ async def test_discord_webhook(_: bool = Depends(verify_admin)):
 
 
 @app.delete("/admin/settings/discord")
-async def clear_discord_settings(_: bool = Depends(verify_admin)):
+async def clear_discord_settings(request: Request, _: bool = Depends(verify_admin)):
     """Clear Discord webhook URL."""
     from database import set_setting
 
     set_setting("discord_webhook_url", None)
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="clear_discord_webhook",
+        target_type="settings",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Discord webhook URL cleared"}
 
 
@@ -5808,6 +6098,15 @@ async def update_discord_options(
         pota_interval = 30
     set_setting("discord_pota_interval", str(pota_interval))
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="update_discord_options",
+        target_type="settings",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Discord notification options saved"}
 
 
@@ -5816,11 +6115,21 @@ async def update_discord_options(
 # ============================================================
 
 @app.post("/admin/notifications/send-reminders")
-async def admin_send_match_reminders(_: bool = Depends(verify_admin)):
+async def admin_send_match_reminders(request: Request, _: bool = Depends(verify_admin)):
     """Send match reminder notifications for upcoming matches."""
     from notifications import send_match_reminders
 
     results = await asyncio.to_thread(send_match_reminders)
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="send_push_reminders",
+        target_type="notifications",
+        details=f"Checked {results['checked']} matches, sent {results['sent']}, skipped {results['skipped']}",
+        ip_address=get_client_ip(request)
+    )
 
     return {
         "message": "Match reminders processed",
@@ -5847,12 +6156,22 @@ async def admin_check_pota_spots(_: bool = Depends(verify_admin)):
 
 
 @app.post("/admin/notifications/cleanup")
-async def admin_cleanup_notifications(_: bool = Depends(verify_admin)):
+async def admin_cleanup_notifications(request: Request, _: bool = Depends(verify_admin)):
     """Cleanup old notification records and stale subscriptions."""
     from notifications import cleanup_old_notifications, cleanup_stale_subscriptions
 
     old_deleted = await asyncio.to_thread(cleanup_old_notifications, 30)
     stale_deleted = await asyncio.to_thread(cleanup_stale_subscriptions, 90)
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="cleanup_notifications",
+        target_type="notifications",
+        details=f"Deleted {old_deleted} old notifications, {stale_deleted} stale subscriptions",
+        ip_address=get_client_ip(request)
+    )
 
     return {
         "message": "Notification cleanup complete",
@@ -5891,7 +6210,7 @@ async def admin_notification_stats(_: bool = Depends(verify_admin)):
 
 
 @app.post("/admin/recompute-records")
-async def admin_recompute_records(_: bool = Depends(verify_admin)):
+async def admin_recompute_records(request: Request, _: bool = Depends(verify_admin)):
     """Recompute all medals and world records from match-qualifying QSOs."""
     from scoring import recompute_all_records
     from sync import recompute_all_active_matches
@@ -5904,15 +6223,35 @@ async def admin_recompute_records(_: bool = Depends(verify_admin)):
     # Send any pending push disabled notification emails
     await send_pending_push_disabled_emails()
 
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="recompute_records",
+        target_type="system",
+        details="Recomputed all medals and world records",
+        ip_address=get_client_ip(request)
+    )
+
     return {"message": "Medals and world records recomputed successfully"}
 
 
 @app.post("/admin/merge-duplicates")
-async def admin_merge_duplicates(_: bool = Depends(verify_admin)):
+async def admin_merge_duplicates(request: Request, _: bool = Depends(verify_admin)):
     """Merge duplicate QSOs from multiple sources (QRZ + LoTW)."""
     from sync import merge_duplicate_qsos
 
     result = merge_duplicate_qsos()
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="merge_duplicates",
+        target_type="system",
+        details=f"Merged {result['duplicate_groups']} groups, deleted {result['qsos_deleted']} duplicate QSOs",
+        ip_address=get_client_ip(request)
+    )
 
     if result["duplicate_groups"] > 0:
         return {"message": f"Merged {result['duplicate_groups']} duplicate groups, deleted {result['qsos_deleted']} duplicate QSOs"}
@@ -5921,11 +6260,21 @@ async def admin_merge_duplicates(_: bool = Depends(verify_admin)):
 
 
 @app.post("/admin/send-medal-notifications")
-async def admin_send_medal_notifications(_: bool = Depends(verify_admin)):
+async def admin_send_medal_notifications(request: Request, _: bool = Depends(verify_admin)):
     """Send email notifications for new medals."""
     from email_service import notify_new_medals
 
     result = await notify_new_medals()
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="send_medal_notifications",
+        target_type="notifications",
+        details=f"Sent {result['sent']}, skipped {result['skipped']}, errors {result['errors']}",
+        ip_address=get_client_ip(request)
+    )
 
     if result["sent"] > 0:
         return {"message": f"Sent {result['sent']} medal notifications, skipped {result['skipped']}, errors {result['errors']}"}
@@ -5936,11 +6285,21 @@ async def admin_send_medal_notifications(_: bool = Depends(verify_admin)):
 
 
 @app.post("/admin/send-match-reminders")
-async def admin_send_match_reminders(_: bool = Depends(verify_admin), hours: int = 24):
+async def admin_send_match_reminders_email(request: Request, _: bool = Depends(verify_admin), hours: int = 24):
     """Send email reminders for matches starting soon."""
     from email_service import send_match_reminders
 
     result = await send_match_reminders(hours_before=hours)
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="send_match_reminders",
+        target_type="notifications",
+        details=f"Sent {result['sent']} email reminders, errors {result['errors']}",
+        ip_address=get_client_ip(request)
+    )
 
     if result["sent"] > 0:
         return {"message": f"Sent {result['sent']} match reminders, errors {result['errors']}"}
@@ -5949,13 +6308,24 @@ async def admin_send_match_reminders(_: bool = Depends(verify_admin), hours: int
 
 
 @app.post("/admin/toggle-auto-sync")
-async def admin_toggle_auto_sync(_: bool = Depends(verify_admin)):
+async def admin_toggle_auto_sync(request: Request, _: bool = Depends(verify_admin)):
     """Toggle the auto-sync on or off."""
     current = is_sync_paused()
     set_sync_paused(not current)
     new_state = not current
     status = "paused" if new_state else "running"
     logger.info(f"Auto-sync toggled to: {status}")
+
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="toggle_auto_sync",
+        target_type="system",
+        details=f"Auto-sync is now {status}",
+        ip_address=get_client_ip(request)
+    )
+
     return {"paused": new_state, "message": f"Auto-sync is now {status}"}
 
 
@@ -6072,12 +6442,16 @@ async def admin_create_team(
             VALUES (?, ?, ?)
         """, (team_id, captain_callsign, now))
 
-        # Audit log
-        user = get_current_user(request)
-        conn.execute("""
-            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
-            VALUES (?, ?, 'admin_create_team', 'team', ?, ?)
-        """, (now, user.callsign if user else None, str(team_id), f"Created team: {name}"))
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_create_team",
+        target_type="team",
+        target_id=str(team_id),
+        details=f"Created team: {name}",
+        ip_address=get_client_ip(request)
+    )
 
     # Recompute team standings
     recompute_all_team_standings()
@@ -6096,13 +6470,16 @@ async def admin_delete_team(request: Request, team_id: int, _: bool = Depends(ve
 
         conn.execute("DELETE FROM teams WHERE id = ?", (team_id,))
 
-        # Audit log
-        user = get_current_user(request)
-        now = datetime.utcnow().isoformat()
-        conn.execute("""
-            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
-            VALUES (?, ?, 'admin_delete_team', 'team', ?, ?)
-        """, (now, user.callsign if user else None, str(team_id), f"Deleted team: {team['name']}"))
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_delete_team",
+        target_type="team",
+        target_id=str(team_id),
+        details=f"Deleted team: {team['name']}",
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": "Team deleted"}
 
@@ -6141,12 +6518,16 @@ async def admin_add_team_member(request: Request, team_id: int, callsign: str, _
             VALUES (?, ?, ?)
         """, (team_id, callsign, now))
 
-        # Audit log
-        user = get_current_user(request)
-        conn.execute("""
-            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
-            VALUES (?, ?, 'admin_add_team_member', 'team', ?, ?)
-        """, (now, user.callsign if user else None, str(team_id), f"Added {callsign} to team"))
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_add_team_member",
+        target_type="team",
+        target_id=str(team_id),
+        details=f"Added {callsign} to team",
+        ip_address=get_client_ip(request)
+    )
 
     # Recompute team standings
     recompute_all_team_standings()
@@ -6180,13 +6561,16 @@ async def admin_remove_team_member(request: Request, team_id: int, callsign: str
         # Remove member
         conn.execute("DELETE FROM team_members WHERE team_id = ? AND callsign = ?", (team_id, callsign))
 
-        # Audit log
-        user = get_current_user(request)
-        now = datetime.utcnow().isoformat()
-        conn.execute("""
-            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
-            VALUES (?, ?, 'admin_remove_team_member', 'team', ?, ?)
-        """, (now, user.callsign if user else None, str(team_id), f"Removed {callsign} from team"))
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_remove_team_member",
+        target_type="team",
+        target_id=str(team_id),
+        details=f"Removed {callsign} from team",
+        ip_address=get_client_ip(request)
+    )
 
     # Recompute team standings
     recompute_all_team_standings()
@@ -6215,13 +6599,16 @@ async def admin_transfer_captaincy(request: Request, team_id: int, callsign: str
 
         conn.execute("UPDATE teams SET captain_callsign = ? WHERE id = ?", (callsign, team_id))
 
-        # Audit log
-        user = get_current_user(request)
-        now = datetime.utcnow().isoformat()
-        conn.execute("""
-            INSERT INTO audit_log (timestamp, actor_callsign, action, target_type, target_id, details)
-            VALUES (?, ?, 'admin_transfer_captaincy', 'team', ?, ?)
-        """, (now, user.callsign if user else None, str(team_id), f"Transferred captaincy from {team['captain_callsign']} to {callsign}"))
+    from audit import log_action
+    user = get_current_user(request)
+    log_action(
+        actor_callsign=user.callsign if user else "ADMIN",
+        action="admin_transfer_captaincy",
+        target_type="team",
+        target_id=str(team_id),
+        details=f"Transferred captaincy from {team['captain_callsign']} to {callsign}",
+        ip_address=get_client_ip(request)
+    )
 
     return {"message": f"Captaincy transferred to {callsign}"}
 

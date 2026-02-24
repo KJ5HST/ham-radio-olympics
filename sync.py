@@ -1094,6 +1094,11 @@ def merge_duplicate_qsos() -> dict:
             master_id = qsos[0]["id"]
 
             for other in qsos[1:]:
+                # Delete the duplicate FIRST to avoid unique index collision
+                # (the update may set sig_info values that match the duplicate's unique key)
+                conn.execute("DELETE FROM qsos WHERE id = ?", (other["id"],))
+                deleted_count += 1
+
                 # Merge each field - take non-NULL value, prefer confirmed
                 # For confirmed_at, take the earliest timestamp if both are confirmed
                 conn.execute("""
@@ -1138,10 +1143,6 @@ def merge_duplicate_qsos() -> dict:
                     other["qrz_logid"],
                     master_id,
                 ))
-
-                # Delete the duplicate
-                conn.execute("DELETE FROM qsos WHERE id = ?", (other["id"],))
-                deleted_count += 1
 
             merged_count += 1
 
