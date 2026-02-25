@@ -589,6 +589,259 @@ class TestMedalNotificationEmail:
         assert result is True
 
 
+class TestMedalNotificationPreservation:
+    """Test that notified_at is preserved across medal recomputation."""
+
+    def _setup_competition(self):
+        """Helper: create olympiad, sport, match, two competitors with QSOs."""
+        from database import get_db
+        from scoring import recompute_match_medals
+
+        with get_db() as conn:
+            # Create olympiad
+            conn.execute(
+                "INSERT INTO olympiads (id, name, start_date, end_date, qualifying_qsos, is_active) "
+                "VALUES (1, 'Test Olympiad', '2026-01-01', '2026-12-31', 0, 1)"
+            )
+            # Create sport
+            conn.execute(
+                "INSERT INTO sports (id, olympiad_id, name, target_type, work_enabled, activate_enabled, separate_pools) "
+                "VALUES (1, 1, 'DX Challenge', 'continent', 1, 0, 0)"
+            )
+            # Create match
+            conn.execute(
+                "INSERT INTO matches (id, sport_id, start_date, end_date, target_value) "
+                "VALUES (1, 1, '2026-01-01T00:00:00', '2026-01-31T23:59:59', 'EU')"
+            )
+            # Register competitors
+            conn.execute(
+                "INSERT INTO competitors (callsign, password_hash, registered_at) "
+                "VALUES ('W1ABC', 'x', '2026-01-01T00:00:00')"
+            )
+            conn.execute(
+                "INSERT INTO competitors (callsign, password_hash, registered_at) "
+                "VALUES ('K2DEF', 'x', '2026-01-01T00:00:00')"
+            )
+            # Opt into sport
+            conn.execute(
+                "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES ('W1ABC', 1, '2026-01-01')"
+            )
+            conn.execute(
+                "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES ('K2DEF', 1, '2026-01-01')"
+            )
+            # QSOs - W1ABC gold (earlier), K2DEF silver
+            conn.execute(
+                "INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, "
+                "tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed, distance_km, cool_factor) "
+                "VALUES ('W1ABC', 'DL1ABC', '2026-01-15T12:01:00', 5.0, 'EM12', 'JN58', 230, 1, 8500.0, 1700.0)"
+            )
+            conn.execute(
+                "INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, "
+                "tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed, distance_km, cool_factor) "
+                "VALUES ('K2DEF', 'DL2XYZ', '2026-01-15T12:05:00', 10.0, 'FN31', 'JO62', 230, 1, 8600.0, 860.0)"
+            )
+
+        recompute_match_medals(1, notify=False)
+        return 1  # match_id
+
+    def test_notified_at_preserved_on_recompute(self):
+        """Recomputing medals should NOT reset notified_at when medals are unchanged."""
+        from database import get_db
+        from scoring import recompute_match_medals
+
+        match_id = self._setup_competition()
+
+        # Simulate notification: set notified_at on all medals
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE medals SET notified_at = '2026-01-16T00:00:00' WHERE match_id = ?",
+                (match_id,)
+            )
+            # Verify it's set
+            rows = conn.execute(
+                "SELECT callsign, notified_at FROM medals WHERE match_id = ?", (match_id,)
+            ).fetchall()
+            for row in rows:
+                assert row["notified_at"] is not None
+
+        # Recompute medals (same data, nothing changed)
+        recompute_match_medals(match_id, notify=False)
+
+        # notified_at should still be set (not wiped)
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT callsign, notified_at FROM medals WHERE match_id = ?", (match_id,)
+            ).fetchall()
+            assert len(rows) > 0
+            for row in rows:
+                assert row["notified_at"] == "2026-01-16T00:00:00", (
+                    f"notified_at was reset for {row['callsign']}"
+                )
+
+    def test_notified_at_cleared_when_medal_changes(self):
+        """When a medal changes (e.g. silver->gold), notified_at should be NULL for new notification."""
+        from database import get_db
+        from scoring import recompute_match_medals
+
+        match_id = self._setup_competition()
+
+        # Set notified_at on all medals
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE medals SET notified_at = '2026-01-16T00:00:00' WHERE match_id = ?",
+                (match_id,)
+            )
+
+        # Now add a new competitor who beats W1ABC, reshuffling medals
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO competitors (callsign, password_hash, registered_at) "
+                "VALUES ('N3NEW', 'x', '2026-01-01T00:00:00')"
+            )
+            conn.execute(
+                "INSERT INTO sport_entries (callsign, sport_id, entered_at) VALUES ('N3NEW', 1, '2026-01-01')"
+            )
+            # N3NEW contacts EU earlier than W1ABC -> takes gold for QSO race
+            conn.execute(
+                "INSERT INTO qsos (competitor_callsign, dx_callsign, qso_datetime_utc, "
+                "tx_power_w, my_grid, dx_grid, dx_dxcc, is_confirmed, distance_km, cool_factor) "
+                "VALUES ('N3NEW', 'DL3NEW', '2026-01-15T11:00:00', 5.0, 'EM12', 'JN58', 230, 1, 8500.0, 1700.0)"
+            )
+
+        # Recompute - N3NEW gets gold, W1ABC drops to silver, K2DEF drops to bronze
+        recompute_match_medals(match_id, notify=False)
+
+        with get_db() as conn:
+            # N3NEW is new - should have NULL notified_at
+            n3 = conn.execute(
+                "SELECT notified_at FROM medals WHERE match_id = ? AND callsign = 'N3NEW'",
+                (match_id,)
+            ).fetchone()
+            assert n3 is not None
+            assert n3["notified_at"] is None
+
+            # W1ABC's medals changed (gold->silver for QSO race) - should have NULL notified_at
+            w1 = conn.execute(
+                "SELECT notified_at, qso_race_medal FROM medals WHERE match_id = ? AND callsign = 'W1ABC'",
+                (match_id,)
+            ).fetchone()
+            assert w1 is not None
+            assert w1["notified_at"] is None, "notified_at should be NULL when medal changed"
+
+    def test_recompute_twice_only_one_notification_batch(self):
+        """After notify, recomputing should NOT create new un-notified medals."""
+        from database import get_db
+        from scoring import recompute_match_medals
+
+        match_id = self._setup_competition()
+
+        # Mark all as notified
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE medals SET notified_at = '2026-01-16T00:00:00' WHERE match_id = ?",
+                (match_id,)
+            )
+
+        # Recompute again
+        recompute_match_medals(match_id, notify=False)
+
+        # No medals should have NULL notified_at
+        with get_db() as conn:
+            unnotified = conn.execute(
+                "SELECT COUNT(*) as cnt FROM medals WHERE match_id = ? AND notified_at IS NULL",
+                (match_id,)
+            ).fetchone()["cnt"]
+            assert unnotified == 0, f"Expected 0 un-notified medals, got {unnotified}"
+
+
+class TestMedalNotificationDailyCap:
+    """Test daily email cap for medal notifications."""
+
+    def _setup_competitor_with_medals(self, callsign="W1CAP", medal_count=4):
+        """Helper: create a competitor with multiple notifiable medals."""
+        from database import get_db
+
+        with get_db() as conn:
+            # Create olympiad, sport
+            conn.execute(
+                "INSERT INTO olympiads (id, name, start_date, end_date, qualifying_qsos, is_active) "
+                "VALUES (1, 'Test', '2026-01-01', '2026-12-31', 0, 1)"
+            )
+            conn.execute(
+                "INSERT INTO sports (id, olympiad_id, name, target_type, work_enabled, activate_enabled, separate_pools) "
+                "VALUES (1, 1, 'Test Sport', 'continent', 1, 0, 0)"
+            )
+            # Create competitor with verified email
+            conn.execute(
+                "INSERT INTO competitors (callsign, password_hash, registered_at, "
+                "email, email_verified, email_notifications_enabled, email_medal_notifications) "
+                "VALUES (?, 'x', '2026-01-01', 'test@example.com', 1, 1, 1)",
+                (callsign,)
+            )
+
+            # Create multiple matches with un-notified medals
+            for i in range(1, medal_count + 1):
+                conn.execute(
+                    "INSERT INTO matches (id, sport_id, start_date, end_date, target_value) "
+                    "VALUES (?, 1, '2026-01-01', '2026-01-31', ?)",
+                    (i, f"EU{i}")
+                )
+                conn.execute(
+                    "INSERT INTO medals (match_id, callsign, role, qualified, "
+                    "qso_race_medal, total_points) "
+                    "VALUES (?, ?, 'work', 1, 'gold', 3)",
+                    (i, callsign)
+                )
+
+    def test_daily_digest_skips_if_already_emailed(self):
+        """If a medal email was already sent in the last 24h, skip until next digest window."""
+        import asyncio
+        from database import get_db
+        from datetime import datetime, timedelta
+
+        self._setup_competitor_with_medals("W1CAP", medal_count=1)
+
+        # Simulate 1 prior notification in the last 24 hours
+        with get_db() as conn:
+            ts = (datetime.utcnow() - timedelta(hours=2)).isoformat()
+            conn.execute(
+                "INSERT INTO matches (id, sport_id, start_date, end_date, target_value) "
+                "VALUES (100, 1, '2026-01-01', '2026-01-31', 'OLD')"
+            )
+            conn.execute(
+                "INSERT INTO medals (match_id, callsign, role, qualified, "
+                "qso_race_medal, total_points, notified_at) "
+                "VALUES (100, 'W1CAP', 'work', 1, 'gold', 3, ?)",
+                (ts,)
+            )
+
+        # The un-notified medal from _setup should be skipped — already emailed today
+        from email_service import notify_new_medals
+        with patch('email_service.send_medals_summary_email', new_callable=AsyncMock) as mock_send, \
+             patch('email_service.send_admin_error_email', new_callable=AsyncMock):
+            mock_send.return_value = True
+            result = asyncio.run(notify_new_medals())
+
+        assert mock_send.call_count == 0, "Should not send email when already notified in last 24h"
+        assert result["skipped"] > 0
+
+    def test_digest_sends_when_no_recent_email(self):
+        """When no medal email was sent in the last 24h, send normally."""
+        import asyncio
+
+        self._setup_competitor_with_medals("W1OK", medal_count=1)
+
+        # No prior notifications - should be under cap
+        from email_service import notify_new_medals
+        with patch('email_service.send_medals_summary_email', new_callable=AsyncMock) as mock_send, \
+             patch('email_service.send_admin_error_email', new_callable=AsyncMock):
+            mock_send.return_value = True
+            result = asyncio.run(notify_new_medals())
+
+        assert mock_send.call_count == 1, "Should send email when under daily cap"
+        assert result["sent"] == 1
+
+
 class TestMatchReminderEmail:
     """Test match reminder email functionality."""
 

@@ -1305,6 +1305,19 @@ async def notify_new_medals() -> dict:
                     )
                 continue
 
+            # Daily digest: at most 1 medal notification email per user per 24 hours
+            today_start = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+            already_notified = conn.execute(
+                "SELECT COUNT(*) FROM medals "
+                "WHERE callsign = ? AND notified_at > ? "
+                "AND (qso_race_medal IS NOT NULL OR cool_factor_medal IS NOT NULL)",
+                (callsign, today_start)
+            ).fetchone()[0]
+            if already_notified > 0:
+                results["skipped"] += len(data["medals"])
+                logger.info(f"Medal email already sent in last 24h for {callsign}, skipping until next digest window")
+                continue
+
             # Calculate total points
             total_points = sum(m["points"] for m in data["medals"])
 

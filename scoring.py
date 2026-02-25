@@ -613,6 +613,20 @@ def recompute_match_medals(match_id: int, notify: bool = True):
             effective_target_type,
         )
 
+        # Capture notified_at state before clearing medals
+        old_medals = {}
+        for medal_row in conn.execute(
+            "SELECT callsign, role, qso_race_medal, cool_factor_medal, notified_at "
+            "FROM medals WHERE match_id = ?", (match_id,)
+        ):
+            if medal_row["notified_at"]:
+                key = (medal_row["callsign"], medal_row["role"])
+                old_medals[key] = {
+                    "qso_race_medal": medal_row["qso_race_medal"],
+                    "cool_factor_medal": medal_row["cool_factor_medal"],
+                    "notified_at": medal_row["notified_at"],
+                }
+
         # Clear existing medals for this match
         conn.execute("DELETE FROM medals WHERE match_id = ?", (match_id,))
 
@@ -638,6 +652,19 @@ def recompute_match_medals(match_id: int, notify: bool = True):
                 result.pota_bonus,
                 result.total_points,
             ))
+
+        # Restore notified_at for medals that haven't changed
+        for result in results:
+            key = (result.callsign, result.role)
+            if key in old_medals:
+                old = old_medals[key]
+                if (old["qso_race_medal"] == result.qso_race_medal and
+                        old["cool_factor_medal"] == result.cool_factor_medal):
+                    conn.execute(
+                        "UPDATE medals SET notified_at = ? "
+                        "WHERE match_id = ? AND callsign = ? AND role = ?",
+                        (old["notified_at"], match_id, result.callsign, result.role)
+                    )
 
     # Update records after exclusive block is released
     for qso_id, callsign in qsos_for_records:
