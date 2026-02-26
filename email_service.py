@@ -68,11 +68,16 @@ async def send_email(
     """
     # Check if admin BCC is enabled
     bcc = None
-    if not skip_bcc and config.ADMIN_EMAIL:
+    if not skip_bcc:
         try:
             from database import get_setting
             if get_setting("admin_bcc_emails") == "1":
-                bcc = config.ADMIN_EMAIL
+                # Use ADMIN_EMAIL env var, or fall back to first admin user's email
+                admin_email = config.ADMIN_EMAIL
+                if not admin_email:
+                    admin_email = _get_admin_email_fallback()
+                if admin_email and admin_email != to:
+                    bcc = admin_email
         except Exception:
             pass  # Don't fail email send if we can't check setting
 
@@ -93,6 +98,18 @@ def _get_backend():
     else:
         logger.warning(f"Unknown email backend '{backend_name}', using console")
         return _console_backend
+
+
+def _get_admin_email_fallback() -> Optional[str]:
+    """Get the email address of the first admin user as a BCC fallback."""
+    try:
+        row = get_db().execute(
+            "SELECT email FROM competitors WHERE is_admin = 1 AND email IS NOT NULL "
+            "AND email != '' AND email_verified = 1 LIMIT 1"
+        ).fetchone()
+        return row["email"] if row else None
+    except Exception:
+        return None
 
 
 async def _console_backend(

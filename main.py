@@ -5791,6 +5791,11 @@ async def admin_settings(request: Request, _: bool = Depends(verify_admin)):
     # Get email settings
     admin_bcc_emails = get_setting("admin_bcc_emails") == "1"
     admin_email = config.ADMIN_EMAIL
+    if not admin_email:
+        # Fall back to logged-in admin's email
+        user = get_current_user(request)
+        if user and user.email:
+            admin_email = user.email
 
     # Get Discord settings
     discord_webhook_url = get_setting("discord_webhook_url")
