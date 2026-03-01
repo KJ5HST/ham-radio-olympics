@@ -97,6 +97,9 @@ def get_sync_script_path():
 async def run_sync_subprocess():
     """Run sync as a subprocess, completely independent of the event loop."""
     global _sync_process
+    if _sync_process is not None:
+        logger.info("Sync already in progress, skipping")
+        return
     script_path = get_sync_script_path()
 
     try:
@@ -1603,6 +1606,13 @@ async def get_match(request: Request, sport_id: int, match_id: int, user: Option
                 if qso_mode not in allowed_modes:
                     continue
 
+            # Filter by max_power_w if set on the match
+            match_max_power = match_dict.get("max_power_w")
+            if match_max_power is not None:
+                tx_power = qso.get("tx_power_w")
+                if tx_power is None or tx_power > match_max_power:
+                    continue
+
             # Check if QSO matches target (only check modes that are enabled for this sport)
             if target_type and target_value:
                 matches_work = sport["work_enabled"] and matches_target(qso, target_type, target_value, "work")
@@ -2327,7 +2337,8 @@ async def sync_page(request: Request, callsign: Optional[str] = None):
 
 
 @app.post("/sync")
-async def trigger_sync(callsign: Optional[str] = None):
+@limiter.limit("3/minute")
+async def trigger_sync(request: Request, callsign: Optional[str] = None):
     """Trigger QRZ sync (API). Syncs single competitor or all if no callsign provided."""
     from notifications import send_pending_push_disabled_emails, check_pota_spots_and_notify
 
@@ -2632,8 +2643,9 @@ async def signup(request: Request, signup_data: UserSignup):
     has_qrz = signup_data.qrz_api_key and signup_data.qrz_api_key.strip()
     has_lotw = signup_data.lotw_username and signup_data.lotw_password
 
-    if not has_qrz and not has_lotw:
-        raise HTTPException(status_code=400, detail="Please provide QRZ API key and/or LoTW credentials")
+    # Credentials are optional — registrants can add them later via Settings
+    # if not has_qrz and not has_lotw:
+    #     raise HTTPException(status_code=400, detail="Please provide QRZ API key and/or LoTW credentials")
 
     encrypted_qrz_key = None
     encrypted_lotw_username = None

@@ -21,7 +21,7 @@
             <div style="margin: 20px 0; padding: 15px; background: var(--bg-card); border-radius: 8px;">
                 <label style="font-weight: 600; margin-bottom: 10px; display: block;">Verify Callsign & Load QSOs</label>
                 <p style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 15px;">
-                    Provide at least one set of credentials to verify callsign ownership and load your QSOs.
+                    Optional — you can add credentials later in Settings to load your QSOs.
                 </p>
 
                 <div class="form-group">
@@ -106,10 +106,7 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
     const lotw_username = document.getElementById('lotw_username').value.trim();
     const lotw_password = document.getElementById('lotw_password').value;
 
-    if (!qrz_api_key && !lotw_username) {
-        result.innerHTML = '<div class="alert alert-error">Please provide QRZ API key and/or LoTW credentials</div>';
-        return;
-    }
+    // Credentials are optional — registrants can add them later via Settings
 
     if (lotw_username && !lotw_password) {
         result.innerHTML = '<div class="alert alert-error">Please enter your LoTW password</div>';
@@ -133,7 +130,7 @@ document.getElementById('signup-form').addEventListener('submit', async (e) => {
 
     const btn = e.target.querySelector('button[type="submit"]');
     setButtonLoading(btn, true);
-    result.innerHTML = '<div class="alert alert-info">Verifying credentials...</div>';
+    result.innerHTML = '<div class="alert alert-info">Creating account...</div>';
 
     try {
         const resp = await fetch('/signup', {

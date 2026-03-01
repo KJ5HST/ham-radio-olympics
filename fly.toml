@@ -14,7 +14,7 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ["app"]
 
 [[services]]
@@ -31,11 +31,11 @@ primary_region = "iad"
 
   [services.concurrency]
     type = "connections"
-    hard_limit = 25
-    soft_limit = 20
+    hard_limit = 100
+    soft_limit = 80
 
 [[vm]]
-  memory = "512mb"
+  memory = "1024mb"
   cpu_kind = "shared"
   cpus = 1
 
