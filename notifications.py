@@ -741,7 +741,7 @@ def notify_pota_spot(
     if was_notification_sent(callsign, "pota_spot", reference):
         return False
 
-    title = f"{sport_name}: {format_park_display(park_reference)}"
+    title = format_park_display(park_reference)
     body = f"{activator_callsign} on {frequency} {mode}"
 
     # Use sport page if sport_id is provided, otherwise dashboard
