@@ -2,6 +2,19 @@
 
 Amateur radio competition server with LoTW and QRZ Logbook integration. Designed for clubs to do a variety of competitions ("matches") for a multitude of interests ("sports" like POTA) throughout a season (aka "Olympiad"). The activities are pretty flexible, but at this point scoring is pretty static and has some room for improvement, but it's a start.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Sports List](screenshots/1.jpg) | ![Sport Standings](screenshots/2.jpg) |
+| *Olympiad overview with all sports* | *Sport standings with live POTA spots* |
+| ![Match Detail](screenshots/3.jpg) | ![Medal Breakdown](screenshots/4.jpg) |
+| *Match detail with live activator spots* | *Expanded per-match medal breakdown* |
+| ![Medal Standings](screenshots/5.jpg) | ![World Records](screenshots/6.jpg) |
+| *Overall medal standings* | *World records and Triathlon podium* |
+| ![Referee Dashboard](screenshots/7.jpg) | ![Admin Dashboard](screenshots/8.jpg) |
+| *Referee dashboard for sport management* | *Admin control panel* |
+
 ## Important Note for World Radio League (WRL) Users
 
 > **WARNING:** Do NOT use the direct WRL → QRZ integration. There is a bug that strips POTA data (SIG/SIG_INFO fields) during the automatic sync.

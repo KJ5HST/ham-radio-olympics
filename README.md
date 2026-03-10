@@ -4,6 +4,19 @@ Amateur radio competition server with LoTW and QRZ Logbook integration.
 
 **[Full Documentation](docs/README.md)** | **[User Guide](docs/USER_GUIDE.md)** | **[Changelog](docs/CHANGELOG.md)** | **[Email Setup](docs/EMAIL_SETUP.md)**
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Sports List](docs/screenshots/1.jpg) | ![Sport Standings](docs/screenshots/2.jpg) |
+| *Olympiad overview with all sports* | *Sport standings with live POTA spots* |
+| ![Match Detail](docs/screenshots/3.jpg) | ![Medal Breakdown](docs/screenshots/4.jpg) |
+| *Match detail with live activator spots* | *Expanded per-match medal breakdown* |
+| ![Medal Standings](docs/screenshots/5.jpg) | ![World Records](docs/screenshots/6.jpg) |
+| *Overall medal standings* | *World records and Triathlon podium* |
+| ![Referee Dashboard](docs/screenshots/7.jpg) | ![Admin Dashboard](docs/screenshots/8.jpg) |
+| *Referee dashboard for sport management* | *Admin control panel* |
+
 ## Quick Start
 
 ```bash
