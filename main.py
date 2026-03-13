@@ -7883,9 +7883,6 @@ async def leave_team(request: Request, team_id: int, user: User = Depends(requir
             (team_id, user.callsign)
         )
 
-        # Recompute team standings
-        recompute_all_team_standings()
-
         # Log action
         now = datetime.utcnow().isoformat()
         conn.execute("""
@@ -7893,7 +7890,12 @@ async def leave_team(request: Request, team_id: int, user: User = Depends(requir
             VALUES (?, ?, 'leave_team', 'team', ?, ?)
         """, (now, user.callsign, str(team_id), f"Left team: {team['name']}"))
 
-        return {"message": f"You have left {team['name']}"}
+        team_name = team['name']
+
+    # Recompute team standings outside the transaction to avoid nested write lock
+    recompute_all_team_standings()
+
+    return {"message": f"You have left {team_name}"}
 
 
 @app.post("/team/{team_id}/remove/{callsign}")
@@ -7929,9 +7931,6 @@ async def remove_team_member(request: Request, team_id: int, callsign: str, user
             (team_id, callsign)
         )
 
-        # Recompute team standings
-        recompute_all_team_standings()
-
         # Log action
         now = datetime.utcnow().isoformat()
         conn.execute("""
@@ -7939,7 +7938,10 @@ async def remove_team_member(request: Request, team_id: int, callsign: str, user
             VALUES (?, ?, 'remove_team_member', 'team', ?, ?)
         """, (now, user.callsign, str(team_id), f"Removed {callsign} from team"))
 
-        return {"message": f"{callsign} has been removed from the team"}
+    # Recompute team standings outside the transaction to avoid nested write lock
+    recompute_all_team_standings()
+
+    return {"message": f"{callsign} has been removed from the team"}
 
 
 @app.post("/team/{team_id}/transfer/{callsign}")
