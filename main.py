@@ -8156,11 +8156,27 @@ async def api_all_spots(request: Request, sport_id: Optional[int] = None):
 
 @app.get("/api/v1/park/{reference}/spots")
 @limiter.limit("60/minute")
-async def api_park_spots(request: Request, reference: str):
-    """Get current POTA spots for a specific park."""
+async def api_park_spots(request: Request, reference: str, match_id: Optional[int] = None):
+    """Get current POTA spots for a specific park.
+
+    If match_id is provided, filters spots to only include modes allowed by that match/sport.
+    """
     import httpx
+    from scoring import is_mode_allowed
 
     reference = reference.upper().strip()
+
+    # Get allowed_modes for the match if specified
+    allowed_modes = None
+    if match_id:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(m.allowed_modes, s.allowed_modes) as allowed_modes "
+                "FROM matches m JOIN sports s ON m.sport_id = s.id WHERE m.id = ?",
+                (match_id,)
+            ).fetchone()
+            if row:
+                allowed_modes = row["allowed_modes"]
 
     try:
         async with httpx.AsyncClient() as client:
@@ -8174,6 +8190,15 @@ async def api_park_spots(request: Request, reference: str):
                     return {"spots": []}
 
                 # Filter spots for this park
+                filtered = [spot for spot in all_spots if spot.get("reference") == reference]
+
+                # Filter by allowed modes if specified
+                if allowed_modes:
+                    filtered = [
+                        spot for spot in filtered
+                        if is_mode_allowed(spot.get("mode", ""), allowed_modes)
+                    ]
+
                 park_spots = [
                     {
                         "activator": spot.get("activator"),
@@ -8185,8 +8210,7 @@ async def api_park_spots(request: Request, reference: str):
                         "qso_count": spot.get("count"),
                         "expires_in": spot.get("expire")
                     }
-                    for spot in all_spots
-                    if spot.get("reference") == reference
+                    for spot in filtered
                 ]
 
                 return {"spots": park_spots, "reference": reference}

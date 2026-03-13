@@ -35,7 +35,7 @@
     async function loadSpots() {
         const container = document.getElementById('spots-container');
         try {
-            const resp = await fetch('/api/v1/park/{{ target_value }}/spots');
+            const resp = await fetch('/api/v1/park/{{ target_value }}/spots?match_id={{ match.id }}');
             if (!resp.ok) {
                 container.innerHTML = '<p style="color: var(--text-secondary);">Unable to load spots.</p>';
                 return;
