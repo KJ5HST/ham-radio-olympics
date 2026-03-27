@@ -264,7 +264,7 @@ These are documented tendencies. The agent must actively guard against them.
 | # | Learning | Source | When to Apply |
 |---|----------|--------|---------------|
 | 1 | Plan-mode output is a draft, not a verified plan. When a prompt contains a multi-phase plan with "implement," the deliverable is a plan document with evidence-based inventory, not Phase 1 code. The gap: Phase 1's task mapping had no entry for plan-mode handoffs, so the session defaulted to "implement." Structural fix: new mapping row + FM #19. | FM #19 discovery | When a prompt contains a multi-phase plan with "implement" — recognize this as a planning workstream. |
-| 2 | "Update the methodology" means: diff all methodology files against the source repo (`../methodology/`) and sync any changes. Don't ask for clarification — just do the comparison. The source repo is a sibling directory. | Session 1 | When user says "update methodology" or similar — go straight to diffing against the source. |
+| 2 | "Update the methodology" means: fetch from GitHub (`KJ5HST/methodology`), diff all methodology files against the remote, and sync any changes. Don't ask for clarification — just do it. Use `gh api` to fetch files, not the local sibling repo. | Session 1–2 | When user says "update methodology" or similar — fetch from GitHub and diff. |
 
 ---
 

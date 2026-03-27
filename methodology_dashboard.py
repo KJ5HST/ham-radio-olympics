@@ -30,26 +30,13 @@ SETUP
 -----
 1. Copy this file to your desired location (see Modes above).
 
-2. Run manually:
+2. Run:
 
        python3 methodology_dashboard.py
 
-3. (Recommended) Auto-run on every Claude Code session via a UserPromptSubmit hook.
-   Add this to .claude/settings.local.json in the same directory:
-
-       {
-         "hooks": {
-           "UserPromptSubmit": [
-             {
-               "command": "python3 methodology_dashboard.py",
-               "once": true
-             }
-           ]
-         }
-       }
-
-   The dashboard will run on the first prompt of each session and print a
-   terminal summary before opening the HTML report in your browser.
+   This generates dashboard.html, opens it in your browser, and prints a
+   terminal summary. The HTML auto-refreshes every 60 seconds — leave it
+   open and re-run the script whenever you want updated data.
 
 CUSTOMIZATION
 -------------
@@ -1157,7 +1144,7 @@ def render_project_card(p):
     </div>'''
 
 
-def render_html(portfolio, projects):
+def render_html(portfolio, projects, title="METHODOLOGY DASHBOARD"):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     h_color = health_color(portfolio["health_score"])
 
@@ -1171,7 +1158,8 @@ def render_html(portfolio, projects):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Methodology Dashboard</title>
+<meta http-equiv="refresh" content="60">
+<title>{esc(title)}</title>
 <style>
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 body {{
@@ -1281,8 +1269,8 @@ h4 {{ color: #8b949e; font-size: 13px; font-weight: 600; margin-bottom: 6px; tex
 .card-risk {{ font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #21262d; }}
 .card-activity {{ font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: #21262d; }}
 .card-summary {{ font-size: 13px; color: #8b949e; }}
-.card-body {{ padding: 16px 24px; display: block; }}
-.card-body.collapsed {{ display: none; }}
+.card-body {{ padding: 16px 24px; display: none; }}
+.card-body.expanded {{ display: block; }}
 .card-section {{ margin-bottom: 16px; }}
 .card-columns {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }}
 @media (max-width: 1000px) {{ .card-columns {{ grid-template-columns: 1fr; }} }}
@@ -1332,7 +1320,7 @@ h4 {{ color: #8b949e; font-size: 13px; font-weight: 600; margin-bottom: 6px; tex
 <body>
 
 <div class="header">
-    <h1>METHODOLOGY DASHBOARD</h1>
+    <h1>{esc(title)}</h1>
     <div class="header-time">Generated: {now}</div>
 </div>
 
@@ -1390,16 +1378,16 @@ h4 {{ color: #8b949e; font-size: 13px; font-weight: 600; margin-bottom: 6px; tex
 <script>
 function toggleCard(header) {{
     const body = header.nextElementSibling;
-    body.classList.toggle('collapsed');
+    body.classList.toggle('expanded');
 }}
 
-let allCollapsed = false;
+let allExpanded = false;
 function toggleAll() {{
     const bodies = document.querySelectorAll('.card-body');
-    allCollapsed = !allCollapsed;
+    allExpanded = !allExpanded;
     bodies.forEach(b => {{
-        if (allCollapsed) b.classList.add('collapsed');
-        else b.classList.remove('collapsed');
+        if (allExpanded) b.classList.add('expanded');
+        else b.classList.remove('expanded');
     }});
 }}
 
@@ -1434,71 +1422,23 @@ function sortCards(by) {{
 </html>'''
 
 
-# === SETUP ===
-
-HOOK_CONFIG = {
-    "hooks": {
-        "UserPromptSubmit": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "python3 methodology_dashboard.py",
-                        "timeout": 15,
-                        "statusMessage": "Generating Methodology Dashboard...",
-                        "once": True
-                    }
-                ]
-            }
-        ]
-    }
-}
-
-
-def setup_hook(root):
-    """Create or update .claude/settings.local.json with the dashboard hook."""
-    claude_dir = root / ".claude"
-    settings_path = claude_dir / "settings.local.json"
-
-    if settings_path.exists():
-        try:
-            with open(settings_path) as f:
-                existing = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            existing = {}
-    else:
-        existing = {}
-
-    # Merge: preserve existing permissions, add/replace hooks
-    if "hooks" not in existing:
-        existing["hooks"] = {}
-
-    existing["hooks"]["UserPromptSubmit"] = HOOK_CONFIG["hooks"]["UserPromptSubmit"]
-
-    claude_dir.mkdir(parents=True, exist_ok=True)
-    with open(settings_path, "w") as f:
-        json.dump(existing, f, indent=2)
-        f.write("\n")
-
-    print(f"  Dashboard hook installed: {settings_path}")
-    print(f"  The dashboard will auto-run on the first prompt of each new session.")
-
-
 # === MAIN ===
 
 def main():
     root = ROOT
-
-    # --setup: install the Claude Code hook and exit
-    if "--setup" in sys.argv:
-        setup_hook(root)
-        return
 
     project_paths = discover_projects(root)
 
     if not project_paths:
         print("Methodology Dashboard: No projects found.")
         return
+
+    # Determine title based on mode
+    single_project = (root / ".git").exists()
+    if single_project:
+        title = f"{root.name.upper()} — METHODOLOGY DASHBOARD"
+    else:
+        title = "METHODOLOGY DASHBOARD"
 
     projects = []
     for path in project_paths:
@@ -1512,26 +1452,60 @@ def main():
     projects.sort(key=lambda p: p["scores"]["health"]["total"])
 
     portfolio = aggregate_portfolio(projects)
-    html = render_html(portfolio, projects)
+    html = render_html(portfolio, projects, title=title)
 
     output_path = root / "dashboard.html"
     output_path.write_text(html)
 
-    # Open in browser
-    open_in_browser(output_path)
+    # Open in browser (skip with --no-open or when piped)
+    if "--no-open" not in sys.argv and sys.stdout.isatty():
+        open_in_browser(output_path)
 
-    # Terminal summary
-    print(f"\n{'='*60}")
-    print(f"  METHODOLOGY DASHBOARD -- {len(projects)} projects scanned")
-    print(f"  Portfolio Health: {portfolio['health_score']}/100")
-    print(f"{'='*60}")
+    # Terminal summary with ANSI colors
+    R = "\033[0m"       # reset
+    B = "\033[1m"       # bold
+    D = "\033[2m"       # dim
+    def c_health(score):
+        if score >= 80: return "\033[32m"    # green
+        if score >= 60: return "\033[92m"    # bright green
+        if score >= 40: return "\033[33m"    # yellow
+        if score >= 20: return "\033[91m"    # bright red
+        return "\033[31m"                     # red
+    def c_risk(sev):
+        return {"critical": "\033[31m", "high": "\033[91m", "medium": "\033[33m",
+                "low": "\033[36m", "healthy": "\033[32m"}.get(sev, "")
+    def c_activity(act):
+        return {"active": "\033[32m", "slowing": "\033[33m",
+                "stale": "\033[91m", "dead": "\033[31m"}.get(act, "")
+
+    W = 70
+    ph = portfolio["health_score"]
+    pc = c_health(ph)
+    rc = portfolio.get("risk_counts", {})
+    hi_risk = rc.get("critical", 0) + rc.get("high", 0)
+
+    print(f"\n{D}{'─'*W}{R}")
+    print(f"  {B}{title}{R}  {D}│{R}  {len(projects)} projects")
+    print(f"{D}{'─'*W}{R}")
+    print(f"  Health: {pc}{B}{ph}/100{R}    "
+          f"High+ Risk: {c_risk('high') if hi_risk else c_risk('healthy')}{B}{hi_risk}{R}    "
+          f"Commits: {B}{portfolio['total_commits']:,}{R}")
+    print(f"{D}{'─'*W}{R}")
+
+    # Column headers
+    print(f"  {D}{'Project':<25s} {'Health':>8s}  {'Risk':>8s}  {'Activity':>8s}{R}")
+
     for p in projects:
         wr = worst_risk(p["scores"]["risks"])
         h = p["scores"]["health"]["total"]
         a = p["scores"]["activity"]
-        print(f"  {p['name']:25s}  Health: {h:3d}/100  Risk: {wr:8s}  {a}")
-    print(f"{'='*60}")
-    print(f"  Dashboard: {output_path}")
+        hc = c_health(h)
+        wrc = c_risk(wr)
+        ac = c_activity(a)
+        print(f"  {p['name']:<25s} {hc}{h:>5d}/100{R}  {wrc}{wr:>8s}{R}  {ac}{a:>8s}{R}")
+
+    print(f"{D}{'─'*W}{R}")
+    print(f"  {D}Dashboard: {output_path}{R}")
     print()
 
 
