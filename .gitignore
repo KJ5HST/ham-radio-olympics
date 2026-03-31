@@ -66,3 +66,4 @@ fly.toml.bak
 vapid_*.txt
 vapid_*.json
 .vapid_keys
+dashboard.html
