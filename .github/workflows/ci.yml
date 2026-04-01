@@ -20,7 +20,9 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install 'pytest-asyncio>=0.24'
 
       - name: Run tests
         run: pytest --tb=short
