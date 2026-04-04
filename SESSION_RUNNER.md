@@ -12,13 +12,13 @@ Every session has exactly ONE deliverable. When it's done, you close out. You do
 
 1. Read `SAFEGUARDS.md` — **in full, not skimmed. Every section.**
 2. Read `SESSION_NOTES.md` — focus on the ACTIVE TASK section at the top
-3. Read `BACKLOG.md` — understand current milestone and priorities
+3. Check GitHub Issues (`gh issue list`) — understand current milestone and priorities. If the project has no GitHub repo, fall back to `BACKLOG.md`.
 4. Run: `git status`, `git log --oneline -5`, `git diff --stat`
 5. **Check for ghost sessions:** Compare the session number in SESSION_NOTES.md against `git log`. If there are commits between the last documented session and now that don't correspond to any session notes, report: "Detected [N] undocumented session(s) between Session [X] and now. Commits: [list]. No session notes exist for this work."
 6. **Report findings to the user:**
    - Current branch and clean/dirty state
    - What the last session was doing
-   - Current milestone and active task from BACKLOG.md
+   - Current milestone and active task from GitHub Issues (or BACKLOG.md if no repo)
    - Any uncommitted changes
    - Ghost session detection results (step 5)
    - Build status if known

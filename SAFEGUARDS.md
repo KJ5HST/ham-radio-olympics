@@ -74,7 +74,7 @@ These phrases signal a mode switch is happening. The correct response is: **comm
 ### Step 1: Orient (Read Only — Change Nothing)
 ```
 1. Read SESSION_NOTES.md          — What was the last session doing?
-2. Read BACKLOG.md                — What are the current priorities?
+2. Check GitHub Issues (`gh issue list`) — What are the current priorities? (Fall back to BACKLOG.md if no repo)
 3. Read SAFEGUARDS.md             — Refresh the rules (this file)
 4. git status                     — What's committed? What's not?
 5. git log --oneline -10          — What were the recent commits?
